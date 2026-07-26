@@ -4,15 +4,14 @@
 
 ---
 
-## [YYYY-MM-DD]
+## 2026-07-26
 
 | Member | Task | Status | Output | Time |
 |--------|------|--------|--------|------|
-| [Tên] | [mô tả task] | ✅ Done | [link/kết quả] | 2h |
-| [Tên] | [mô tả task] | 🔄 WIP | [mô tả tiến độ] | 1.5h |
-| [Tên] | [mô tả task] | ❌ Blocked | [lý do block] | - |
+| [Tên] | Khởi tạo dự án từ template, setup repo | ✅ Done | commit 7b59cf7 | - |
+| [Tên] | Tạo branch `docs` để cập nhật worklog | ✅ Done | branch `docs` | - |
 
-**Tổng kết ngày:** [1-2 câu về tiến độ chung]
+**Tổng kết ngày:** Repo đã setup xong, bắt đầu ghi worklog.
 
 ---
 
