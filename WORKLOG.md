@@ -1,29 +1,19 @@
-# Worklog — Team [Tên Team]
+# Worklog — Team P-035
 
 > Ghi lại tất cả công việc đã làm theo ngày. Ai làm gì, kết quả gì.
 
 ---
 
-## [YYYY-MM-DD]
+## 2026-07-26
 
 | Member | Task | Status | Output | Time |
 |--------|------|--------|--------|------|
-| [Tên] | [mô tả task] | ✅ Done | [link/kết quả] | 2h |
-| [Tên] | [mô tả task] | 🔄 WIP | [mô tả tiến độ] | 1.5h |
-| [Tên] | [mô tả task] | ❌ Blocked | [lý do block] | - |
+| Việt | Tạo và publish branch `viet` | ✅ Done | `origin/viet` | 2m |
+| Việt | Fix pre-push hook (CRLF → LF line endings) | ✅ Done | Hook chạy được trên Git Bash Windows | 5m |
 
-**Tổng kết ngày:** [1-2 câu về tiến độ chung]
-
----
-
-## [YYYY-MM-DD]
-
-| Member | Task | Status | Output | Time |
-|--------|------|--------|--------|------|
-| | | | | |
-
-**Tổng kết ngày:**
+**Tổng kết ngày:** Sync code remote, tạo branch riêng, fix hook cho Windows.
 
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
+
