@@ -17,6 +17,8 @@
 - [x] Chốt đề tài: **PTNT-20 — AI Agent điều phối ứng phó sự cố**
 - [x] Phân chia vai trò 4 thành viên theo năng lực thực tế
 - [x] Viết README của đội (problem / solution / target user / features / phân vai) — deliverable #2
+- [x] Vẽ architecture diagram thật (3 sơ đồ Mermaid) + `ARCHITECTURE.md` + 3 ADR — deliverable #3
+- [x] Chốt 4 contract giữa 4 người để làm song song được từ tuần 2
 - [ ] Setup môi trường Python 3.11 (venv + dependencies), chạy được server local — **cả 4 người**
 - [ ] Cài `pre-push` hook trên clone của Long, Trung, Việt
 
@@ -44,16 +46,20 @@
 - **Tạo branch chưa phải là xong — phải push.** `develop` tồn tại 1 ngày trên local mà cả đội tưởng đã có. Cùng một loại lỗi với `setup_hooks.sh`: việc "làm một lần" fail âm thầm. Cách kiểm tra đúng là hỏi remote (`git ls-remote --heads origin`), không phải `git branch` local.
 - **Đội lệch trình độ thì vỡ ở đường ghép, không vỡ ở từng module.** Vì vậy lead nên giữ phần contract + tích hợp thay vì nhận module khó nhất, và phải chốt interface trước để mọi người code với mock của nhau — nếu không, người làm UI sẽ ngồi chờ 3 tuần rồi làm gấp trong 1 tuần.
 - **Chọn công cụ theo người dùng nó, không theo công cụ tốt nhất.** Next.js tốt hơn Streamlit về mọi mặt kỹ thuật, nhưng với người code còn yếu thì nó là 2 tuần không ra kết quả. Status page xấu vẫn tính là có; status page không tồn tại là mất một yêu cầu Cơ bản.
+- **Contract là thứ mở khoá làm song song, và phải viết trước logic.** Bốn workstream của đề bài có chuỗi phụ thuộc Trung → Việt → Đức → Long; để tự nhiên thì Long ngồi chờ tới tuần 4 rồi làm gấp trong 1 tuần. Chốt 4 interface trước (kèm `FakeJiraClient` và fixture JSON) thì cả 4 người bắt đầu cùng ngày. Chi phí ~250 dòng, gần như toàn bộ là khai báo type.
+- **Ràng buộc bắt buộc nên được thực thi bằng cấu trúc, không bằng thiện chí.** HITL không nằm ở chỗ "nhớ đừng cho Agent tự duyệt" mà ở chỗ `JiraClient` không có method nào duyệt, và `FakeJiraClient.transition(..., REMEDIATING)` raise `PermissionError`. Viết sai luồng thì CI đỏ ngay, không phải phát hiện lúc demo.
+- **Contract dễ vỡ nhất là contract không báo lỗi.** Nếu Trung đặt tên metric khác với câu PromQL Việt viết, Prometheus trả về kết quả rỗng chứ không phải exception — Agent im lặng không phát hiện gì và không có gì để lần theo. Vì vậy tên metric và label được chốt thành văn bản trước khi ai viết code.
 - Dọn dẹp cho "gọn" (xoá branch đã merge, đổi default branch) nghe hợp lý nhưng phải cân với cái giá thật: branch biến mất dưới tay người chưa quen Git là lỗi mất cả buổi, còn đổi default sang `develop` sẽ khiến `main` stale suốt 5 tuần — trái với chương 2 (`main` luôn ổn định, deploy được). Giữ `main` làm default và merge `develop` → `main` cuối mỗi tuần.
 
 ### Kế hoạch tuần sau
-- [ ] Phân vai 4 người và ghi vào README (deliverable #2 yêu cầu mục team members)
+- [ ] **Long, Trung, Việt: `bash scripts/setup_hooks.sh`** trên clone của mình — việc gấp nhất, thiếu nó là mất deliverable #4
 - [ ] Mỗi người tạo venv Python 3.11, `pip install -r requirements.txt`, verify Swagger UI tại `/docs`
-- [ ] Chốt đề tài agent + viết PRD
-- [ ] Vẽ architecture diagram thật (Mermaid) thay diagram mẫu trong `docs/architecture_diagram.md`
-- [ ] Viết 2-3 ADR cho quyết định quan trọng (LLM provider, vector store, streaming hay không)
 - [ ] Chuyển hết về workflow `feature/*` → `develop` → `main`, ngừng push lên branch cá nhân
-- [ ] Deploy sớm lên Render dù chỉ có endpoint `/health`
+- [ ] Deploy sớm lên Render — **không phải để có deliverable #5 mà vì Jira Automation không gọi được `localhost`**, thiếu public URL thì bước duyệt → webhook → remediation không chạy được
+- [ ] Trung: task probe `service-thanh-toan` (pool = 5, `/metrics` + `db_pool_*`) — cuối 30/07 Đức xem kết quả để quyết phần việc tuần 2
+- [ ] Việt: spike Prometheus + PromQL từ Python, verify giả định kỹ thuật cốt lõi trước khi kiến trúc phụ thuộc vào nó
+- [ ] Long: Streamlit status page đọc `GET /api/status`
+- [ ] Đức + Trung: tạo Jira Cloud workspace, cấu hình workflow `Awaiting Approval`, **verify quota automation free plan (~100 lần/tháng)**
 
 ---
 

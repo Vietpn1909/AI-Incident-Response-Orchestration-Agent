@@ -1,0 +1,186 @@
+[
+  {
+    "jira_key": "INC-12",
+    "title": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
+    "severity": "P2",
+    "state": "Awaiting Approval",
+    "affected_services": ["service-thanh-toan"],
+    "detected_at": "2026-07-28T14:32:04Z",
+    "resolved_at": null,
+    "signal": {
+      "affected_service": "service-thanh-toan",
+      "severity": "P2",
+      "detected_at": "2026-07-28T14:32:04Z",
+      "metric_name": "http_request_duration_seconds p95",
+      "metric_value": 5.1,
+      "threshold": 2.0,
+      "breached_for_seconds": 45.0,
+      "evidence": [
+        {
+          "name": "http_request_duration_seconds p95",
+          "value": 5.1,
+          "baseline": 0.2,
+          "unit": "s",
+          "promql": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, service))"
+        },
+        {
+          "name": "db_pool_connections_in_use / db_pool_size",
+          "value": 1.0,
+          "baseline": 0.35,
+          "unit": "",
+          "promql": "db_pool_connections_in_use / db_pool_size"
+        }
+      ]
+    },
+    "hypotheses": [
+      {
+        "statement": "Connection pool Postgres cạn kiệt do tải tăng, request phải xếp hàng chờ connection",
+        "confidence": 0.86,
+        "evidence": [
+          {
+            "name": "db_pool_connections_in_use / db_pool_size",
+            "value": 1.0,
+            "baseline": 0.35,
+            "unit": "",
+            "promql": "db_pool_connections_in_use / db_pool_size"
+          }
+        ],
+        "related_deploy": {
+          "service": "service-thanh-toan",
+          "version": "v1.4.2",
+          "deployed_at": "2026-07-28T14:28:00Z",
+          "deployed_by": "ci-bot",
+          "commit_sha": "9f2c1ab"
+        },
+        "reasoning": "Pool sử dụng đạt 100% trong khi baseline là 35%. Deploy v1.4.2 diễn ra 4 phút trước thời điểm phát hiện, phù hợp về thời gian. p95 tăng 25 lần so với baseline 0.2s."
+      }
+    ],
+    "proposal": {
+      "action": "rollback",
+      "target": "service-thanh-toan",
+      "params": { "to_version": "v1.4.1" },
+      "runbook": "1. Xác nhận v1.4.1 còn artifact. 2. Rollback. 3. Theo dõi p95 trong 5 phút. 4. Nếu chưa hồi phục, tăng pool size tạm thời.",
+      "risk": "Rollback làm mất tính năng mới của v1.4.2. Giao dịch đang xử lý có thể bị gián đoạn ngắn.",
+      "requires_approval": true
+    },
+    "timeline": [
+      {
+        "at": "2026-07-28T14:32:04Z",
+        "actor": "agent",
+        "action": "mở war room",
+        "detail": "p95 vượt ngưỡng 2s liên tục 45s"
+      },
+      {
+        "at": "2026-07-28T14:32:11Z",
+        "actor": "agent",
+        "action": "thu thập bối cảnh",
+        "detail": "pool sử dụng 100%, tỷ lệ lỗi 5xx 12%"
+      },
+      {
+        "at": "2026-07-28T14:32:19Z",
+        "actor": "agent",
+        "action": "giả thuyết",
+        "detail": "Pool DB cạn kiệt do tải tăng (86%)"
+      },
+      {
+        "at": "2026-07-28T14:32:40Z",
+        "actor": "agent",
+        "action": "link incident",
+        "detail": "relates to INC-13"
+      },
+      {
+        "at": "2026-07-28T14:32:45Z",
+        "actor": "agent",
+        "action": "đề xuất khắc phục",
+        "detail": "rollback về v1.4.1 — chờ người duyệt"
+      }
+    ],
+    "postmortem": null,
+    "related_incidents": ["INC-13"]
+  },
+  {
+    "jira_key": "INC-13",
+    "title": "[P3] service-dat-hang: http_request_duration_seconds p95 = 2.40 (ngưỡng 2.00)",
+    "severity": "P3",
+    "state": "Investigating",
+    "affected_services": ["service-dat-hang"],
+    "detected_at": "2026-07-28T14:32:38Z",
+    "resolved_at": null,
+    "signal": null,
+    "hypotheses": [
+      {
+        "statement": "Suy giảm lan truyền từ service-thanh-toan do phụ thuộc đồng bộ",
+        "confidence": 0.79,
+        "evidence": [],
+        "related_deploy": null,
+        "reasoning": "service-dat-hang gọi chéo sang service-thanh-toan. Thời điểm suy giảm chậm hơn INC-12 khoảng 34 giây, phù hợp với lan truyền qua timeout."
+      }
+    ],
+    "proposal": null,
+    "timeline": [
+      {
+        "at": "2026-07-28T14:32:38Z",
+        "actor": "agent",
+        "action": "mở war room",
+        "detail": "phát hiện suy giảm sau INC-12"
+      }
+    ],
+    "postmortem": null,
+    "related_incidents": ["INC-12"]
+  },
+  {
+    "jira_key": "INC-9",
+    "title": "[P1] service-thanh-toan: tỷ lệ lỗi 5xx = 0.62 (ngưỡng 0.50)",
+    "severity": "P1",
+    "state": "Resolved",
+    "affected_services": ["service-thanh-toan"],
+    "detected_at": "2026-07-26T09:14:00Z",
+    "resolved_at": "2026-07-26T09:41:00Z",
+    "signal": null,
+    "hypotheses": [],
+    "proposal": null,
+    "timeline": [],
+    "postmortem": {
+      "summary": "Tỷ lệ lỗi 5xx tăng lên 62% trong 27 phút do truy vấn thiếu index trên bảng payments",
+      "root_cause": "Truy vấn tra cứu payment theo order_id không có index, thời gian thực thi tăng theo kích thước bảng cho tới khi vượt timeout của connection pool",
+      "impact": "27 phút, khoảng 4.100 giao dịch thất bại",
+      "timeline": [
+        {
+          "at": "2026-07-26T09:14:00Z",
+          "actor": "agent",
+          "action": "phát hiện",
+          "detail": "tỷ lệ lỗi 5xx vượt 50%"
+        },
+        {
+          "at": "2026-07-26T09:22:00Z",
+          "actor": "on-call",
+          "action": "DUYỆT",
+          "detail": "chấp nhận thêm index"
+        },
+        {
+          "at": "2026-07-26T09:41:00Z",
+          "actor": "agent",
+          "action": "xác nhận hồi phục",
+          "detail": "tỷ lệ lỗi về 0.1%"
+        }
+      ],
+      "actions_taken": [
+        "Thêm index trên payments(order_id)",
+        "Tăng tạm connection pool từ 5 lên 10 trong lúc xử lý"
+      ],
+      "action_items": [
+        {
+          "title": "Rà soát toàn bộ truy vấn thiếu index trên payments và orders",
+          "owner": "Trung",
+          "jira_key": "INC-9-1"
+        },
+        {
+          "title": "Thêm alert cho thời gian truy vấn DB, không chỉ latency HTTP",
+          "owner": "Việt",
+          "jira_key": "INC-9-2"
+        }
+      ]
+    },
+    "related_incidents": []
+  }
+]

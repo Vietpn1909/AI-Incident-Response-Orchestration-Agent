@@ -55,6 +55,8 @@ Ba quyết định định hình toàn bộ dự án (ADR chi tiết trong [docs
 
 Luồng end-to-end: load test → pool cạn → Prometheus ghi nhận → Agent phát hiện vượt ngưỡng & phân loại severity → tạo Jira Issue + comment bối cảnh → đối chiếu deploy history, sinh giả thuyết + runbook → phát hiện lan truyền, link issue → **on-call duyệt** → webhook → Agent thực thi remediation → status page cập nhật → sinh postmortem.
 
+📐 Sơ đồ đầy đủ: [docs/architecture_diagram.md](docs/architecture_diagram.md) (container · agent flow · sequence) · Chi tiết thành phần: [ARCHITECTURE.md](ARCHITECTURE.md) · Interface giữa 4 người: [docs/contracts/](docs/contracts/)
+
 ### Trong phạm vi MVP vs. tuỳ chọn
 
 **MVP:** phát hiện & phân loại · war room · thu thập bối cảnh · chẩn đoán + runbook · HITL · status page · correlation deploy · escalation · postmortem · phát hiện lan truyền
@@ -118,19 +120,21 @@ git push origin feature/<tên-tính-năng>
 
 Hiện có:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/v1/chat` | Chat với agent (placeholder từ template) |
-| GET | `/api/v1/status` | Trạng thái agent |
+| Method | Path | Description | Nguồn dữ liệu |
+|--------|------|-------------|---|
+| GET | `/health` | Health check | — |
+| GET | `/api/status` | Dữ liệu status page công khai | fixture → Jira (tuần 3) |
+| GET | `/api/incidents` | Danh sách incident (war-room view), lọc `?only_open=true` | fixture → Jira (tuần 3) |
+| GET | `/api/incidents/{jira_key}` | Chi tiết incident: giả thuyết, bằng chứng, timeline, postmortem | fixture → Jira (tuần 3) |
+| POST | `/api/v1/chat` | Chat với agent (placeholder từ template) | — |
+| GET | `/api/v1/status` | Trạng thái agent | — |
+
+Ba endpoint incident **đã trả dữ liệu thật ngay bây giờ** (từ fixture JSON), nên UI build được trước khi Agent và Jira tồn tại. Tuần 3 chỉ đổi nguồn dữ liệu, hình dạng response không đổi — xem [contract ④](src/api/incidents.py).
 
 Theo kế hoạch:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/incidents` | Danh sách incident (war-room view) |
-| GET | `/api/incidents/{id}` | Chi tiết incident + timeline |
-| GET | `/api/status` | Dữ liệu status page công khai |
 | POST | `/webhooks/jira` | Nhận trigger từ Jira Automation sau khi được duyệt |
 
 ## Project Structure
@@ -159,7 +163,7 @@ Theo kế hoạch:
 |---|---|---|---|:---:|
 | 1 | Source Code | `src/` | Cả đội | 🔄 |
 | 2 | README.md | file này | Đức | ✅ |
-| 3 | Architecture Diagram | `docs/architecture_diagram.md` | Đức | ⏳ |
+| 3 | Architecture Diagram | `docs/architecture_diagram.md` + `ARCHITECTURE.md` + 3 ADR | Đức | ✅ |
 | 4 | AI Logs | LangSmith + `.ai-log/` | Đức | 🔄 |
 | 5 | Live URL | Render | Đức | ⏳ |
 | 6 | Video Demo | `presentation/` | Long | ⏳ |

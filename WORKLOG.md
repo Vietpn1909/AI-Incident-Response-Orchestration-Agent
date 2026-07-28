@@ -48,13 +48,25 @@
 | Trương Công Thái Đức | Fix CI: PR vào `develop` không có lint/test gác cửa | ✅ Done | `a885985` | - |
 | Trương Công Thái Đức | Wiring LangSmith tracing (`configure_tracing()` export sang `os.environ`) | ✅ Done | `f6bc3f2` | - |
 | Trương Công Thái Đức | Viết README của đội — deliverable #2 | ✅ Done | `README.md` | - |
+| Trương Công Thái Đức | Vẽ 3 sơ đồ kiến trúc (container tô màu theo người, LangGraph flow, sequence demo + escalation) — deliverable #3 | ✅ Done | `docs/architecture_diagram.md` | - |
+| Trương Công Thái Đức | Viết `ARCHITECTURE.md` thật thay template (thành phần, data flow, deployment, security) | ✅ Done | `ARCHITECTURE.md` | - |
+| Trương Công Thái Đức | Viết 3 ADR: Jira làm incident lifecycle, bỏ Alertmanager, load test thật thay fault injection | ✅ Done | `docs/adr/0001..0003` | - |
+| Trương Công Thái Đức | Contract ①: metric name, label, PromQL, ngưỡng severity (Trung → Việt) | ✅ Done | `docs/contracts/01-metrics.md` | - |
+| Trương Công Thái Đức | Contract ②: Pydantic model dùng chung (Severity, IncidentSignal, Hypothesis, Incident, StatusPage…) | ✅ Done | `src/models/incident.py` | - |
+| Trương Công Thái Đức | Contract ③: `JiraClient` Protocol + `FakeJiraClient` (Đức → Việt) | ✅ Done | `src/services/jira_client.py` | - |
+| Trương Công Thái Đức | Contract ④: endpoint `/api/status`, `/api/incidents` + fixture JSON (Đức → Long) | ✅ Done | `src/api/incidents.py` | - |
+| Trương Công Thái Đức | 17 test bảo vệ contract, gồm test HITL chặn Agent tự duyệt | ✅ Done | 22 test pass, ruff clean | - |
 | Long / Trung / Việt | Cài `pre-push` hook trên clone của mình (`bash scripts/setup_hooks.sh`) | ⏳ Todo | verify `ls -l .git/hooks/pre-push` | - |
 | Long / Trung / Việt | Setup venv 3.11 + chạy được `localhost:8000/docs` | ⏳ Todo | screenshot | - |
-| Việt | Spike: docker-compose Prometheus + dummy service, query PromQL từ Python | ⏳ Todo | script in ra avg latency | - |
-| Trung | Task probe: `service-thanh-toan` (FastAPI, `POST /pay`, Postgres, pool = 5, `/metrics`) | ⏳ Todo | `curl` được + `/metrics` có `http_request_duration_seconds` | - |
-| Long | Streamlit status page hardcode 2 service (xanh/đỏ) | ⏳ Todo | `streamlit run` mở được trang | - |
+| Việt | Đọc contract ①②③, spike docker-compose Prometheus + dummy service, query PromQL từ Python | ⏳ Todo | script in ra avg latency | - |
+| Trung | Đọc contract ①. Task probe: `service-thanh-toan` (FastAPI, `POST /pay`, Postgres, pool = 5, `/metrics` + `db_pool_*`) | ⏳ Todo | `curl` được + `/metrics` có `http_request_duration_seconds` và `db_pool_connections_in_use` | - |
+| Long | Đọc contract ④. Streamlit status page đọc `GET /api/status` (đã có dữ liệu fixture) | ⏳ Todo | `streamlit run` mở được trang, 2 service đúng màu theo `health` | - |
 
-**Tổng kết ngày:** Chốt đề tài và phân vai — bỏ cách chia 4 phần đều trong đề bài vì đội có 2 người mạnh và 2 người ít kinh nghiệm; phần mơ hồ dồn cho Đức/Việt, phần biên rõ và không chặn ai giao Trung/Long, kèm quyền sở hữu deliverable phi-code để 2 bạn đóng góp vào điểm số. Phát hiện `develop` tạo hôm 27/07 nhưng chưa push → cả đội tưởng đã có branch tích hợp, và CI chưa chạy lần nào. Sau khi push, CI pass lần đầu và 39 AI log entry được submit. Cùng loại lỗi "việc làm một lần fail âm thầm" như `setup_hooks.sh` hôm qua — lần này 3 người còn lại vẫn chưa cài hook, là việc gấp nhất còn lại của tuần.
+**Tổng kết ngày:** Chốt đề tài và phân vai — bỏ cách chia 4 phần đều trong đề bài vì đội có 2 người mạnh và 2 người ít kinh nghiệm; phần mơ hồ dồn cho Đức/Việt, phần biên rõ và không chặn ai giao Trung/Long, kèm quyền sở hữu deliverable phi-code để 2 bạn đóng góp vào điểm số. Phát hiện `develop` tạo hôm 27/07 nhưng chưa push → cả đội tưởng đã có branch tích hợp, và CI chưa chạy lần nào. Sau khi push, CI pass lần đầu và 39 AI log entry được submit.
+
+Buổi chiều làm xong nền kiến trúc: 3 sơ đồ + `ARCHITECTURE.md` + 3 ADR (deliverable #3), và 4 contract file mở khoá làm song song. Nhờ contract ③ và ④, Việt viết được Agent mà không cần Jira workspace (`FakeJiraClient`), Long build được UI mà không cần Agent (`/api/status` đã trả dữ liệu fixture) — cả 4 người bắt đầu cùng lúc thay vì xếp hàng chờ nhau. Cổng HITL được chốt ở tầng interface: `FakeJiraClient.transition(..., REMEDIATING)` raise `PermissionError`, nên Agent viết sai luồng sẽ fail ở CI chứ không fail lúc demo. Tổng 22 test pass, ruff clean.
+
+Việc gấp nhất còn lại của tuần: Long, Trung, Việt vẫn chưa cài `pre-push` hook trên clone của mình — cùng loại lỗi "việc làm một lần fail âm thầm" như `setup_hooks.sh` hôm qua.
 
 ---
 
