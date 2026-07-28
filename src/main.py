@@ -3,14 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.incidents import router as incidents_router
 from src.api.routes import router
-from src.config import get_settings
+from src.config import configure_tracing, get_settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    print(f"Starting {settings.app_name} in {settings.app_env} mode")
+    tracing = "on" if configure_tracing() else "off"
+    print(f"Starting {settings.app_name} in {settings.app_env} mode (LangSmith tracing: {tracing})")
     yield
     print("Shutting down...")
 
@@ -32,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(incidents_router, prefix="/api")
 
 
 @app.get("/health")
