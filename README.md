@@ -4,6 +4,8 @@
 
 **Team Binary Brothers** · Đề bài **PTNT-20** — Khối PTNT (Kiến trúc & Tích hợp)
 
+> 👋 **Thành viên đội: mở [docs/START-HERE.md](docs/START-HERE.md) trước khi code** — việc của từng người, lệnh cụ thể, và tiêu chí "xong là thế nào".
+
 ---
 
 ## Vấn đề (Problem)

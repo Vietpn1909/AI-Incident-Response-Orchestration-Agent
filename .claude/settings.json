@@ -35,7 +35,12 @@
       "Bash(echo \"=== ruff exit=$? ===\")",
       "Bash(APP_ENV=test OPENAI_API_KEY=test-key .venv/bin/pytest tests/ -q)",
       "Bash(gh run *)",
-      "Bash(APP_ENV=test OPENAI_API_KEY=test-key .venv/bin/python -c ' *)"
+      "Bash(APP_ENV=test OPENAI_API_KEY=test-key .venv/bin/python -c ' *)",
+      "Bash(code --list-extensions)",
+      "Bash(npx -y -p @mermaid-js/mermaid-cli mmdc --version)",
+      "Bash(npx -y -p @mermaid-js/mermaid-cli mmdc -i /Users/duc/VIN_AI/P-035/docs/architecture_diagram.md -o render/png/diagram.png -e png -w 2000)",
+      "Bash(npx -y -p @mermaid-js/mermaid-cli mmdc -i /Users/duc/VIN_AI/P-035/docs/architecture_diagram.md -o render/png/d.png -e png -w 2200)",
+      "Bash(code --install-extension bierner.markdown-mermaid)"
     ]
   },
   "hooks": {
