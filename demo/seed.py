@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
+from datetime import datetime, timezone, timedelta
 
 import asyncpg
 
@@ -56,22 +58,58 @@ CREATE TABLE IF NOT EXISTS deploy_history (
 async def main() -> None:
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute(SCHEMA)
-    print("✅ đã tạo schema (orders, payments, deploy_history)")
+    print("[OK] Da tao schema (orders, payments, deploy_history)")
 
-    # TODO(Trung):
-    #   1. Dùng Faker sinh ROWS_ORDERS dòng `orders` và ROWS_PAYMENTS dòng
-    #      `payments`. Dùng `conn.executemany` hoặc `copy_records_to_table`
-    #      cho nhanh, đừng insert từng dòng.
-    #   2. Sinh vài dòng `deploy_history` cho cả 2 service, trong đó phải có
-    #      MỘT dòng deploy cách thời điểm chạy demo chừng 3–5 phút — đó là
-    #      "nghi phạm" để Agent tìm ra khi correlate.
-    #   3. In ra số dòng đã tạo để verify.
-    #
-    # Xong là thế nào:
-    #   psql $DATABASE_URL -c "SELECT count(*) FROM payments;"   -> >= 5000
-    #   psql $DATABASE_URL -c "SELECT * FROM deploy_history;"    -> có dữ liệu
+    # 1. Sinh dữ liệu mẫu bằng Faker / Random
+    try:
+        from faker import Faker
+        fake = Faker()
+    except ImportError:
+        fake = None
 
-    print("⚠️  TODO(Trung): chưa sinh dữ liệu mẫu — xem TODO trong file này")
+    now = datetime.now(timezone.utc)
+
+    # Sinh 3000 dòng orders
+    orders_data = []
+    for i in range(1, ROWS_ORDERS + 1):
+        cust = fake.name() if fake else f"Customer {i}"
+        amt = random.randint(50, 500)
+        orders_data.append((str(i), cust, amt, now - timedelta(minutes=random.randint(10, 1000))))
+
+    await conn.executemany(
+        "INSERT INTO orders (order_id, customer, amount, created_at) VALUES ($1, $2, $3, $4)",
+        orders_data,
+    )
+
+    # Sinh 5000 dòng payments
+    payments_data = []
+    for i in range(1, ROWS_PAYMENTS + 1):
+        ord_id = str(random.randint(1, ROWS_ORDERS))
+        amt = random.randint(50, 500)
+        payments_data.append((ord_id, amt, now - timedelta(minutes=random.randint(1, 500))))
+
+    await conn.executemany(
+        "INSERT INTO payments (order_id, amount, created_at) VALUES ($1, $2, $3)",
+        payments_data,
+    )
+
+    # 2. Sinh dữ liệu deploy_history (Có 1 dòng deploy v1.4.2 cách đây 4 phút cho service-thanh-toan)
+    deploys = [
+        ("service-thanh-toan", "v1.4.1", now - timedelta(days=2), "ci-bot", "a1b2c3d"),
+        ("service-dat-hang", "v2.1.0", now - timedelta(days=1), "ci-bot", "e5f6g7h"),
+        ("service-thanh-toan", "v1.4.2", now - timedelta(minutes=4), "ci-bot", "9f2c1ab"),
+    ]
+
+    await conn.executemany(
+        "INSERT INTO deploy_history (service, version, deployed_at, deployed_by, commit_sha) VALUES ($1, $2, $3, $4, $5)",
+        deploys,
+    )
+
+    count_orders = await conn.fetchval("SELECT count(*) FROM orders")
+    count_payments = await conn.fetchval("SELECT count(*) FROM payments")
+    count_deploys = await conn.fetchval("SELECT count(*) FROM deploy_history")
+
+    print(f"[OK] Da seed thanh cong: {count_orders} orders, {count_payments} payments, {count_deploys} deploy history records.")
     await conn.close()
 
 
