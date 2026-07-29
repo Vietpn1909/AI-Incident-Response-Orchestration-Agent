@@ -256,9 +256,11 @@ npx -y -p @mermaid-js/mermaid-cli mmdc -i docs/architecture_diagram.md -o out.md
 
 ### Việc tuần này
 
-- [ ] Deploy `/health` lên Render → lấy public URL (**cần cho Jira webhook**, không chỉ để có deliverable #5)
+- [x] Deploy `/health` lên Render → https://p-035-incident-agent.onrender.com
+- [x] `RealJiraClient` + cổng HITL — đã verify trên Jira thật
+- [x] `POST /webhooks/jira` — nhận trigger sau khi duyệt, 3 lớp bảo vệ
 - [ ] Tạo Jira Cloud workspace + workflow — làm theo [docs/jira-setup.md](jira-setup.md)
-- [ ] **Verify quota Jira Automation free plan (~100 lần/tháng)** — nếu chật thì chuyển escalation vào Agent
+- [ ] Cấu hình Jira Automation rule gọi webhook (xem [jira-setup.md](jira-setup.md) Phần 5) + **verify quota free plan (~100 lần/tháng)**
 - [ ] Pair với Trung phần cấu hình Jira (đừng giao khoán — chỗ này encode HITL, sai là sai ràng buộc cứng)
 - [ ] Cuối 30/07 xem kết quả task probe của Trung để quyết phần việc tuần 2
 - [ ] Cuối tuần mở PR `develop` → `main`

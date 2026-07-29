@@ -70,6 +70,14 @@ Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/s
 
 Endpoint hiện trả dữ liệu từ fixture JSON, nên UI build được trước khi Agent tồn tại. Xem [contract ④](src/api/incidents.py).
 
+**`POST /webhooks/jira`** ([src/api/webhooks.py](src/api/webhooks.py)) là mảnh nối bước 7→8 của luồng: on-call duyệt trên Jira → Jira Automation gọi endpoint này → backend xác minh rồi mới thi hành. Ba lớp kiểm tra theo thứ tự:
+
+1. **Shared secret** (`X-Webhook-Secret`) — không có secret cấu hình thì endpoint trả 503, không chạy ở chế độ mở. Endpoint này kích được hành động production nên không có đường "tạm bỏ qua".
+2. **[`assert_human_approved()`](src/services/hitl.py)** — hỏi changelog ai đã duyệt. Là Agent → 403, **và post comment cảnh báo lên chính war room** để trạng thái `Remediating` trên Jira không khiến người xem tưởng hành động đã thi hành.
+3. **[`remediation.execute()`](src/services/remediation.py)** — chỉ nhận hành động trong `SUPPORTED_ACTIONS`, chặn trường hợp LLM sinh ra một `action` lạ rồi backend thi hành mù.
+
+Hành động hiện được **mô phỏng** (`simulated=True`) vì 2 service demo chưa tồn tại. Khi có rồi chỉ thay thân các hàm `_do_*`, chữ ký không đổi.
+
 ### 6. Data layer
 
 | Store | Nội dung |

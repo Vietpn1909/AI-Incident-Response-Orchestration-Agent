@@ -26,7 +26,7 @@ AI Agent điều phối trọn vòng đời incident, con người giữ quyền
 - **Tự mở war room** — tạo Jira Issue + comment thread cập nhật realtime
 - **Thu thập bối cảnh** — metric, log, và đối chiếu lịch sử deploy gần đây
 - **Chẩn đoán có bằng chứng** — giả thuyết nguyên nhân kèm số liệu dẫn chứng, gợi ý runbook
-- **HITL bắt buộc** — mọi hành động khắc phục production phải qua bước `Awaiting Approval`, Agent không có quyền tự duyệt
+- **HITL bắt buộc** — mọi hành động khắc phục production phải qua bước `Awaiting Approval`; backend xác minh qua Jira changelog rằng người duyệt không phải Agent, nếu là Agent thì từ chối thi hành
 - **Phát hiện lan truyền** — nhận biết sự cố lây sang dịch vụ phụ thuộc và link các incident
 - **Status page công khai** — trạng thái dịch vụ tự cập nhật theo incident
 - **Postmortem tự động** — sinh timeline, nguyên nhân, action item khi đóng incident
@@ -53,7 +53,8 @@ Ba quyết định định hình toàn bộ dự án (ADR chi tiết trong [docs
 
 | Quyết định | Lựa chọn | Lý do |
 |---|---|---|
-| Lớp quản lý vòng đời incident | **Jira Cloud** (workspace miễn phí riêng, không dùng Jira tổ chức) | War room = Issue, HITL = Workflow transition có phân quyền, audit trail = changelog, action item = sub-task — không phải tự xây CRUD + phân quyền + audit từ đầu |
+| Lớp quản lý vòng đời incident | **Jira Cloud** (workspace miễn phí riêng, không dùng Jira tổ chức) | War room = Issue, audit trail = changelog, action item = sub-task — không phải tự xây CRUD + phân quyền + audit từ đầu |
+| Thực thi HITL | **Backend kiểm tra changelog Jira**, không dùng phân quyền workflow | Jira Cloud bản mới chỉ tạo được team-managed project, loại này không đặt được điều kiện lên transition. Backend hỏi *ai* đã duyệt, là Agent thì từ chối — đã verify trên Jira thật |
 | Alerting | **Prometheus, không dùng Alertmanager** | Logic ngưỡng nằm thẳng trong code Agent để kiểm soát được và tích hợp trực tiếp với LangGraph |
 | Cách tạo sự cố để demo | **Load test thật (k6/Locust), không fault injection giả** | Giới hạn connection pool ở 5 → tải cao làm request xếp hàng → latency tăng do nghẽn cổ chai thật, và service phụ thuộc timeout theo một cách tự nhiên |
 
@@ -130,16 +131,13 @@ Hiện có:
 | GET | `/api/status` | Dữ liệu status page công khai | fixture → Jira (tuần 3) |
 | GET | `/api/incidents` | Danh sách incident (war-room view), lọc `?only_open=true` | fixture → Jira (tuần 3) |
 | GET | `/api/incidents/{jira_key}` | Chi tiết incident: giả thuyết, bằng chứng, timeline, postmortem | fixture → Jira (tuần 3) |
+| POST | `/webhooks/jira` | Nhận trigger từ Jira sau khi có người duyệt → thi hành khắc phục | Jira changelog |
 | POST | `/api/v1/chat` | Chat với agent (placeholder từ template) | — |
 | GET | `/api/v1/status` | Trạng thái agent | — |
 
 Ba endpoint incident **đã trả dữ liệu thật ngay bây giờ** (từ fixture JSON), nên UI build được trước khi Agent và Jira tồn tại. Tuần 3 chỉ đổi nguồn dữ liệu, hình dạng response không đổi — xem [contract ④](src/api/incidents.py).
 
-Theo kế hoạch:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/webhooks/jira` | Nhận trigger từ Jira Automation sau khi được duyệt |
+`POST /webhooks/jira` có **3 lớp bảo vệ**: shared secret → `assert_human_approved()` kiểm changelog Jira → danh sách hành động cho phép. Chi tiết: [src/api/webhooks.py](src/api/webhooks.py).
 
 ## Project Structure
 

@@ -80,6 +80,12 @@ Việc gấp nhất còn lại của tuần: Long, Trung, Việt vẫn chưa cà
 | Trương Công Thái Đức | Xử lý rào quyền: cả 4 thành viên chỉ có `push` trên repo org nên không cài được GitHub App của Render | ✅ Done | mirror `TruongDuke/P-035-deploy` (private, đã tắt Actions) | - |
 | Trương Công Thái Đức | **Deploy Render thành công — deliverable #5** | ✅ Done | https://p-035-incident-agent.onrender.com | - |
 | Trương Công Thái Đức | Điền Hồ sơ quản lý dự án (6/13 sheet: Tổng hợp, Đường link, Thành viên, 28 User Story, Lộ trình, Báo cáo tuần W1) | ✅ Done | file xlsx gửi lên Google Sheets | - |
+| Trương Công Thái Đức | Setup Jira Cloud (2 account, token, khảo sát project qua API) | ✅ Done | `jibinarybro.atlassian.net`, project `KAN` | - |
+| Trương Công Thái Đức | Phát hiện Jira Cloud bản mới chỉ tạo được team-managed → **đổi cơ chế HITL** sang kiểm tra changelog | ✅ Done | `src/services/hitl.py`, ADR-0001 cập nhật | - |
+| Trương Công Thái Đức | Phát hiện custom field không dùng được trên team-managed → chuyển sang label | ✅ Done | `src/services/jira/mapping.py` | - |
+| Trương Công Thái Đức | `RealJiraClient` + **verify cổng HITL trên Jira thật** | ✅ Done | Agent tự duyệt → backend từ chối ✅ | - |
+| Trương Công Thái Đức | `POST /webhooks/jira` — 3 lớp bảo vệ (secret → HITL → allowlist hành động) | ✅ Done | `src/api/webhooks.py`, 13 test | - |
+| Trương Công Thái Đức | Gom 3 file `jira*` thành package `src/services/jira/` | ✅ Done | `96630aa` | - |
 | Long / Trung / Việt | Cài `pre-push` hook + setup môi trường | ⏳ Todo | vẫn chưa xong | - |
 | Việt | Dựng spike `docker-compose`: Prometheus + service dummy có instrumentator, pool 5 mô phỏng bằng `Semaphore` | ✅ Done | `spike/` — target UP tại `localhost:9090` | - |
 | Việt | Viết `spike_promql.py` query Prometheus HTTP API, verify 4 câu PromQL của contract ① | ✅ Done | `avg latency = 1.562 s` lúc nghẽn, `0.083 s` lúc rảnh | - |
@@ -95,6 +101,15 @@ Việc gấp nhất vẫn chưa xong: 3 thành viên còn lại chưa cài `pre-
 Việt chạy xong spike Prometheus + PromQL. **Kết luận: kiến trúc không phải đổi** — 4 câu PromQL của contract ① chạy được và phân biệt rõ lúc rảnh (p95 0.095s, pool 0%) với lúc nghẽn (p95 1.95s, pool 100%, lỗi 2.1%). Nút cổ chai là thật: pool 5 × truy vấn 80ms cho trần ~62 req/s, bắn 150 request đồng thời đo được đúng 61 req/s và phần dư xếp hàng.
 
 Nhưng spike tìm ra **4 lỗi trong contract ①**, và lỗi nặng nhất đúng loại "không báo lỗi" mà contract ① tự cảnh báo: `prometheus-fastapi-instrumentator` mặc định chỉ có 4 bucket `(0.1, 0.5, 1, +Inf)`, nên `histogram_quantile` **kẹp p95 về 1.0** khi giá trị thật rơi vào `+Inf`. Bảng severity có P1 = p95 > 10s và P2 = p95 > 2s → **hai mức này chết cứng**, Agent sẽ phân loại mọi sự cố nặng thành P3. Query vẫn trả số, không có exception nào để lần theo. Sửa bằng cách chỉ định bucket tường minh; sau khi sửa cùng câu query trả 1.95s thay vì 1.0. Ba lỗi còn lại: câu tỷ lệ lỗi trả rỗng thay vì 0 khi service khoẻ (Agent không phân biệt được "khoẻ" với "mất metric"), request scrape `/metrics` của chính Prometheus làm nhiễu avg latency 40 lần, và label `service` của `db_pool_*` bị đổi tên thành `exported_service` do khai trùng ở hai chỗ. Chi tiết + cách sửa ở `spike/README.md`, cần PR riêng vào contract ① có Trung review vì 2 lỗi đổi code service của Trung.
+
+**Buổi tối:** setup Jira và làm trọn khối "quản lý vòng đời incident". Hai giả định trong ADR-0001 gãy khi gặp Jira thật, cả hai đều chỉ lộ ra khi chạy chứ không đọc tài liệu mà biết được:
+
+1. Jira Cloud bản mới (mô hình Spaces) **chỉ tạo được team-managed project**, mà loại này không đặt được điều kiện phân quyền lên transition → không thể trông cậy Jira chặn Agent. Chuyển cổng HITL sang backend, kiểm tra changelog xem *ai* đã duyệt. Cách mới còn demo trực quan hơn và test được bằng CI.
+2. **Custom field không dùng được** trên team-managed (tạo qua API thành công nhưng không xuất hiện trên project) → chuyển sang label, bớt hẳn một lớp phức tạp.
+
+Đã verify cổng HITL trên Jira thật: Agent tự chuyển sang `Remediating` → Jira cho chuyển (đúng như dự đoán) → **backend từ chối thi hành**. Đây là bằng chứng cho ràng buộc bắt buộc của đề bài, chạy trên hạ tầng thật chứ không phải mock. Trên đường verify còn bắt được một bug của chính mình: Jira đặt issue mới ở status đầu tiên của board (`Idea`) mà `Idea` đang map vào `REMEDIATING`, nên incident vừa tạo đã hiện là "Remediating".
+
+Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bước 7→8 của kịch bản demo. Tổng 49 test pass.
 
 ---
 
