@@ -70,6 +70,26 @@ Việc gấp nhất còn lại của tuần: Long, Trung, Việt vẫn chưa cà
 
 ---
 
+## 2026-07-29
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Phát hiện `Dockerfile` của template chưa bao giờ chạy được (package ở `/root/.local`, quyền 700, non-root user không đọc được → exit 126) | ✅ Done | `8e3526e` — chuyển sang venv `/opt/venv` | - |
+| Trương Công Thái Đức | Bind `$PORT` thay vì hardcode 8000 + viết `render.yaml` | ✅ Done | `8e3526e` | - |
+| Trương Công Thái Đức | Test Docker local: build, PORT=10000 và mặc định, healthcheck, SIGTERM | ✅ Done | tất cả pass | - |
+| Trương Công Thái Đức | Xử lý rào quyền: cả 4 thành viên chỉ có `push` trên repo org nên không cài được GitHub App của Render | ✅ Done | mirror `TruongDuke/P-035-deploy` (private, đã tắt Actions) | - |
+| Trương Công Thái Đức | **Deploy Render thành công — deliverable #5** | ✅ Done | https://p-035-incident-agent.onrender.com | - |
+| Trương Công Thái Đức | Điền Hồ sơ quản lý dự án (6/13 sheet: Tổng hợp, Đường link, Thành viên, 28 User Story, Lộ trình, Báo cáo tuần W1) | ✅ Done | file xlsx gửi lên Google Sheets | - |
+| Long / Trung / Việt | Cài `pre-push` hook + setup môi trường | ⏳ Todo | vẫn chưa xong | - |
+
+**Tổng kết ngày:** Deploy xong, có public URL — deliverable #5 hoàn thành, và quan trọng hơn là bước duyệt → webhook → remediation của kịch bản demo giờ khả thi. Trên đường deploy phát hiện `Dockerfile` của template **chưa bao giờ chạy được**: package cài bằng `pip install --user` nằm ở `/root/.local` (quyền 700) nên sau `USER appuser` container exit 126 với `exec: uvicorn: Permission denied`. Đúng loại lỗi mà việc deploy sớm tồn tại để bắt — nếu để tuần 5 mới deploy thì gặp nó lúc không còn thời gian.
+
+Rào thứ hai: cả 4 thành viên chỉ có quyền `push` trên repo org (repo do bot BTC tạo nên không ai có `admin`), mà Render cần quyền admin để cài GitHub App. Thay vì chờ BTC approve, deploy từ repo mirror trên account cá nhân — không phải xin quyền gì và có URL ngay trong ngày. Đánh đổi: sau mỗi lần merge PR trên web phải `git push origin develop` để mirror không tụt lại, đã ghi vào START-HERE.
+
+Việc gấp nhất vẫn chưa xong: 3 thành viên còn lại chưa cài `pre-push` hook.
+
+---
+
 ## [YYYY-MM-DD]
 
 | Member | Task | Status | Output | Time |

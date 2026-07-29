@@ -54,9 +54,24 @@ git push origin feature/<tên-việc>
 - Commit message: `feat:` thêm tính năng · `fix:` sửa lỗi · `docs:` tài liệu · `test:` test · `chore:` việc phụ.
 - Ghi việc mình làm vào [WORKLOG.md](../WORKLOG.md) mỗi ngày. Đây là deliverable được chấm, không phải thủ tục.
 
-### 4. Vì sao có repo thứ hai (`TruongDuke/P-035-deploy`)
+### 4. Backend đã deploy — dùng URL này khi cần
 
-Render deploy code từ repo `TruongDuke/P-035-deploy`, **không phải** từ repo org. Lý do: Render dùng GitHub App, mà cài GitHub App lên repo org cần quyền `admin` — cả 4 thành viên đều chỉ có `push` vì repo do bot của BTC tạo. Đang chờ BTC approve; trong lúc đó deploy từ repo mirror cá nhân để không chậm tiến độ.
+```
+https://p-035-incident-agent.onrender.com
+```
+
+Long có thể trỏ Streamlit vào đây thay vì `localhost:8000` nếu không muốn chạy backend local:
+
+```python
+API = "https://p-035-incident-agent.onrender.com"   # hoặc "http://localhost:8000"
+data = requests.get(f"{API}/api/status").json()
+```
+
+⚠️ Free tier **tự ngủ sau 15 phút** không có request, request đầu tiên sau đó mất 50 giây hoặc hơn. Gọi `/health` một lần cho service tỉnh trước khi làm việc thật.
+
+### 5. Vì sao có repo thứ hai (`TruongDuke/P-035-deploy`)
+
+Render deploy code từ repo `TruongDuke/P-035-deploy`, **không phải** từ repo org. Lý do: Render dùng GitHub App, mà cài GitHub App lên repo org cần quyền `admin` — cả 4 thành viên đều chỉ có `push` vì repo do bot của BTC tạo. Thay vì chờ BTC approve, deploy từ repo mirror cá nhân (Đức có admin ở đó) nên **không cần xin quyền gì**.
 
 **Repo org vẫn là nguồn chính** — mọi người làm việc, mở PR, nộp bài ở đó. Repo mirror chỉ để Render pull code, đã tắt GitHub Actions.
 
@@ -73,9 +88,9 @@ git remote set-url --add --push origin https://github.com/AI20K-Build-Phase-Coho
 git remote set-url --add --push origin https://github.com/TruongDuke/P-035-deploy.git
 ```
 
-Khi BTC approve xong thì đổi Blueprint sang repo org và bỏ mirror đi.
+Nếu sau này BTC cấp quyền admin repo org thì đổi Blueprint sang repo org và bỏ mirror đi — nhưng không gấp, hiện tại đã chạy được.
 
-### 5. Không tự sửa 4 file contract
+### 6. Không tự sửa 4 file contract
 
 Bốn file này là thoả thuận giữa nhiều người. Sửa một mình sẽ làm vỡ code người khác:
 

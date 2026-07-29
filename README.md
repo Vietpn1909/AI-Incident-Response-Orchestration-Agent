@@ -4,6 +4,8 @@
 
 **Team Binary Brothers** · Đề bài **PTNT-20** — Khối PTNT (Kiến trúc & Tích hợp)
 
+🌐 **Live:** https://p-035-incident-agent.onrender.com · [API docs](https://p-035-incident-agent.onrender.com/docs) · [status page (JSON)](https://p-035-incident-agent.onrender.com/api/status)
+
 > 👋 **Thành viên đội: mở [docs/START-HERE.md](docs/START-HERE.md) trước khi code** — việc của từng người, lệnh cụ thể, và tiêu chí "xong là thế nào".
 
 ---
@@ -167,7 +169,7 @@ Theo kế hoạch:
 | 2 | README.md | file này | Đức | ✅ |
 | 3 | Architecture Diagram | `docs/architecture_diagram.md` + `ARCHITECTURE.md` + 3 ADR | Đức | ✅ |
 | 4 | AI Logs | LangSmith + `.ai-log/` | Đức | 🔄 |
-| 5 | Live URL | Render | Đức | ⏳ |
+| 5 | Live URL | [p-035-incident-agent.onrender.com](https://p-035-incident-agent.onrender.com) | Đức | ✅ |
 | 6 | Video Demo | `presentation/` | Long | ⏳ |
 | 7 | Pitch Deck | `presentation/` | Long | ⏳ |
 | 8 | Weekly Journal | `JOURNAL.md` | Đức | 🔄 |
