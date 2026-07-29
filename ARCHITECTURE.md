@@ -8,7 +8,7 @@ Sơ đồ đầy đủ (container, agent flow, sequence) ở [docs/architecture_
 
 Hệ thống gồm bốn phần: một cặp service demo tự sinh sự cố thật khi bị tải, một lớp observability thu thập số liệu, một AI Agent phát hiện — chẩn đoán — điều phối khắc phục, và Jira Cloud làm lớp quản lý vòng đời incident kèm cổng phê duyệt của con người.
 
-Điểm cốt lõi của kiến trúc: **Agent không có đường nào để tự thực thi hành động production**. Nó chỉ đề xuất; việc mở cổng do người làm trên Jira, và Agent biết được qua webhook. Đây là ràng buộc bắt buộc của đề bài, và nó được thực thi ở tầng phân quyền của Jira chứ không phải bằng một câu `if` trong code.
+Điểm cốt lõi của kiến trúc: **Agent không có đường nào để tự thực thi hành động production**. Nó chỉ đề xuất; việc phê duyệt do người làm trên Jira. Trước khi thi hành bất kỳ hành động khắc phục nào, backend hỏi Jira *ai* đã phê duyệt — nếu là chính account Agent thì từ chối. Bằng chứng lấy từ Jira changelog, dữ liệu Jira tự ghi nên Agent không giả mạo được. Thực thi ở [`src/services/hitl.py`](src/services/hitl.py), lý do chọn cách này ở [ADR-0001 mục "Cập nhật 2026-07-29"](docs/adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog).
 
 ## Components
 
@@ -52,7 +52,7 @@ Thay vì tự xây CRUD ticket + phân quyền + audit log, dùng Jira Cloud qua
 | Yêu cầu đề bài | Cơ chế Jira |
 |---|---|
 | War room | Issue type `Incident` + comment thread |
-| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`, bước sang `Remediating` cần quyền Agent không có |
+| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`, cộng cổng kiểm tra changelog ở backend (`hitl.assert_human_approved`) |
 | Audit trail | Jira changelog (có sẵn) |
 | Action item | Sub-task |
 | Học từ incident cũ | JQL search |

@@ -36,7 +36,7 @@ Mapping:
 | Yêu cầu đề bài | Cơ chế Jira |
 |---|---|
 | War room | 1 Issue (type `Incident`) + comment thread Agent post realtime |
-| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`, bước sang `Remediating` yêu cầu quyền mà **Agent không có** |
+| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`. ⚠️ Cách thực thi đã đổi — xem mục "Cập nhật 2026-07-29" ở dưới |
 | Audit trail | Jira changelog (có sẵn) |
 | Postmortem | Comment/description cuối khi chuyển `Resolved` |
 | Action item | Sub-task gắn issue chính |
@@ -60,6 +60,43 @@ Mapping:
 - **Automation free plan giới hạn ~100 lần chạy/tháng** và time-based trigger không tức thời. Rủi ro cạn quota giữa lúc test escalation. Giảm thiểu: Trung verify quota thật ngay tuần 1; nếu chật, chuyển escalation logic vào Agent (scheduler nội bộ) thay vì Automation rule.
 - **Webhook cần public URL.** Jira không gọi được `localhost`, nên phải deploy backend lên Render sớm — đây là lý do deploy được đặt là việc tuần 1 chứ không phải tuần cuối.
 - Cấu hình Jira là bước thủ công, không nằm trong code nên không được version control. Giảm thiểu: ghi lại cấu hình thành checklist trong `docs/`.
+
+## Cập nhật 2026-07-29 — HITL chuyển sang kiểm tra changelog
+
+**Điều đã thay đổi so với quyết định gốc.**
+
+Quyết định gốc dựa trên giả định: cấu hình Jira Workflow có điều kiện phân quyền trên transition `Awaiting Approval → Remediating`, để chính Jira chặn account Agent. Giả định này **không còn đúng**.
+
+Khi thực tế cấu hình, Jira Cloud bản mới (mô hình "Spaces") **chỉ tạo được team-managed project**. Đã thử cả ba đường: luồng Create space, gallery template đầy đủ, và URL tạo project cổ điển — không đường nào cho chọn company-managed. Mà team-managed project không cho đặt điều kiện lên từng transition, nên **không thể trông cậy Jira chặn Agent**.
+
+### Phương án thay: cổng phê duyệt ở backend, bằng chứng từ changelog
+
+Khi issue chuyển sang `Remediating`, backend hỏi Jira: *ai* đã thực hiện transition này? Nếu là account Agent → **từ chối thực thi remediation**.
+
+```python
+author = client.get_transition_author(jira_key, IncidentState.REMEDIATING)
+if author == agent_account_id:
+    raise ApprovalError("Agent không được tự duyệt hành động production")
+```
+
+Thực thi ở [`src/services/hitl.py`](../../src/services/hitl.py). Mọi đường tới `execute_remediation` phải đi qua `assert_human_approved()`.
+
+Vẫn cần **hai account Jira** như quyết định gốc — một cho Agent, một cho người duyệt — vì cơ chế này so accountId để phân biệt.
+
+### Đánh đổi
+
+**Được thêm**
+
+- Không phụ thuộc loại project hay gói Jira. Đổi Jira sang công cụ khác cũng chỉ cần một hàm đọc "ai đã thay đổi trạng thái"
+- **Demo trực quan hơn:** cho Agent thử tự transition rồi gọi remediation → backend từ chối, in log rõ ràng. Thuyết phục hơn "Jira ẩn nút nên Agent không bấm được"
+- Kiểm được bằng pytest nên CI gác được. `tests/test_services/test_hitl.py::test_agent_tu_duyet_bi_tu_choi` là test quan trọng nhất repo
+- Bằng chứng là changelog do Jira tự ghi, Agent không giả mạo được
+
+**Mất đi**
+
+- Hàng rào nằm trong code của mình, không ở tầng phân quyền của hệ thống ngoài. Nếu ai xoá lời gọi `assert_human_approved()` thì cổng mất — chống bằng test trong CI, nhưng vẫn yếu hơn phân quyền hạ tầng
+- Agent vẫn *chuyển được* trạng thái issue sang `Remediating` trên Jira, chỉ là hành động khắc phục không được thi hành. Trạng thái trên Jira có thể gây nhầm lẫn khi xem bằng mắt → cần comment cảnh báo khi phát hiện trường hợp này
+- Phụ thuộc `jira_agent_account_id` được cấu hình đúng. Thiếu giá trị này thì `assert_human_approved()` raise `ValueError` chứ không cho qua — cấu hình sai phải fail to
 
 ## Phần Jira không giải quyết được — vẫn phải tự xây
 

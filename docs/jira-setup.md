@@ -1,51 +1,59 @@
 # Checklist cấu hình Jira Cloud
 
-Làm một lần, khoảng 30–45 phút. Làm theo đúng thứ tự — phần sau phụ thuộc phần trước.
+Làm một lần, khoảng 20–30 phút.
 
 > ⚠️ Dùng **workspace Jira miễn phí tự tạo**, tuyệt đối không dùng Jira của công ty/tổ chức. Lý do trong [ADR-0001](adr/0001-jira-lam-lop-incident-lifecycle.md).
 
+> 📌 **Bản trước của file này yêu cầu tạo project `Company-managed` để cấu hình điều kiện phân quyền trên workflow. Yêu cầu đó đã bỏ** — Jira Cloud bản mới chỉ tạo được team-managed project. Cổng phê duyệt HITL giờ nằm ở backend, kiểm tra qua changelog. Chi tiết: [ADR-0001, mục "Cập nhật 2026-07-29"](adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog).
+
 ---
 
-## Phần 0 — Điều quan trọng nhất: cần HAI account Jira
+## Phần 0 — Vẫn cần HAI account Jira
 
-Đây là chỗ dễ làm sai nhất, và làm sai thì **toàn bộ cơ chế HITL vô nghĩa**.
+Đây vẫn là điều quan trọng nhất, chỉ khác lý do.
 
-Ràng buộc của đề bài là Agent **không được** tự chuyển incident sang `Remediating`. Nhưng nếu Agent dùng API token của bạn, nó có đúng quyền của bạn — tức là chuyển được. Lúc đó "HITL" chỉ là lời hứa trong code, không phải cơ chế được thực thi.
+Cổng HITL hoạt động bằng cách so **accountId** của người đã chuyển issue sang `Remediating` với accountId của Agent. Nếu Agent và người duyệt dùng **cùng một account**, backend không phân biệt được ai làm gì và cổng phê duyệt vô nghĩa.
 
-Nên cần:
+| Account | Dùng cho |
+|---|---|
+| **Của bạn** | Vai on-call/IC — người bấm duyệt trên Jira |
+| **Account riêng cho Agent** | Agent gọi REST API (tạo issue, comment, transition các bước khác) |
 
-| Account | Dùng cho | Quyền |
-|---|---|---|
-| **Của bạn** (`ductct@...`) | Vai on-call/IC — người duyệt | Đầy đủ, chuyển được sang `Remediating` |
-| **Account riêng cho Agent** | Agent gọi REST API | Tạo issue, comment, chuyển các bước khác — **KHÔNG** chuyển được sang `Remediating` |
-
-Tạo account thứ hai bằng một email khác (Gmail phụ, hoặc `+agent` nếu Gmail hỗ trợ: `ductct+agent@gmail.com`).
-
-> **Thứ tự thực tế:** phải làm **Phần 1** (tạo site + project) trước, vì chỉ khi có site rồi mới mời được account thứ hai vào. Đọc phần này trước để biết *vì sao* cần 2 account, nhưng bắt tay làm thì bắt đầu từ Phần 1.
-
-- [ ] Chuẩn bị sẵn một email thứ hai
-- [ ] (sau Phần 1) Jira → Settings → User management → **Invite user** → mời email đó vào site
+- [ ] Chuẩn bị một email thứ hai (Gmail phụ, hoặc `ductct+agent@gmail.com` nếu Gmail hỗ trợ)
+- [ ] Jira → ⚙️ → **User management** → **Invite user** → mời email đó vào site
 - [ ] Cả hai account đăng nhập được
 
 ---
 
-## Phần 1 — Tạo site và project
+## Phần 1 — Project
 
-- [ ] Vào https://www.atlassian.com/software/jira/free → tạo site mới (dạng `<tên>.atlassian.net`)
-- [ ] Ghi lại URL site — đây là `JIRA_BASE_URL`
-- [ ] Tạo project mới, **chọn loại `Company-managed`** (có nơi gọi là *Classic*)
+Dùng luôn project có sẵn, không cần tạo mới.
 
-> ⚠️ **Phải là Company-managed, không phải Team-managed.** Team-managed project có workflow đơn giản hoá, **không cho thêm condition lên transition** — tức không cấu hình được cổng phê duyệt. Nếu tạo sai loại thì phải tạo lại project từ đầu, không đổi được.
+- [ ] Ghi lại URL site → đây là `JIRA_BASE_URL`, dạng `https://<tên>.atlassian.net`
+- [ ] Ghi lại project key đang dùng (vd. `KAN`) → `JIRA_PROJECT_KEY`
+- [ ] Xoá các space mẫu không dùng cho gọn (tuỳ, không bắt buộc)
 
-- [ ] Project key đặt là `INC` (để issue có dạng `INC-1`, khớp với `FakeJiraClient`)
-- [ ] Template chọn `Bug tracking` hoặc `Kanban` — không quan trọng, sẽ tự sửa workflow sau
+Loại team-managed hay company-managed **không còn quan trọng**.
 
 ---
 
-## Phần 2 — Issue type và custom field
+## Phần 2 — Trạng thái workflow
 
-- [ ] Project settings → **Issue types** → tạo issue type tên `Incident`
-- [ ] Tạo 3 custom field, gắn vào screen của `Incident`:
+- [ ] Mở board của project → cấu hình cột/trạng thái → tạo đúng 5 status, **tên viết chính xác như dưới** (khớp `IncidentState` trong [src/models/incident.py](../src/models/incident.py)):
+
+```
+Open  ·  Investigating  ·  Awaiting Approval  ·  Remediating  ·  Resolved
+```
+
+Trên team-managed, thêm status làm ở ngay board: thêm cột mới rồi đặt tên. Không cần cấu hình transition — team-managed cho chuyển tự do giữa các trạng thái, và điều đó **không sao**, vì hàng rào đã nằm ở backend.
+
+- [ ] Kiểm tra tên viết đúng từng chữ, kể cả khoảng trắng trong `Awaiting Approval`
+
+---
+
+## Phần 3 — Custom field
+
+- [ ] Tạo 3 field và gắn vào work type dùng cho incident:
 
 | Tên field | Kiểu | Giá trị |
 |---|---|---|
@@ -53,9 +61,9 @@ Tạo account thứ hai bằng một email khác (Gmail phụ, hoặc `+agent` n
 | `affected_service` | Short text | (để trống) |
 | `root_cause_confidence` | Number | (để trống) |
 
-- [ ] Ghi lại **field ID** của từng field: Settings → Issues → Custom fields → hover vào field, URL có dạng `...customFieldId=10050` → ID là `customfield_10050`
+- [ ] Ghi lại **field ID** của từng field: ⚙️ → Issues → Custom fields → hover vào field, URL chứa `customFieldId=10050` → ID là `customfield_10050`
 
-Cần field ID vì REST API dùng ID chứ không dùng tên. Ghi lại theo mẫu:
+REST API dùng ID chứ không dùng tên, nên thiếu bước này là không tích hợp được:
 
 ```
 severity              = customfield_____
@@ -65,103 +73,79 @@ root_cause_confidence = customfield_____
 
 ---
 
-## Phần 3 — Workflow 5 trạng thái
+## Phần 4 — API token và accountId của Agent
 
-- [ ] Project settings → **Workflows** → edit workflow của `Incident`
-- [ ] Tạo đúng 5 status, **tên viết chính xác như dưới** (khớp `IncidentState` trong [src/models/incident.py](../src/models/incident.py)):
+- [ ] Đăng nhập bằng **account Agent** (không phải account bạn)
+- [ ] https://id.atlassian.com/manage-profile/security/api-tokens → **Create API token** → copy ngay (chỉ hiện một lần)
+- [ ] Lấy **accountId** của account Agent — đây là giá trị cổng HITL dựa vào. Cách dễ nhất, chạy sau khi đã có token:
+
+```bash
+curl -sS -u "<email-agent>:<token>" \
+  "https://<site>.atlassian.net/rest/api/3/myself" | python3 -m json.tool | grep accountId
+```
+
+- [ ] Điền vào `.env` local **và** Render → service → Environment:
 
 ```
-Open  →  Investigating  →  Awaiting Approval  →  Remediating  →  Resolved
+JIRA_BASE_URL           = https://______.atlassian.net
+JIRA_EMAIL              = <email account Agent>
+JIRA_API_TOKEN          = <token>
+JIRA_PROJECT_KEY        = KAN
+JIRA_AGENT_ACCOUNT_ID   = <accountId vừa lấy>
 ```
 
-- [ ] Thêm transition giữa các bước theo đúng thứ tự trên
-- [ ] Thêm transition `Resolved` ← từ bất kỳ đâu (để đóng sớm khi báo động sai)
+⚠️ `JIRA_AGENT_ACCOUNT_ID` **bắt buộc phải có**. Thiếu nó thì [`assert_human_approved()`](../src/services/hitl.py) raise `ValueError` và từ chối chạy — cố ý làm vậy, vì thiếu giá trị này đồng nghĩa không có cổng phê duyệt nào cả.
 
-### Chặn Agent ở cổng phê duyệt — bước then chốt
-
-- [ ] Settings → Groups → tạo group `oncall-approvers`, thêm **account của bạn** vào (KHÔNG thêm account Agent)
-- [ ] Trong workflow, click vào transition **`Awaiting Approval → Remediating`** → tab **Conditions** → **Add condition** → chọn **User Is In Group** → chọn `oncall-approvers`
-- [ ] Publish workflow
-
-Sau bước này, Agent gọi API để chuyển sang `Remediating` sẽ nhận lỗi HTTP 400/403 — giống hệt `PermissionError` mà `FakeJiraClient` đã mô phỏng.
+⚠️ Token không được commit. Lỡ đẩy lên GitHub thì revoke ngay ở link trên rồi tạo token mới.
 
 ---
 
-## Phần 4 — Automation
+## Phần 5 — Automation (tuỳ chọn, làm sau)
 
-- [ ] Project settings → **Automation**
+Không còn là bắt buộc. Nếu quota gói Free đủ thì làm, không thì Agent tự poll Jira.
+
+- [ ] Project settings → **Automation** → tab **Usage**: xem giới hạn thực tế (khoảng 100 lần chạy/tháng)
+- [ ] Kiểm tra action **Send web request** có dùng được trên gói Free không
 
 ### Rule 1: webhook khi được duyệt
 
 - [ ] Trigger: **Issue transitioned** → To status = `Remediating`
 - [ ] Action: **Send web request**
   - URL: `https://p-035-incident-agent.onrender.com/webhooks/jira`
-  - Method: `POST`
-  - Header: `X-Webhook-Secret` = giá trị lấy từ Render (Dashboard → service → Environment → `JIRA_WEBHOOK_SECRET`)
-  - Body: `Issue data` (hoặc custom JSON có `{{issue.key}}`)
-- [ ] Đặt tên rule: `Approved → notify agent`, bật rule
+  - Method: `POST`, Header `X-Webhook-Secret` = giá trị `JIRA_WEBHOOK_SECRET` trên Render
+  - Body: `Issue data`
 
-### Rule 2: leo thang khi treo quá lâu
-
-- [ ] Trigger: **Scheduled** → mỗi 5 phút, kèm JQL:
-  ```
-  project = INC AND status = "Awaiting Approval" AND updated <= -10m
-  ```
-- [ ] Action: **Add comment** — nội dung cảnh báo leo thang
-- [ ] Đặt tên: `Escalate stale approval`, **tạm thời để TẮT** (bật lúc test để không tốn quota)
-
-### Kiểm tra quota — làm ngay, đừng bỏ qua
-
-- [ ] Project settings → Automation → tab **Usage**: xem giới hạn thực tế của gói Free (khoảng 100 lần chạy/tháng)
-- [ ] Kiểm tra action **Send web request** có dùng được trên gói Free không
-
-> Nếu `Send web request` bị chặn (yêu cầu gói trả phí), **không cần đổi kiến trúc**: chuyển sang cho Agent tự poll Jira định kỳ (query JQL tìm issue vừa sang `Remediating`) thay vì chờ webhook. Chậm hơn vài giây, nhưng luồng HITL giữ nguyên và không cần public URL nữa. Ghi lại kết quả kiểm tra này vào JOURNAL vì nó ảnh hưởng thiết kế.
+> Nếu `Send web request` bị chặn hoặc quota quá chật: cho Agent poll Jira bằng JQL tìm issue vừa sang `Remediating`, chậm hơn vài giây và luồng HITL giữ nguyên **vì cổng phê duyệt không nằm ở webhook**. Ghi kết quả kiểm tra vào JOURNAL.
 
 ---
 
-## Phần 5 — API token cho Agent
+## Phần 6 — Gửi lại cho người làm tích hợp
 
-- [ ] Đăng nhập bằng **account Agent** (không phải account bạn)
-- [ ] Vào https://id.atlassian.com/manage-profile/security/api-tokens → **Create API token**
-- [ ] Copy token ngay (chỉ hiện một lần)
-- [ ] Điền vào Render → service → Environment:
-
-```
-JIRA_BASE_URL  = https://<tên-site>.atlassian.net
-JIRA_EMAIL     = <email của account Agent>
-JIRA_API_TOKEN = <token vừa tạo>
-```
-
-- [ ] Đồng thời thêm 3 biến này vào `.env` local (file đã gitignore, không lo lộ)
-
-⚠️ Token này **không được commit**. Nếu vô tình đẩy lên GitHub thì vào lại trang trên revoke ngay rồi tạo token mới.
-
----
-
-## Phần 6 — Cần gửi lại cho ai làm tích hợp
-
-Sau khi xong, gửi 5 thông tin sau (token gửi riêng, không đăng group chat):
+Token và accountId gửi riêng, không đăng group chat:
 
 ```
 JIRA_BASE_URL         = https://______.atlassian.net
-Project key           = INC
+JIRA_PROJECT_KEY      = ______
 severity              = customfield_____
 affected_service      = customfield_____
 root_cause_confidence = customfield_____
-Send web request có dùng được trên Free?   có / không
-Quota automation còn lại:                  ___/100
+JIRA_AGENT_ACCOUNT_ID = ______
+5 status đã tạo đúng tên?                  có / chưa
+Send web request dùng được trên Free?      có / không
+Quota automation:                          ___/100
 ```
 
 ---
 
-## Phần 7 — Sẽ verify bằng test thật
+## Phần 7 — Verify bằng Jira thật
 
-Sau khi có thông tin trên, `RealJiraClient` được implement theo [contract ③](../src/services/jira_client.py) và chạy 3 test này với Jira thật — không phải giả định:
+Sau khi có thông tin trên, `RealJiraClient` được implement theo [contract ③](../src/services/jira_client.py) và chạy 4 test với Jira thật:
 
 | Test | Kỳ vọng |
 |---|---|
-| Agent tạo issue, comment, chuyển `Open → Investigating → Awaiting Approval` | Thành công |
-| **Agent chuyển `Awaiting Approval → Remediating`** | **Bị từ chối** (403/400) — nếu thành công thì cấu hình Phần 3 sai, HITL không được thực thi |
-| Account của bạn chuyển `Awaiting Approval → Remediating` | Thành công |
+| Agent tạo issue, comment, set custom field | Thành công |
+| Agent chuyển `Open → Investigating → Awaiting Approval` | Thành công |
+| Agent tự chuyển sang `Remediating`, rồi gọi remediation | **`ApprovalError`** — changelog cho thấy tác giả là Agent |
+| Bạn bấm duyệt trên Jira, rồi gọi remediation | Thành công, trả về accountId của bạn |
 
-Test thứ hai là quan trọng nhất. Nó là bằng chứng cho thấy ràng buộc bắt buộc của đề bài được thực thi ở tầng hạ tầng, không phải bằng thiện chí trong code.
+Hai test cuối là bằng chứng cho ràng buộc bắt buộc của đề bài. Bản mock của chúng đã chạy trong CI: [`tests/test_services/test_hitl.py`](../tests/test_services/test_hitl.py).

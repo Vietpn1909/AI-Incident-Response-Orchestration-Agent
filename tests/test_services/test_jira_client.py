@@ -79,28 +79,25 @@ def test_post_proposal_chuyen_sang_cho_duyet(client: FakeJiraClient, signal: Inc
     assert incident.awaiting_human is True
 
 
-def test_agent_khong_the_tu_duyet(client: FakeJiraClient, signal: IncidentSignal):
-    """HITL: Agent không có quyền chuyển sang Remediating.
-
-    Đây là ràng buộc bắt buộc của đề bài. Nếu test này fail, tức là ai đó đã mở
-    đường cho Agent tự thực thi hành động production.
-    """
+def test_changelog_ghi_dung_ai_da_transition(client: FakeJiraClient, signal: IncidentSignal):
+    """Client phải ghi lại *ai* chuyển trạng thái — đây là dữ liệu mà cổng HITL dựa vào."""
     jira_key = client.create_incident(signal)
     client.post_proposal(jira_key, RemediationProposal(action="rollback", target="service-thanh-toan"))
 
-    with pytest.raises(PermissionError, match="không có quyền"):
-        client.transition(jira_key, IncidentState.REMEDIATING)
+    assert client.get_transition_author(jira_key, IncidentState.REMEDIATING) is None
 
-    assert client.get_incident(jira_key).state == IncidentState.AWAITING_APPROVAL
+    client.transition(jira_key, IncidentState.REMEDIATING)
+    assert client.get_transition_author(jira_key, IncidentState.REMEDIATING) == client.AGENT_ACCOUNT_ID
 
 
-def test_nguoi_duyet_moi_chuyen_duoc_sang_remediating(client: FakeJiraClient, signal: IncidentSignal):
+def test_nguoi_duyet_duoc_ghi_nhan_la_nguoi(client: FakeJiraClient, signal: IncidentSignal):
     jira_key = client.create_incident(signal)
     client.post_proposal(jira_key, RemediationProposal(action="rollback", target="service-thanh-toan"))
 
     client.approve_as_human(jira_key)
 
     assert client.get_incident(jira_key).state == IncidentState.REMEDIATING
+    assert client.get_transition_author(jira_key, IncidentState.REMEDIATING) == client.HUMAN_ACCOUNT_ID
 
 
 def test_find_open_incident_chong_mo_trung(client: FakeJiraClient, signal: IncidentSignal):
