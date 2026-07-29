@@ -80,6 +80,12 @@ Việc gấp nhất còn lại của tuần: Long, Trung, Việt vẫn chưa cà
 | Trương Công Thái Đức | Xử lý rào quyền: cả 4 thành viên chỉ có `push` trên repo org nên không cài được GitHub App của Render | ✅ Done | mirror `TruongDuke/P-035-deploy` (private, đã tắt Actions) | - |
 | Trương Công Thái Đức | **Deploy Render thành công — deliverable #5** | ✅ Done | https://p-035-incident-agent.onrender.com | - |
 | Trương Công Thái Đức | Điền Hồ sơ quản lý dự án (6/13 sheet: Tổng hợp, Đường link, Thành viên, 28 User Story, Lộ trình, Báo cáo tuần W1) | ✅ Done | file xlsx gửi lên Google Sheets | - |
+| Trương Công Thái Đức | Setup Jira Cloud (2 account, token, khảo sát project qua API) | ✅ Done | `jibinarybro.atlassian.net`, project `KAN` | - |
+| Trương Công Thái Đức | Phát hiện Jira Cloud bản mới chỉ tạo được team-managed → **đổi cơ chế HITL** sang kiểm tra changelog | ✅ Done | `src/services/hitl.py`, ADR-0001 cập nhật | - |
+| Trương Công Thái Đức | Phát hiện custom field không dùng được trên team-managed → chuyển sang label | ✅ Done | `src/services/jira/mapping.py` | - |
+| Trương Công Thái Đức | `RealJiraClient` + **verify cổng HITL trên Jira thật** | ✅ Done | Agent tự duyệt → backend từ chối ✅ | - |
+| Trương Công Thái Đức | `POST /webhooks/jira` — 3 lớp bảo vệ (secret → HITL → allowlist hành động) | ✅ Done | `src/api/webhooks.py`, 13 test | - |
+| Trương Công Thái Đức | Gom 3 file `jira*` thành package `src/services/jira/` | ✅ Done | `96630aa` | - |
 | Long / Trung / Việt | Cài `pre-push` hook + setup môi trường | ⏳ Todo | vẫn chưa xong | - |
 
 **Tổng kết ngày:** Deploy xong, có public URL — deliverable #5 hoàn thành, và quan trọng hơn là bước duyệt → webhook → remediation của kịch bản demo giờ khả thi. Trên đường deploy phát hiện `Dockerfile` của template **chưa bao giờ chạy được**: package cài bằng `pip install --user` nằm ở `/root/.local` (quyền 700) nên sau `USER appuser` container exit 126 với `exec: uvicorn: Permission denied`. Đúng loại lỗi mà việc deploy sớm tồn tại để bắt — nếu để tuần 5 mới deploy thì gặp nó lúc không còn thời gian.
@@ -87,6 +93,15 @@ Việc gấp nhất còn lại của tuần: Long, Trung, Việt vẫn chưa cà
 Rào thứ hai: cả 4 thành viên chỉ có quyền `push` trên repo org (repo do bot BTC tạo nên không ai có `admin`), mà Render cần quyền admin để cài GitHub App. Thay vì chờ BTC approve, deploy từ repo mirror trên account cá nhân — không phải xin quyền gì và có URL ngay trong ngày. Đánh đổi: sau mỗi lần merge PR trên web phải `git push origin develop` để mirror không tụt lại, đã ghi vào START-HERE.
 
 Việc gấp nhất vẫn chưa xong: 3 thành viên còn lại chưa cài `pre-push` hook.
+
+**Buổi tối:** setup Jira và làm trọn khối "quản lý vòng đời incident". Hai giả định trong ADR-0001 gãy khi gặp Jira thật, cả hai đều chỉ lộ ra khi chạy chứ không đọc tài liệu mà biết được:
+
+1. Jira Cloud bản mới (mô hình Spaces) **chỉ tạo được team-managed project**, mà loại này không đặt được điều kiện phân quyền lên transition → không thể trông cậy Jira chặn Agent. Chuyển cổng HITL sang backend, kiểm tra changelog xem *ai* đã duyệt. Cách mới còn demo trực quan hơn và test được bằng CI.
+2. **Custom field không dùng được** trên team-managed (tạo qua API thành công nhưng không xuất hiện trên project) → chuyển sang label, bớt hẳn một lớp phức tạp.
+
+Đã verify cổng HITL trên Jira thật: Agent tự chuyển sang `Remediating` → Jira cho chuyển (đúng như dự đoán) → **backend từ chối thi hành**. Đây là bằng chứng cho ràng buộc bắt buộc của đề bài, chạy trên hạ tầng thật chứ không phải mock. Trên đường verify còn bắt được một bug của chính mình: Jira đặt issue mới ở status đầu tiên của board (`Idea`) mà `Idea` đang map vào `REMEDIATING`, nên incident vừa tạo đã hiện là "Remediating".
+
+Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bước 7→8 của kịch bản demo. Tổng 49 test pass.
 
 ---
 
