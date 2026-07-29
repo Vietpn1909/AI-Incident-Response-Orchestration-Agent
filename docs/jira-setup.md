@@ -19,9 +19,13 @@ Nên cần:
 | **Của bạn** (`ductct@...`) | Vai on-call/IC — người duyệt | Đầy đủ, chuyển được sang `Remediating` |
 | **Account riêng cho Agent** | Agent gọi REST API | Tạo issue, comment, chuyển các bước khác — **KHÔNG** chuyển được sang `Remediating` |
 
-Tạo account thứ hai bằng một email khác (Gmail phụ, hoặc `+agent` nếu Gmail hỗ trợ: `ductct+agent@gmail.com`). Sau đó mời vào Jira site.
+Tạo account thứ hai bằng một email khác (Gmail phụ, hoặc `+agent` nếu Gmail hỗ trợ: `ductct+agent@gmail.com`).
 
-- [ ] Có 2 account Jira, cả hai đăng nhập được
+> **Thứ tự thực tế:** phải làm **Phần 1** (tạo site + project) trước, vì chỉ khi có site rồi mới mời được account thứ hai vào. Đọc phần này trước để biết *vì sao* cần 2 account, nhưng bắt tay làm thì bắt đầu từ Phần 1.
+
+- [ ] Chuẩn bị sẵn một email thứ hai
+- [ ] (sau Phần 1) Jira → Settings → User management → **Invite user** → mời email đó vào site
+- [ ] Cả hai account đăng nhập được
 
 ---
 
