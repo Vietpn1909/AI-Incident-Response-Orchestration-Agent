@@ -54,7 +54,28 @@ git push origin feature/<tên-việc>
 - Commit message: `feat:` thêm tính năng · `fix:` sửa lỗi · `docs:` tài liệu · `test:` test · `chore:` việc phụ.
 - Ghi việc mình làm vào [WORKLOG.md](../WORKLOG.md) mỗi ngày. Đây là deliverable được chấm, không phải thủ tục.
 
-### 4. Không tự sửa 4 file contract
+### 4. Vì sao có repo thứ hai (`TruongDuke/P-035-deploy`)
+
+Render deploy code từ repo `TruongDuke/P-035-deploy`, **không phải** từ repo org. Lý do: Render dùng GitHub App, mà cài GitHub App lên repo org cần quyền `admin` — cả 4 thành viên đều chỉ có `push` vì repo do bot của BTC tạo. Đang chờ BTC approve; trong lúc đó deploy từ repo mirror cá nhân để không chậm tiến độ.
+
+**Repo org vẫn là nguồn chính** — mọi người làm việc, mở PR, nộp bài ở đó. Repo mirror chỉ để Render pull code, đã tắt GitHub Actions.
+
+⚠️ **Cạm bẫy:** khi merge PR trên web GitHub, commit đó **không đi qua máy ai cả**, nên mirror bị tụt lại và Render tiếp tục chạy code cũ — mà dashboard vẫn báo deploy thành công. Sau mỗi lần merge PR, người merge phải chạy:
+
+```bash
+git checkout develop && git pull && git push origin develop
+```
+
+Máy của Đức đã cấu hình `git push origin` đẩy tới cả hai repo trong một lệnh. Ai cần làm việc này trên máy mình thì chạy:
+
+```bash
+git remote set-url --add --push origin https://github.com/AI20K-Build-Phase-Cohort-3/P-035.git
+git remote set-url --add --push origin https://github.com/TruongDuke/P-035-deploy.git
+```
+
+Khi BTC approve xong thì đổi Blueprint sang repo org và bỏ mirror đi.
+
+### 5. Không tự sửa 4 file contract
 
 Bốn file này là thoả thuận giữa nhiều người. Sửa một mình sẽ làm vỡ code người khác:
 
