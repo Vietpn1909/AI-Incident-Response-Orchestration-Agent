@@ -70,7 +70,9 @@
       "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/jira_probe.py)",
       "Bash(curl -sS -o /dev/null -w \"site jibinarybro.atlassian.net → HTTP %{http_code}\\\\n\" --max-time 25 \"https://jibinarybro.atlassian.net/rest/api/3/serverInfo\")",
       "Bash(curl -sS --max-time 25 \"https://jibinarybro.atlassian.net/rest/api/3/serverInfo\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(' ', d.get\\('baseUrl','?'\\), '|', d.get\\('deploymentType','?'\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(' ', d.get\\('baseUrl','?'\\), '|', d.get\\('deploymentType','?'\\)\\)\")",
+      "Bash(.venv/bin/pip -q install \"httpx>=0.28.0\")",
+      "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/test_real_hitl.py)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",

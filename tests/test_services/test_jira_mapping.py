@@ -66,3 +66,12 @@ def test_jql_khong_loc_service_van_hop_le():
 
     assert "service-" not in jql
     assert 'labels = "incident"' in jql
+
+
+def test_status_dau_tien_cua_board_phai_la_open():
+    """Jira đặt mọi issue mới ở status đầu tiên của board — hiện là `Idea`.
+
+    Map `Idea` vào trạng thái khác thì incident vừa tạo đã hiện sai ngay. Bug
+    này đã gặp thật ngày 2026-07-29: issue mới tạo báo là "Remediating".
+    """
+    assert jira_status_for(IncidentState.OPEN) == "Idea"

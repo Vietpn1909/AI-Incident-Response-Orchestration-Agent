@@ -68,18 +68,27 @@ def service_from_labels(labels: list[str]) -> str | None:
 # Map trạng thái
 # ---------------------------------------------------------------------------
 # Team-managed project của đội hiện có sẵn 5 status: Idea, To Do, In Progress,
-# In Review, Done. Map dưới đây dùng ĐÚNG tên đang có, nên code chạy được ngay
-# mà không cần đổi gì trên Jira.
+# In Review, Done. Map dưới đây dùng ĐÚNG tên đang có nên code chạy được ngay.
 #
-# Đổi tên 5 cột trên board thành đúng tên IncidentState (Open, Investigating,
-# Awaiting Approval, Remediating, Resolved) sẽ làm demo dễ hiểu hơn nhiều —
-# nhất là "Awaiting Approval", vì đó là cổng HITL mà người chấm cần thấy rõ.
-# Sau khi đổi tên, sửa đúng dict này là xong, không phải sửa chỗ nào khác.
+# ⚠️ `Idea` PHẢI map vào OPEN, vì Jira đặt mọi issue mới ở status đầu tiên của
+# board — tức `Idea`. Map nó vào trạng thái khác thì incident vừa tạo đã hiện
+# sai ngay (bug đã gặp: issue mới báo là "Remediating").
+#
+# 🔧 KHUYẾN NGHỊ đổi tên 5 cột trên board thành đúng tên IncidentState. Không
+# chỉ để demo đẹp — với tên hiện tại, `REMEDIATING → "To Do"` đọc lên vô nghĩa
+# và người xem board sẽ hiểu sai trạng thái thật của incident. Sau khi đổi tên,
+# sửa đúng dict này là xong, không phải sửa chỗ nào khác:
+#
+#     IncidentState.OPEN:              "Open"
+#     IncidentState.INVESTIGATING:     "Investigating"
+#     IncidentState.AWAITING_APPROVAL: "Awaiting Approval"
+#     IncidentState.REMEDIATING:       "Remediating"
+#     IncidentState.RESOLVED:          "Resolved"
 JIRA_STATUS: dict[IncidentState, str] = {
-    IncidentState.OPEN: "To Do",
+    IncidentState.OPEN: "Idea",
     IncidentState.INVESTIGATING: "In Progress",
     IncidentState.AWAITING_APPROVAL: "In Review",
-    IncidentState.REMEDIATING: "Idea",
+    IncidentState.REMEDIATING: "To Do",
     IncidentState.RESOLVED: "Done",
 }
 
