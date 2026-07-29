@@ -60,7 +60,7 @@ Thay vì tự xây CRUD ticket + phân quyền + audit log, dùng Jira Cloud qua
 | Tự leo thang | Automation time-based trigger |
 | Cảnh báo lan truyền | Issue Linking `relates to` |
 
-Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/services/jira_client.py)) — một `Protocol` có hai bản cài đặt: `FakeJiraClient` (trong bộ nhớ, dùng để phát triển và test) và `RealJiraClient` (tuần 3).
+Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/services/jira/client.py)) — một `Protocol` có hai bản cài đặt: `FakeJiraClient` (trong bộ nhớ, dùng để phát triển và test) và `RealJiraClient` (tuần 3).
 
 ### 5. API & Frontend (Đức + Long)
 
@@ -137,7 +137,8 @@ Backend **phải** deploy public sớm, không phải để có deliverable #5 m
 - API key trong `.env`, không commit
 - Jira API token dùng token riêng của workspace đội, không dùng credential tổ chức
 - Input validation bằng Pydantic
-- Phân quyền HITL do Jira Workflow thực thi, không phải logic trong code
+- Cổng phê duyệt HITL do [`hitl.assert_human_approved()`](src/services/hitl.py) thực thi, dựa trên changelog Jira. Không dùng phân quyền Jira Workflow vì team-managed project không hỗ trợ — xem [ADR-0001](docs/adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog)
+- Agent chạy bằng account Jira riêng, tách khỏi account người duyệt (*separation of duties*). Account Agent không có quyền xoá issue — đã verify
 - CORS chỉ cho phép origin của Streamlit UI
 - Webhook từ Jira cần xác thực (shared secret) để không ai gọi được endpoint remediation từ ngoài
 

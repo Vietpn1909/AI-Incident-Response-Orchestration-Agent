@@ -53,7 +53,7 @@
 | Trương Công Thái Đức | Viết 3 ADR: Jira làm incident lifecycle, bỏ Alertmanager, load test thật thay fault injection | ✅ Done | `docs/adr/0001..0003` | - |
 | Trương Công Thái Đức | Contract ①: metric name, label, PromQL, ngưỡng severity (Trung → Việt) | ✅ Done | `docs/contracts/01-metrics.md` | - |
 | Trương Công Thái Đức | Contract ②: Pydantic model dùng chung (Severity, IncidentSignal, Hypothesis, Incident, StatusPage…) | ✅ Done | `src/models/incident.py` | - |
-| Trương Công Thái Đức | Contract ③: `JiraClient` Protocol + `FakeJiraClient` (Đức → Việt) | ✅ Done | `src/services/jira_client.py` | - |
+| Trương Công Thái Đức | Contract ③: `JiraClient` Protocol + `FakeJiraClient` (Đức → Việt) | ✅ Done | `src/services/jira/client.py` | - |
 | Trương Công Thái Đức | Contract ④: endpoint `/api/status`, `/api/incidents` + fixture JSON (Đức → Long) | ✅ Done | `src/api/incidents.py` | - |
 | Trương Công Thái Đức | 17 test bảo vệ contract, gồm test HITL chặn Agent tự duyệt | ✅ Done | 22 test pass, ruff clean | - |
 | Long / Trung / Việt | Cài `pre-push` hook trên clone của mình (`bash scripts/setup_hooks.sh`) | ⏳ Todo | verify `ls -l .git/hooks/pre-push` | - |

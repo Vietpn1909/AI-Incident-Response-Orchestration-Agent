@@ -96,7 +96,7 @@ Bốn file này là thoả thuận giữa nhiều người. Sửa một mình s�
 
 - `docs/contracts/01-metrics.md`
 - `src/models/incident.py`
-- `src/services/jira_client.py`
+- `src/services/jira/client.py`
 - `src/api/incidents.py`
 
 Cần đổi thì nói trong group, mở PR riêng, người ở đầu kia review. Chi tiết: [docs/contracts/](contracts/).
@@ -148,7 +148,7 @@ Cả hai lệnh phải ra kết quả. Báo Đức khi xong.
 
 - [docs/contracts/01-metrics.md](contracts/01-metrics.md) — câu PromQL và ngưỡng severity
 - [src/models/incident.py](../src/models/incident.py) — model bạn sinh ra
-- [src/services/jira_client.py](../src/services/jira_client.py) — cách gọi Jira
+- [src/services/jira/client.py](../src/services/jira/client.py) — cách gọi Jira
 - [docs/architecture_diagram.md](architecture_diagram.md) mục 2 — sơ đồ node bạn phải viết
 
 ### Việc tuần này (28–31/07)
@@ -166,7 +166,7 @@ Không cần chờ service của Trung — gán label `service` tuỳ ý cho dum
 ### Bạn viết Agent được ngay, không cần Jira
 
 ```python
-from src.services.jira_client import FakeJiraClient
+from src.services.jira import FakeJiraClient
 
 jira = FakeJiraClient()              # in ra console, không gọi mạng
 key = jira.create_incident(signal)

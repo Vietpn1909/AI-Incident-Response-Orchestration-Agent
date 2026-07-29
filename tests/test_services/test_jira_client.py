@@ -19,7 +19,7 @@ from src.models.incident import (
     RemediationProposal,
     Severity,
 )
-from src.services.jira_client import FakeJiraClient, JiraClient
+from src.services.jira import FakeJiraClient, JiraClient
 
 NOW = datetime(2026, 7, 28, 14, 32, 4, tzinfo=UTC)
 

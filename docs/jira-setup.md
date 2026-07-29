@@ -39,7 +39,7 @@ Loại team-managed hay company-managed **không còn quan trọng**.
 
 ## Phần 2 — Trạng thái workflow (tuỳ chọn)
 
-**Không bắt buộc.** Project đã có sẵn 5 status `Idea · To Do · In Progress · In Review · Done`, và [`JIRA_STATUS`](../src/services/jira_mapping.py) map thẳng vào 5 trạng thái incident nên code chạy được ngay.
+**Không bắt buộc.** Project đã có sẵn 5 status `Idea · To Do · In Progress · In Review · Done`, và [`JIRA_STATUS`](../src/services/jira/mapping.py) map thẳng vào 5 trạng thái incident nên code chạy được ngay.
 
 Nhưng đổi tên 5 cột trên board thành đúng tên dưới đây sẽ làm **demo dễ hiểu hơn nhiều** — nhất là `Awaiting Approval`, vì đó là cổng HITL người chấm cần nhìn thấy:
 
@@ -48,7 +48,7 @@ Open  ·  Investigating  ·  Awaiting Approval  ·  Remediating  ·  Resolved
 ```
 
 - [ ] Board của project → bấm vào tên cột → đổi tên (team-managed cho đổi trực tiếp)
-- [ ] Sau khi đổi, sửa dict `JIRA_STATUS` trong `src/services/jira_mapping.py` cho khớp — chỉ một chỗ đó
+- [ ] Sau khi đổi, sửa dict `JIRA_STATUS` trong `src/services/jira/mapping.py` cho khớp — chỉ một chỗ đó
 
 Không cần cấu hình transition. Team-managed cho chuyển tự do giữa mọi trạng thái, và điều đó **không sao** vì hàng rào phê duyệt nằm ở backend.
 
@@ -68,7 +68,7 @@ Thay bằng **label**, đã verify chạy đủ trên site thật:
 
 `root_cause_confidence` nằm trong comment cùng bằng chứng số, không cần lên Jira.
 
-Quy ước ở [`src/services/jira_mapping.py`](../src/services/jira_mapping.py), chi tiết đánh đổi trong [ADR-0001](adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29-2--dùng-label-thay-custom-field).
+Quy ước ở [`src/services/jira/mapping.py`](../src/services/jira/mapping.py), chi tiết đánh đổi trong [ADR-0001](adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29-2--dùng-label-thay-custom-field).
 
 ---
 
@@ -147,7 +147,7 @@ JIRA_AGENT_ACCOUNT_ID=712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7
 
 ## Phần 7 — Verify bằng Jira thật
 
-Sau khi có thông tin trên, `RealJiraClient` được implement theo [contract ③](../src/services/jira_client.py) và chạy 4 test với Jira thật:
+Sau khi có thông tin trên, `RealJiraClient` được implement theo [contract ③](../src/services/jira/client.py) và chạy 4 test với Jira thật:
 
 | Test | Kỳ vọng |
 |---|---|

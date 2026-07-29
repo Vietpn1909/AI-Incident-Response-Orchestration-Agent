@@ -16,7 +16,7 @@ from src.models.incident import (
     Severity,
 )
 from src.services.hitl import ApprovalError, assert_human_approved
-from src.services.jira_client import FakeJiraClient
+from src.services.jira import FakeJiraClient
 
 AGENT = FakeJiraClient.AGENT_ACCOUNT_ID
 HUMAN = FakeJiraClient.HUMAN_ACCOUNT_ID

@@ -1,4 +1,4 @@
-"""`RealJiraClient` — cài đặt [contract ③](jira_client.py) trên Jira Cloud thật.
+"""`RealJiraClient` — cài đặt [contract ③](client.py) trên Jira Cloud thật.
 
 Thay `FakeJiraClient` bằng class này là Agent chạy với Jira thật, không phải sửa
 code Agent (đó là mục đích của Protocol).
@@ -6,9 +6,9 @@ code Agent (đó là mục đích của Protocol).
 Ràng buộc của team-managed project đã kiểm chứng ngày 2026-07-29 và xử lý ở đây:
 
 - Không dùng được custom field → severity và affected_service lưu bằng **label**,
-  quy ước ở [jira_mapping.py](jira_mapping.py)
+  quy ước ở [mapping.py](mapping.py)
 - Không đặt được điều kiện phân quyền lên transition → cổng phê duyệt nằm ở
-  [hitl.py](hitl.py), dựa trên `get_transition_author()` đọc changelog
+  [hitl.py](../hitl.py), dựa trên `get_transition_author()` đọc changelog
 
 Giới hạn hiện tại của đường đọc: `get_incident()` dựng lại được vòng đời
 (trạng thái, severity, service, timeline từ changelog) nhưng **chưa** dựng lại
@@ -36,7 +36,7 @@ from src.models.incident import (
     Severity,
     TimelineEvent,
 )
-from src.services.jira_mapping import (
+from src.services.jira.mapping import (
     INCIDENT_LABEL,
     jira_status_for,
     jql_open_incidents,
@@ -146,7 +146,7 @@ class RealJiraClient:
         available = [t["to"]["name"] for t in data.get("transitions", [])]
         raise JiraApiError(
             f"{jira_key} không có transition sang '{target}'. Đang có: {available}. "
-            "Kiểm tra JIRA_STATUS trong jira_mapping.py có khớp tên status trên board không."
+            "Kiểm tra JIRA_STATUS trong jira/mapping.py có khớp tên status trên board không."
         )
 
     # ------------------------------------------------------------ ghi dữ liệu
@@ -263,7 +263,7 @@ class RealJiraClient:
     def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
         """Ai đã chuyển issue sang trạng thái này, lần gần nhất.
 
-        Nền tảng của cổng HITL ở [hitl.py](hitl.py). Dữ liệu từ Jira changelog —
+        Nền tảng của cổng HITL ở [hitl.py](../hitl.py). Dữ liệu từ Jira changelog —
         Jira tự ghi khi có thao tác, Agent không khai báo được nên không giả mạo
         được.
         """

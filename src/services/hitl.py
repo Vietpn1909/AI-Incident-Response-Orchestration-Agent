@@ -18,7 +18,7 @@ Mọi đường dẫn tới `execute_remediation` PHẢI đi qua `assert_human_a
 from __future__ import annotations
 
 from src.models.incident import IncidentState
-from src.services.jira_client import JiraClient
+from src.services.jira import JiraClient
 
 
 class ApprovalError(PermissionError):

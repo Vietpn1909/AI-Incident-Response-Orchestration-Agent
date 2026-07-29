@@ -14,7 +14,7 @@ Trung ──①──▶ Việt ──②──▶ Đức ──④──▶ Lon
 |---|---|---|---|
 | ① | Metric & PromQL | Trung → Việt | [01-metrics.md](01-metrics.md) |
 | ② | Model dùng chung | Việt ↔ Đức ↔ Long | [`src/models/incident.py`](../../src/models/incident.py) |
-| ③ | Interface Jira | Đức → Việt | [`src/services/jira_client.py`](../../src/services/jira_client.py) |
+| ③ | Interface Jira | Đức → Việt | [`src/services/jira/client.py`](../../src/services/jira/client.py) |
 | ④ | Endpoint + fixture | Đức → Long | [`src/api/incidents.py`](../../src/api/incidents.py) |
 
 ## Mỗi người cần đọc gì
@@ -31,7 +31,7 @@ Trung ──①──▶ Việt ──②──▶ Đức ──④──▶ Lon
 **Việt — viết Agent không cần Jira:**
 
 ```python
-from src.services.jira_client import FakeJiraClient
+from src.services.jira import FakeJiraClient
 
 jira = FakeJiraClient()          # in ra console, không gọi mạng
 key = jira.create_incident(signal)

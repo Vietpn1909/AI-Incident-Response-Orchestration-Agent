@@ -5,7 +5,7 @@ tạo và đọc lại được, JQL tìm theo label ra đúng issue.
 """
 
 from src.models.incident import IncidentState, Severity
-from src.services.jira_mapping import (
+from src.services.jira import (
     INCIDENT_LABEL,
     JIRA_STATUS,
     jira_status_for,

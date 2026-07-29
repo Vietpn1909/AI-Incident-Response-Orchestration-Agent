@@ -120,11 +120,11 @@ Team-managed project quản lý field riêng và **không nhận global custom f
 | `root_cause_confidence` | custom field | nằm trong comment cùng bằng chứng số — không cần lên Jira |
 | Đánh dấu issue của Agent | — | label `incident` |
 
-Quy ước và hàm chuyển đổi ở [`src/services/jira_mapping.py`](../../src/services/jira_mapping.py).
+Quy ước và hàm chuyển đổi ở [`src/services/jira/mapping.py`](../../src/services/jira/mapping.py).
 
 **Được:** bớt hẳn một lớp phức tạp — không phải quản field ID, context, option, screen configuration. Label truy vấn được bằng JQL nên vẫn đủ cho chống mở trùng và tìm incident cũ. Không phụ thuộc loại project.
 
-**Mất:** label là chuỗi phẳng, không có validation kiểu dữ liệu như custom field. Nhập sai `severity-P9` thì Jira vẫn nhận, chỉ phía code phát hiện được — đã có [`severity_from_labels()`](../../src/services/jira_mapping.py) trả `None` và test cho trường hợp này. Trên UI Jira, severity hiện dưới dạng label chứ không phải một trường riêng, nhìn kém gọn hơn.
+**Mất:** label là chuỗi phẳng, không có validation kiểu dữ liệu như custom field. Nhập sai `severity-P9` thì Jira vẫn nhận, chỉ phía code phát hiện được — đã có [`severity_from_labels()`](../../src/services/jira/mapping.py) trả `None` và test cho trường hợp này. Trên UI Jira, severity hiện dưới dạng label chứ không phải một trường riêng, nhìn kém gọn hơn.
 
 ### Trạng thái workflow
 
