@@ -19,7 +19,7 @@ import os
 
 import httpx  # noqa: F401 — Trung dùng trong TODO ở create_order()
 from fastapi import FastAPI, HTTPException
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-dat-hang"
@@ -32,7 +32,16 @@ PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://service-thanh-toa
 PAYMENT_TIMEOUT_SECONDS = 3.0
 
 app = FastAPI(title=SERVICE_NAME)
-Instrumentator().instrument(app).expose(app)
+
+# Bucket tường minh — bắt buộc, xem lý do ở service_thanh_toan/main.py.
+LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, float("inf"))
+
+instrumentator = Instrumentator(
+    should_instrument_requests_inprogress=True,
+    inprogress_labels=True,
+)
+instrumentator.add(metrics.default(latency_lowr_buckets=LATENCY_BUCKETS))
+instrumentator.instrument(app).expose(app)
 
 
 class OrderRequest(BaseModel):

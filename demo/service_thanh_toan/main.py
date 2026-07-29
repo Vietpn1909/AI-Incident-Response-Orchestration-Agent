@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import FastAPI, HTTPException
 from prometheus_client import Gauge
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-thanh-toan"
@@ -36,8 +36,12 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://demo:demo@localhost:5432/
 
 # ⚠️ Contract ①: 2 metric này instrumentator KHÔNG tự tạo, nhưng Agent cần
 # chúng để chứng minh nguyên nhân gốc là "pool cạn" chứ không chỉ nói "chậm".
-db_pool_in_use = Gauge("db_pool_connections_in_use", "Số connection đang được dùng", ["service"])
-db_pool_size = Gauge("db_pool_size", "Kích thước pool tối đa", ["service"])
+#
+# KHÔNG khai label "service" ở đây. `prometheus.yml` đã gắn label đó, hai chỗ
+# cùng đặt một label thì Prometheus giữ label của scrape config và đổi tên label
+# của app thành `exported_service` — Việt phát hiện, xem spike/README.md vấn đề 4.
+db_pool_in_use = Gauge("db_pool_connections_in_use", "Số connection đang được dùng")
+db_pool_size = Gauge("db_pool_size", "Kích thước pool tối đa")
 
 pool: asyncpg.Pool | None = None
 
@@ -46,7 +50,7 @@ pool: asyncpg.Pool | None = None
 async def lifespan(app: FastAPI):
     global pool
     pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
-    db_pool_size.labels(service=SERVICE_NAME).set(POOL_SIZE)
+    db_pool_size.set(POOL_SIZE)
     print(f"{SERVICE_NAME} khởi động — pool tối đa {POOL_SIZE} connection")
     yield
     await pool.close()
@@ -54,8 +58,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=SERVICE_NAME, lifespan=lifespan)
 
-# Tạo /metrics tự động — không đo tay.
-Instrumentator().instrument(app).expose(app)
+# ⚠️ PHẢI chỉ định bucket tường minh. Để mặc định thì histogram chỉ có 4 bucket
+# (0.1, 0.5, 1, +Inf) và `histogram_quantile` KẸP p95 về 1.0 khi giá trị thật
+# rơi vào +Inf. Hệ quả: ngưỡng P1 (>10s) và P2 (>2s) không bao giờ kích hoạt
+# được, Agent phân loại mọi sự cố nặng thành P3 — mà query vẫn trả số nên không
+# có gì để lần theo. Việt đo được và sửa, xem spike/README.md vấn đề 1.
+LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, float("inf"))
+
+# `should_instrument_requests_inprogress` mặc định False — contract ① có liệt kê
+# `http_requests_inprogress` nên phải bật tay, không bật thì metric đó rỗng.
+instrumentator = Instrumentator(
+    should_instrument_requests_inprogress=True,
+    inprogress_labels=True,
+)
+instrumentator.add(metrics.default(latency_lowr_buckets=LATENCY_BUCKETS))
+instrumentator.instrument(app).expose(app)
 
 
 class PayRequest(BaseModel):
@@ -71,7 +88,7 @@ async def pay(request: PayRequest) -> dict:
       1. Lấy connection từ pool: `async with pool.acquire() as conn:`
       2. Cập nhật gauge NGAY SAU khi acquire và trong `finally` — Agent đọc
          gauge này để biết pool có đang cạn:
-             db_pool_in_use.labels(service=SERVICE_NAME).set(POOL_SIZE - pool.get_idle_size())
+             db_pool_in_use.set(POOL_SIZE - pool.get_idle_size())
       3. INSERT vào bảng `payments` (order_id, amount, created_at)
       4. Thêm MỘT truy vấn cố tình chưa tối ưu để độ chậm lộ rõ hơn khi tải
          tăng — ví dụ đếm payment của order đó mà KHÔNG có index trên order_id:
