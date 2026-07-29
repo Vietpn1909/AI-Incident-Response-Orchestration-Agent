@@ -8,7 +8,7 @@ Sơ đồ đầy đủ (container, agent flow, sequence) ở [docs/architecture_
 
 Hệ thống gồm bốn phần: một cặp service demo tự sinh sự cố thật khi bị tải, một lớp observability thu thập số liệu, một AI Agent phát hiện — chẩn đoán — điều phối khắc phục, và Jira Cloud làm lớp quản lý vòng đời incident kèm cổng phê duyệt của con người.
 
-Điểm cốt lõi của kiến trúc: **Agent không có đường nào để tự thực thi hành động production**. Nó chỉ đề xuất; việc mở cổng do người làm trên Jira, và Agent biết được qua webhook. Đây là ràng buộc bắt buộc của đề bài, và nó được thực thi ở tầng phân quyền của Jira chứ không phải bằng một câu `if` trong code.
+Điểm cốt lõi của kiến trúc: **Agent không có đường nào để tự thực thi hành động production**. Nó chỉ đề xuất; việc phê duyệt do người làm trên Jira. Trước khi thi hành bất kỳ hành động khắc phục nào, backend hỏi Jira *ai* đã phê duyệt — nếu là chính account Agent thì từ chối. Bằng chứng lấy từ Jira changelog, dữ liệu Jira tự ghi nên Agent không giả mạo được. Thực thi ở [`src/services/hitl.py`](src/services/hitl.py), lý do chọn cách này ở [ADR-0001 mục "Cập nhật 2026-07-29"](docs/adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog).
 
 ## Components
 
@@ -52,7 +52,7 @@ Thay vì tự xây CRUD ticket + phân quyền + audit log, dùng Jira Cloud qua
 | Yêu cầu đề bài | Cơ chế Jira |
 |---|---|
 | War room | Issue type `Incident` + comment thread |
-| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`, bước sang `Remediating` cần quyền Agent không có |
+| HITL | Workflow `Open → Investigating → Awaiting Approval → Remediating → Resolved`, cộng cổng kiểm tra changelog ở backend (`hitl.assert_human_approved`) |
 | Audit trail | Jira changelog (có sẵn) |
 | Action item | Sub-task |
 | Học từ incident cũ | JQL search |
@@ -60,7 +60,7 @@ Thay vì tự xây CRUD ticket + phân quyền + audit log, dùng Jira Cloud qua
 | Tự leo thang | Automation time-based trigger |
 | Cảnh báo lan truyền | Issue Linking `relates to` |
 
-Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/services/jira_client.py)) — một `Protocol` có hai bản cài đặt: `FakeJiraClient` (trong bộ nhớ, dùng để phát triển và test) và `RealJiraClient` (tuần 3).
+Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/services/jira/client.py)) — một `Protocol` có hai bản cài đặt: `FakeJiraClient` (trong bộ nhớ, dùng để phát triển và test) và `RealJiraClient` (tuần 3).
 
 ### 5. API & Frontend (Đức + Long)
 
@@ -69,6 +69,14 @@ Agent không gọi Jira trực tiếp mà qua `JiraClient` ([contract ③](src/s
 - **2 vai trò:** on-call/IC thấy war room và duyệt được; người xem chỉ thấy status page
 
 Endpoint hiện trả dữ liệu từ fixture JSON, nên UI build được trước khi Agent tồn tại. Xem [contract ④](src/api/incidents.py).
+
+**`POST /webhooks/jira`** ([src/api/webhooks.py](src/api/webhooks.py)) là mảnh nối bước 7→8 của luồng: on-call duyệt trên Jira → Jira Automation gọi endpoint này → backend xác minh rồi mới thi hành. Ba lớp kiểm tra theo thứ tự:
+
+1. **Shared secret** (`X-Webhook-Secret`) — không có secret cấu hình thì endpoint trả 503, không chạy ở chế độ mở. Endpoint này kích được hành động production nên không có đường "tạm bỏ qua".
+2. **[`assert_human_approved()`](src/services/hitl.py)** — hỏi changelog ai đã duyệt. Là Agent → 403, **và post comment cảnh báo lên chính war room** để trạng thái `Remediating` trên Jira không khiến người xem tưởng hành động đã thi hành.
+3. **[`remediation.execute()`](src/services/remediation.py)** — chỉ nhận hành động trong `SUPPORTED_ACTIONS`, chặn trường hợp LLM sinh ra một `action` lạ rồi backend thi hành mù.
+
+Hành động hiện được **mô phỏng** (`simulated=True`) vì 2 service demo chưa tồn tại. Khi có rồi chỉ thay thân các hàm `_do_*`, chữ ký không đổi.
 
 ### 6. Data layer
 
@@ -137,7 +145,8 @@ Backend **phải** deploy public sớm, không phải để có deliverable #5 m
 - API key trong `.env`, không commit
 - Jira API token dùng token riêng của workspace đội, không dùng credential tổ chức
 - Input validation bằng Pydantic
-- Phân quyền HITL do Jira Workflow thực thi, không phải logic trong code
+- Cổng phê duyệt HITL do [`hitl.assert_human_approved()`](src/services/hitl.py) thực thi, dựa trên changelog Jira. Không dùng phân quyền Jira Workflow vì team-managed project không hỗ trợ — xem [ADR-0001](docs/adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog)
+- Agent chạy bằng account Jira riêng, tách khỏi account người duyệt (*separation of duties*). Account Agent không có quyền xoá issue — đã verify
 - CORS chỉ cho phép origin của Streamlit UI
 - Webhook từ Jira cần xác thực (shared secret) để không ai gọi được endpoint remediation từ ngoài
 

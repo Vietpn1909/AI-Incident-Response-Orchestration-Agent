@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.incidents import router as incidents_router
 from src.api.routes import router
+from src.api.webhooks import router as webhooks_router
 from src.config import configure_tracing, get_settings
 
 
@@ -35,6 +36,7 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api/v1")
 app.include_router(incidents_router, prefix="/api")
+app.include_router(webhooks_router, prefix="/webhooks")
 
 
 @app.get("/health")

@@ -1,0 +1,63 @@
+# Cấu hình deploy Render — https://render.com/docs/blueprint-spec
+#
+# Dùng file này để cấu hình nằm trong repo và review được qua PR, thay vì
+# bấm tay trên dashboard rồi không ai nhớ đã set gì.
+#
+# Cách deploy lần đầu:
+#   1. render.com → New → Blueprint → chọn repo P-035, branch develop
+#   2. Render đọc file này và tạo service
+#   3. Điền các biến có sync:false ở Dashboard → Environment (xem ghi chú dưới)
+#
+# LƯU Ý free tier: service tự ngủ sau 15 phút không có request, cold start
+# 30–60s. Jira Automation gọi webhook có thể timeout khi service đang ngủ →
+# trước khi demo phải gọi /health vài lần cho service tỉnh trước.
+
+services:
+  - type: web
+    name: p-035-incident-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore # gần VN nhất, giảm latency khi demo
+    branch: develop # đổi sang main khi bắt đầu release theo tuần
+    autoDeploy: true
+
+    # Render gọi endpoint này để biết service đã sống chưa.
+    healthCheckPath: /health
+
+    envVars:
+      # Render tự set PORT, không khai báo ở đây.
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+
+      # CORS: thêm domain Streamlit vào khi Long deploy UI.
+      - key: CORS_ORIGINS
+        value: http://localhost:8501
+
+      # Điền tay ở Dashboard → Environment (sync:false = không lưu vào repo).
+      - key: OPENAI_API_KEY
+        sync: false
+
+      # LangSmith — deliverable #4. Thiếu 2 biến này thì configure_tracing()
+      # trả về False và trace không được gửi lên (app vẫn chạy bình thường).
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: P-035
+      - key: LANGCHAIN_API_KEY
+        sync: false
+
+      # Jira — điền khi workspace đã tạo (tuần 1–2).
+      - key: JIRA_BASE_URL
+        sync: false
+      - key: JIRA_EMAIL
+        sync: false
+      - key: JIRA_API_TOKEN
+        sync: false
+
+      # Shared secret để xác thực webhook từ Jira Automation, tránh người
+      # ngoài gọi được endpoint remediation. Render tự sinh giá trị random.
+      - key: JIRA_WEBHOOK_SECRET
+        generateValue: true

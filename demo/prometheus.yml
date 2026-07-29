@@ -1,0 +1,25 @@
+# Cấu hình Prometheus scrape 2 service demo.
+#
+# ⚠️ Label `service` dưới đây là contract ① giữa Trung và Việt. Agent query
+# `... by (le, service)` nên đổi giá trị này là Agent không tìm thấy gì — mà
+# Prometheus trả kết quả RỖNG chứ không báo lỗi, nên rất khó phát hiện.
+# Xem docs/contracts/01-metrics.md
+
+global:
+  scrape_interval: 5s # 5s để thấy latency tăng gần như realtime khi demo
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: service-thanh-toan
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["service-thanh-toan:8001"]
+        labels:
+          service: service-thanh-toan
+
+  - job_name: service-dat-hang
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["service-dat-hang:8002"]
+        labels:
+          service: service-dat-hang

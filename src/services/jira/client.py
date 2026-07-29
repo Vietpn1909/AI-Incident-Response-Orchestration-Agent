@@ -6,10 +6,14 @@ Việt import `JiraClient` và `FakeJiraClient`, viết trọn Agent ngay hôm n
 không cần Jira workspace tồn tại. Tuần 3 Đức thay bằng `RealJiraClient` —
 Agent không phải đổi một dòng nào.
 
-Lưu ý HITL: interface này KHÔNG có method nào duyệt incident. Việc chuyển
-`Awaiting Approval -> Remediating` chỉ người mới làm được, trên Jira, qua
-workflow có phân quyền (xem ADR-0001). Nếu có ai định thêm một method như vậy
-vào đây thì đó là dấu hiệu đang phá ràng buộc bắt buộc của đề bài.
+Lưu ý HITL: interface này KHÔNG có method nào duyệt incident. Nhưng Jira Cloud
+bản mới chỉ tạo được team-managed project, mà loại này không cho đặt điều kiện
+phân quyền lên từng transition — nên không thể trông cậy Jira chặn Agent.
+
+Cổng phê duyệt vì vậy nằm ở backend: `get_transition_author()` hỏi Jira xem
+*ai* đã chuyển issue sang `Remediating`, và `src/services/hitl.py` từ chối thực
+thi nếu người đó chính là account Agent. Bằng chứng dựa trên changelog do Jira
+ghi lại, Agent không giả mạo được. Xem ADR-0001 mục "Cập nhật 2026-07-29".
 """
 
 from __future__ import annotations
@@ -62,9 +66,22 @@ class JiraClient(Protocol):
     def transition(self, jira_key: str, to_state: IncidentState) -> None:
         """Chuyển trạng thái issue.
 
-        Raises:
-            PermissionError: khi cố chuyển sang REMEDIATING — bước đó chỉ người
-                duyệt được, Agent không có quyền.
+        Agent KHÔNG được gọi hàm này với `to_state=REMEDIATING`. Jira
+        team-managed không chặn được ở tầng phân quyền, nên hàng rào thật nằm ở
+        `hitl.assert_human_approved()` — nó kiểm tra changelog và từ chối thực
+        thi remediation nếu người transition chính là Agent.
+        """
+        ...
+
+    def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
+        """Ai đã chuyển issue sang trạng thái này (lần gần nhất)?
+
+        Đọc từ Jira changelog — dữ liệu do Jira ghi, không phải do Agent khai
+        báo, nên dùng làm bằng chứng phê duyệt được.
+
+        Returns:
+            accountId của người thực hiện, None nếu chưa từng chuyển sang
+            trạng thái đó.
         """
         ...
 
@@ -117,16 +134,21 @@ class FakeJiraClient:
     Dùng cho: Việt phát triển Agent trước khi có Jira, pytest, và làm đường lùi
     nếu Jira gặp sự cố đúng hôm demo.
 
-    Hành vi mô phỏng đúng ràng buộc quan trọng nhất: `transition` sang
-    REMEDIATING sẽ raise PermissionError, giống hệt Jira thật khi Agent không có
-    quyền — nhờ vậy Agent viết sai luồng HITL sẽ fail ngay ở test, không phải
-    lúc demo.
+    Mô phỏng đúng thực tế Jira team-managed: `transition` sang REMEDIATING
+    **không** bị chặn, ai gọi cũng chuyển được. Nhưng client ghi lại *ai* đã
+    chuyển, để `hitl.assert_human_approved()` kiểm tra và từ chối — giống hệt
+    cách backend hoạt động với Jira thật.
     """
+
+    AGENT_ACCOUNT_ID = "agent-account"
+    HUMAN_ACCOUNT_ID = "oncall-account"
 
     def __init__(self, *, verbose: bool = True) -> None:
         self._incidents: dict[str, Incident] = {}
         self._counter = 0
         self._verbose = verbose
+        # (jira_key, to_state) -> accountId của người transition gần nhất
+        self._transition_authors: dict[tuple[str, IncidentState], str] = {}
 
     def _log(self, message: str) -> None:
         if self._verbose:
@@ -178,12 +200,10 @@ class FakeJiraClient:
         self._append_timeline(jira_key, "agent", "đề xuất khắc phục", proposal.action)
         self._log(f"{jira_key} đề xuất {proposal.action} → CHỜ NGƯỜI DUYỆT")
 
-    def transition(self, jira_key: str, to_state: IncidentState) -> None:
-        if to_state == IncidentState.REMEDIATING:
-            raise PermissionError(
-                f"Agent không có quyền chuyển {jira_key} sang Remediating. "
-                "Bước này phải do người duyệt thực hiện trên Jira (HITL)."
-            )
+    def transition(self, jira_key: str, to_state: IncidentState, *, actor: str | None = None) -> None:
+        """Chuyển trạng thái. `actor` mặc định là Agent — đúng với thực tế là
+        Agent gọi hàm này, còn người duyệt thì bấm trên UI Jira."""
+        self._transition_authors[(jira_key, to_state)] = actor or self.AGENT_ACCOUNT_ID
         incident = self._incidents.get(jira_key)
         if incident is not None:
             incident.state = to_state
@@ -193,16 +213,18 @@ class FakeJiraClient:
         self._log(f"{jira_key} → {to_state.value}")
 
     def approve_as_human(self, jira_key: str) -> None:
-        """Chỉ có ở bản giả: mô phỏng người duyệt trên Jira.
+        """Chỉ có ở bản giả: mô phỏng người duyệt bấm nút trên Jira.
 
         Dùng trong pytest và khi Việt chạy thử luồng end-to-end local. Trên Jira
-        thật, việc này do người bấm nút, và backend biết được qua webhook.
+        thật, việc này do người bấm nút, và backend biết được qua webhook rồi
+        xác minh bằng changelog.
         """
-        incident = self._incidents.get(jira_key)
-        if incident is not None:
-            incident.state = IncidentState.REMEDIATING
+        self.transition(jira_key, IncidentState.REMEDIATING, actor=self.HUMAN_ACCOUNT_ID)
         self._append_timeline(jira_key, "on-call", "DUYỆT", "Awaiting Approval → Remediating")
         self._log(f"{jira_key} ✋ người duyệt → Remediating")
+
+    def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
+        return self._transition_authors.get((jira_key, to_state))
 
     def link_issues(self, from_key: str, to_key: str, link_type: str = "relates to") -> None:
         for a, b in ((from_key, to_key), (to_key, from_key)):

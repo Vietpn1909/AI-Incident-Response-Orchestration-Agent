@@ -54,13 +54,49 @@ git push origin feature/<tên-việc>
 - Commit message: `feat:` thêm tính năng · `fix:` sửa lỗi · `docs:` tài liệu · `test:` test · `chore:` việc phụ.
 - Ghi việc mình làm vào [WORKLOG.md](../WORKLOG.md) mỗi ngày. Đây là deliverable được chấm, không phải thủ tục.
 
-### 4. Không tự sửa 4 file contract
+### 4. Backend đã deploy — dùng URL này khi cần
+
+```
+https://p-035-incident-agent.onrender.com
+```
+
+Long có thể trỏ Streamlit vào đây thay vì `localhost:8000` nếu không muốn chạy backend local:
+
+```python
+API = "https://p-035-incident-agent.onrender.com"   # hoặc "http://localhost:8000"
+data = requests.get(f"{API}/api/status").json()
+```
+
+⚠️ Free tier **tự ngủ sau 15 phút** không có request, request đầu tiên sau đó mất 50 giây hoặc hơn. Gọi `/health` một lần cho service tỉnh trước khi làm việc thật.
+
+### 5. Vì sao có repo thứ hai (`TruongDuke/P-035-deploy`)
+
+Render deploy code từ repo `TruongDuke/P-035-deploy`, **không phải** từ repo org. Lý do: Render dùng GitHub App, mà cài GitHub App lên repo org cần quyền `admin` — cả 4 thành viên đều chỉ có `push` vì repo do bot của BTC tạo. Thay vì chờ BTC approve, deploy từ repo mirror cá nhân (Đức có admin ở đó) nên **không cần xin quyền gì**.
+
+**Repo org vẫn là nguồn chính** — mọi người làm việc, mở PR, nộp bài ở đó. Repo mirror chỉ để Render pull code, đã tắt GitHub Actions.
+
+⚠️ **Cạm bẫy:** khi merge PR trên web GitHub, commit đó **không đi qua máy ai cả**, nên mirror bị tụt lại và Render tiếp tục chạy code cũ — mà dashboard vẫn báo deploy thành công. Sau mỗi lần merge PR, người merge phải chạy:
+
+```bash
+git checkout develop && git pull && git push origin develop
+```
+
+Máy của Đức đã cấu hình `git push origin` đẩy tới cả hai repo trong một lệnh. Ai cần làm việc này trên máy mình thì chạy:
+
+```bash
+git remote set-url --add --push origin https://github.com/AI20K-Build-Phase-Cohort-3/P-035.git
+git remote set-url --add --push origin https://github.com/TruongDuke/P-035-deploy.git
+```
+
+Nếu sau này BTC cấp quyền admin repo org thì đổi Blueprint sang repo org và bỏ mirror đi — nhưng không gấp, hiện tại đã chạy được.
+
+### 6. Không tự sửa 4 file contract
 
 Bốn file này là thoả thuận giữa nhiều người. Sửa một mình sẽ làm vỡ code người khác:
 
 - `docs/contracts/01-metrics.md`
 - `src/models/incident.py`
-- `src/services/jira_client.py`
+- `src/services/jira/client.py`
 - `src/api/incidents.py`
 
 Cần đổi thì nói trong group, mở PR riêng, người ở đầu kia review. Chi tiết: [docs/contracts/](contracts/).
@@ -72,9 +108,21 @@ Cần đổi thì nói trong group, mở PR riêng, người ở đầu kia revi
 **Vai trò:** Backend Engineer · QA
 **Sở hữu:** 2 service demo, script load test, bảng deploy history, test suite, evaluation evidence (deliverable #10)
 
+### Thư mục của bạn: [`demo/`](../demo/) — mở [demo/README.md](../demo/README.md) trước
+
+Skeleton đã dựng sẵn. Phần nào là **contract** (tên metric, label, port, pool = 5) tôi đã viết đầy đủ — đừng đổi, vì đặt sai tên metric thì Prometheus trả kết quả rỗng chứ không báo lỗi, Agent của Việt im lặng không phát hiện gì và cực khó tìm ra. Phần nào là **logic** thì có `TODO(Trung)` kèm đặc tả trong docstring.
+
+Bật cả stack bằng một lệnh:
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Bạn cũng sở hữu [`eval/`](../eval/) — deliverable #10, xem [eval/README.md](../eval/README.md). Đây là chỗ mentor nhấn mạnh nhất.
+
 ### Đọc
 
-[docs/contracts/01-metrics.md](contracts/01-metrics.md) — bắt buộc. File này quy định tên metric bạn phải expose. Nếu đặt tên khác, Agent của Việt sẽ **không phát hiện được gì mà cũng không báo lỗi**, rất khó tìm ra.
+[docs/contracts/01-metrics.md](contracts/01-metrics.md) — quy định tên metric bạn phải expose.
 
 ### Việc tuần này (28–31/07)
 
@@ -108,11 +156,19 @@ Cả hai lệnh phải ra kết quả. Báo Đức khi xong.
 **Vai trò:** AI Agent Engineer
 **Sở hữu:** LangGraph, threshold detection, rule engine, LLM diagnosis, postmortem, correlation deploy
 
+### Thư mục của bạn
+
+- [`src/agents/nodes/`](../src/agents/nodes/) — node LangGraph. Mở [README ở đó](../src/agents/nodes/README.md) để xem danh sách node và luật
+- [`src/services/prometheus.py`](../src/services/prometheus.py) — câu PromQL đã viết sẵn (contract ①), còn `TODO(Việt)` phần gọi API
+- [`src/services/rules.py`](../src/services/rules.py) — ngưỡng đã viết sẵn, còn `TODO(Việt)` phần logic
+
+**Không sửa** `src/services/jira/`, `src/services/hitl.py`, `src/models/` — đó là contract, cần đổi thì mở PR có Đức review.
+
 ### Đọc
 
 - [docs/contracts/01-metrics.md](contracts/01-metrics.md) — câu PromQL và ngưỡng severity
 - [src/models/incident.py](../src/models/incident.py) — model bạn sinh ra
-- [src/services/jira_client.py](../src/services/jira_client.py) — cách gọi Jira
+- [src/services/jira/client.py](../src/services/jira/client.py) — cách gọi Jira
 - [docs/architecture_diagram.md](architecture_diagram.md) mục 2 — sơ đồ node bạn phải viết
 
 ### Việc tuần này (28–31/07)
@@ -130,7 +186,7 @@ Không cần chờ service của Trung — gán label `service` tuỳ ý cho dum
 ### Bạn viết Agent được ngay, không cần Jira
 
 ```python
-from src.services.jira_client import FakeJiraClient
+from src.services.jira import FakeJiraClient
 
 jira = FakeJiraClient()              # in ra console, không gọi mạng
 key = jira.create_incident(signal)
@@ -154,6 +210,20 @@ Thêm 2 quy tắc chống nhiễu, thiếu là lúc load test Agent mở hàng l
 
 **Vai trò:** Frontend Engineer · Demo
 **Sở hữu:** Status page công khai, war-room view, video demo (deliverable #6), pitch deck (deliverable #7)
+
+### Thư mục của bạn: [`ui/`](../ui/) — mở [ui/README.md](../ui/README.md) trước
+
+Hai file skeleton đã có, phần gọi API đã viết sẵn, còn `TODO(Long)` phần hiển thị:
+
+- [`ui/status_page.py`](../ui/status_page.py) — làm cái này TRƯỚC, đơn giản nhất
+- [`ui/war_room.py`](../ui/war_room.py) — làm sau
+
+```bash
+pip install -r ui/requirements.txt
+streamlit run ui/status_page.py
+```
+
+Không cần chạy backend local — code đã trỏ sẵn vào bản deploy.
 
 ### Đọc
 
@@ -220,10 +290,11 @@ npx -y -p @mermaid-js/mermaid-cli mmdc -i docs/architecture_diagram.md -o out.md
 
 ### Việc tuần này
 
-- [ ] Deploy `/health` lên Render → lấy public URL (**cần cho Jira webhook**, không chỉ để có deliverable #5)
-- [ ] Tạo Jira Cloud workspace: project, issue type `Incident`, custom field (`severity`, `affected_service`)
-- [ ] Cấu hình Workflow có bước `Awaiting Approval` bắt buộc người duyệt
-- [ ] **Verify quota Jira Automation free plan (~100 lần/tháng)** — nếu chật thì chuyển escalation vào Agent
+- [x] Deploy `/health` lên Render → https://p-035-incident-agent.onrender.com
+- [x] `RealJiraClient` + cổng HITL — đã verify trên Jira thật
+- [x] `POST /webhooks/jira` — nhận trigger sau khi duyệt, 3 lớp bảo vệ
+- [ ] Tạo Jira Cloud workspace + workflow — làm theo [docs/jira-setup.md](jira-setup.md)
+- [ ] Cấu hình Jira Automation rule gọi webhook (xem [jira-setup.md](jira-setup.md) Phần 5) + **verify quota free plan (~100 lần/tháng)**
 - [ ] Pair với Trung phần cấu hình Jira (đừng giao khoán — chỗ này encode HITL, sai là sai ràng buộc cứng)
 - [ ] Cuối 30/07 xem kết quả task probe của Trung để quyết phần việc tuần 2
 - [ ] Cuối tuần mở PR `develop` → `main`

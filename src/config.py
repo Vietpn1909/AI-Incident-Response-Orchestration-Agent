@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     langchain_project: str = "P-035"
     langchain_tracing_v2: bool = False
 
+    # Jira — lớp quản lý vòng đời incident (ADR-0001)
+    jira_base_url: str = ""
+    jira_email: str = ""
+    jira_api_token: str = ""
+    jira_project_key: str = "KAN"
+    jira_webhook_secret: str = ""
+
+    # accountId của account Agent. Cổng phê duyệt HITL so accountId này với
+    # người đã chuyển issue sang Remediating — trùng nhau nghĩa là Agent đang
+    # cố tự duyệt, và hành động bị từ chối. Xem src/services/hitl.py.
+    jira_agent_account_id: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

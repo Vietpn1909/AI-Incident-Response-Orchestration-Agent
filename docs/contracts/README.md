@@ -14,7 +14,7 @@ Trung ──①──▶ Việt ──②──▶ Đức ──④──▶ Lon
 |---|---|---|---|
 | ① | Metric & PromQL | Trung → Việt | [01-metrics.md](01-metrics.md) |
 | ② | Model dùng chung | Việt ↔ Đức ↔ Long | [`src/models/incident.py`](../../src/models/incident.py) |
-| ③ | Interface Jira | Đức → Việt | [`src/services/jira_client.py`](../../src/services/jira_client.py) |
+| ③ | Interface Jira | Đức → Việt | [`src/services/jira/client.py`](../../src/services/jira/client.py) |
 | ④ | Endpoint + fixture | Đức → Long | [`src/api/incidents.py`](../../src/api/incidents.py) |
 
 ## Mỗi người cần đọc gì
@@ -31,7 +31,7 @@ Trung ──①──▶ Việt ──②──▶ Đức ──④──▶ Lon
 **Việt — viết Agent không cần Jira:**
 
 ```python
-from src.services.jira_client import FakeJiraClient
+from src.services.jira import FakeJiraClient
 
 jira = FakeJiraClient()          # in ra console, không gọi mạng
 key = jira.create_incident(signal)
@@ -65,5 +65,7 @@ Test bảo vệ contract nằm ở [`tests/test_services/test_jira_client.py`](.
 Đây là ràng buộc bắt buộc của đề bài nên nó được chốt ở tầng interface, không phải bằng thiện chí:
 
 - `JiraClient` **không có method nào duyệt incident**. Nếu ai thêm một method như vậy, đó là dấu hiệu đang phá ràng buộc.
-- `FakeJiraClient.transition(key, REMEDIATING)` **raise `PermissionError`** — giống hệt Jira thật khi Agent thiếu quyền. Agent viết sai luồng sẽ fail ở CI, không phải fail lúc demo.
+- **Cổng phê duyệt ở [`src/services/hitl.py`](../../src/services/hitl.py)**: trước khi thi hành remediation, `assert_human_approved()` hỏi Jira ai đã chuyển issue sang `Remediating` (qua `get_transition_author()` → changelog). Nếu là account Agent → `ApprovalError`, không thi hành.
+- Mọi đường tới `execute_remediation` **phải** đi qua `assert_human_approved()`. Hiện chỉ có một đường: [`POST /webhooks/jira`](../../src/api/webhooks.py), và nó gọi cổng này trước khi làm bất cứ gì. Xoá lời gọi đó là phá ràng buộc bắt buộc của đề bài — [`test_hitl.py`](../../tests/test_services/test_hitl.py) gác ở CI.
+- Cổng nằm ở backend chứ không ở phân quyền Jira, vì Jira Cloud bản mới chỉ tạo được team-managed project (không đặt được điều kiện lên transition). Đánh đổi ghi trong [ADR-0001](../adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29--hitl-chuyển-sang-kiểm-tra-changelog).
 - `RemediationProposal.requires_approval` mặc định `True` cho hành động production.
