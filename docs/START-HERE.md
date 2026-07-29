@@ -108,9 +108,21 @@ Cần đổi thì nói trong group, mở PR riêng, người ở đầu kia revi
 **Vai trò:** Backend Engineer · QA
 **Sở hữu:** 2 service demo, script load test, bảng deploy history, test suite, evaluation evidence (deliverable #10)
 
+### Thư mục của bạn: [`demo/`](../demo/) — mở [demo/README.md](../demo/README.md) trước
+
+Skeleton đã dựng sẵn. Phần nào là **contract** (tên metric, label, port, pool = 5) tôi đã viết đầy đủ — đừng đổi, vì đặt sai tên metric thì Prometheus trả kết quả rỗng chứ không báo lỗi, Agent của Việt im lặng không phát hiện gì và cực khó tìm ra. Phần nào là **logic** thì có `TODO(Trung)` kèm đặc tả trong docstring.
+
+Bật cả stack bằng một lệnh:
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Bạn cũng sở hữu [`eval/`](../eval/) — deliverable #10, xem [eval/README.md](../eval/README.md). Đây là chỗ mentor nhấn mạnh nhất.
+
 ### Đọc
 
-[docs/contracts/01-metrics.md](contracts/01-metrics.md) — bắt buộc. File này quy định tên metric bạn phải expose. Nếu đặt tên khác, Agent của Việt sẽ **không phát hiện được gì mà cũng không báo lỗi**, rất khó tìm ra.
+[docs/contracts/01-metrics.md](contracts/01-metrics.md) — quy định tên metric bạn phải expose.
 
 ### Việc tuần này (28–31/07)
 
@@ -143,6 +155,14 @@ Cả hai lệnh phải ra kết quả. Báo Đức khi xong.
 
 **Vai trò:** AI Agent Engineer
 **Sở hữu:** LangGraph, threshold detection, rule engine, LLM diagnosis, postmortem, correlation deploy
+
+### Thư mục của bạn
+
+- [`src/agents/nodes/`](../src/agents/nodes/) — node LangGraph. Mở [README ở đó](../src/agents/nodes/README.md) để xem danh sách node và luật
+- [`src/services/prometheus.py`](../src/services/prometheus.py) — câu PromQL đã viết sẵn (contract ①), còn `TODO(Việt)` phần gọi API
+- [`src/services/rules.py`](../src/services/rules.py) — ngưỡng đã viết sẵn, còn `TODO(Việt)` phần logic
+
+**Không sửa** `src/services/jira/`, `src/services/hitl.py`, `src/models/` — đó là contract, cần đổi thì mở PR có Đức review.
 
 ### Đọc
 
@@ -190,6 +210,20 @@ Thêm 2 quy tắc chống nhiễu, thiếu là lúc load test Agent mở hàng l
 
 **Vai trò:** Frontend Engineer · Demo
 **Sở hữu:** Status page công khai, war-room view, video demo (deliverable #6), pitch deck (deliverable #7)
+
+### Thư mục của bạn: [`ui/`](../ui/) — mở [ui/README.md](../ui/README.md) trước
+
+Hai file skeleton đã có, phần gọi API đã viết sẵn, còn `TODO(Long)` phần hiển thị:
+
+- [`ui/status_page.py`](../ui/status_page.py) — làm cái này TRƯỚC, đơn giản nhất
+- [`ui/war_room.py`](../ui/war_room.py) — làm sau
+
+```bash
+pip install -r ui/requirements.txt
+streamlit run ui/status_page.py
+```
+
+Không cần chạy backend local — code đã trỏ sẵn vào bản deploy.
 
 ### Đọc
 

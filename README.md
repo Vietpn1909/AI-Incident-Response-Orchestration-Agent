@@ -141,23 +141,52 @@ Ba endpoint incident **đã trả dữ liệu thật ngay bây giờ** (từ fix
 
 ## Project Structure
 
+Ba khối chạy độc lập nên 4 người sửa cùng lúc không đụng nhau. Mỗi thư mục có `README.md` riêng ghi việc của người sở hữu.
+
 ```
-├── src/
-│   ├── agents/          # LangGraph agent (graph, state, nodes, tools)
-│   ├── api/             # FastAPI routes
-│   ├── models/          # Pydantic schemas — contract giữa các module
-│   ├── services/        # Business logic (LLM, Jira client, Prometheus client)
-│   ├── config.py        # Pydantic Settings + LangSmith tracing
-│   └── main.py          # App entry point
-├── tests/               # pytest suite
-├── docs/                # Architecture, ADR, guidebook
-├── eval/                # Evaluation evidence
-├── presentation/        # Video demo + pitch deck
-├── scripts/             # AI usage logging hooks
-├── Dockerfile
-├── docker-compose.yml
-└── .github/workflows/   # CI (lint + test trên push và PR vào main/develop)
+├── src/                      # Backend chính — Agent + API        (Đức + Việt)
+│   ├── agents/nodes/         #   node LangGraph              → VIỆT
+│   ├── api/                  #   routes, webhooks, fixtures  → ĐỨC  ✅
+│   ├── models/incident.py    #   schema dùng chung           → ĐỨC  ✅
+│   ├── services/
+│   │   ├── jira/             #     tích hợp Jira            → ĐỨC  ✅
+│   │   ├── hitl.py           #     cổng phê duyệt           → ĐỨC  ✅
+│   │   ├── remediation.py    #     thực thi khắc phục       → ĐỨC  ✅
+│   │   ├── prometheus.py     #     query PromQL             → VIỆT
+│   │   └── rules.py          #     ngưỡng + phân loại       → VIỆT
+│   ├── config.py
+│   └── main.py
+│
+├── demo/                     # Hệ thống BỊ sự cố (chỉ chạy local)      → TRUNG
+│   ├── service_thanh_toan/   #   POST /pay, pool = 5 cố ý
+│   ├── service_dat_hang/     #   POST /orders → gọi chéo
+│   ├── seed.py               #   Faker + bảng deploy_history
+│   ├── loadtest.py           #   bắn tải tăng dần
+│   └── prometheus.yml        #   cấu hình scrape (contract ①)
+│
+├── ui/                       # 2 trang Streamlit                       → LONG
+│   ├── status_page.py        #   trang công khai
+│   └── war_room.py           #   trang nội bộ
+│
+├── eval/                     # Số liệu đo đạc — deliverable #10        → TRUNG
+├── tests/                    # 49 test, chạy trong CI
+├── docs/                     # Architecture, ADR, contracts, guidebook
+├── presentation/             # Video demo + pitch deck                 → LONG
+├── docker-compose.demo.yml   # bật demo stack + Prometheus
+└── render.yaml               # deploy backend lên Render
 ```
+
+⚠️ **`src/` và `demo/` không được import nhau** — chỉ nói chuyện qua HTTP và `/metrics`. Backend phải coi 2 service demo như hệ thống bên ngoài, y như production thật. Import nhau thì Agent biết trước đáp án và phần "chẩn đoán" mất ý nghĩa.
+
+## Chạy demo stack (tạo sự cố thật)
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+python demo/seed.py            # sinh dữ liệu mẫu, chạy một lần
+python demo/loadtest.py         # bắn tải tăng dần
+```
+
+Rồi mở http://localhost:9090 và query p95 — xem [demo/README.md](demo/README.md).
 
 ## Deliverables Checklist
 

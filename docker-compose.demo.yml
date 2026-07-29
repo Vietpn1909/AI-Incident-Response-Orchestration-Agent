@@ -1,0 +1,65 @@
+# Demo stack — hệ thống bị sự cố + Prometheus.
+#
+# CHỈ chạy local, không deploy. Backend chính deploy riêng qua render.yaml.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#
+# Sau khi lên:
+#   http://localhost:8001/docs        service-thanh-toan
+#   http://localhost:8002/docs        service-dat-hang
+#   http://localhost:9090/targets     Prometheus — cả 2 target phải UP
+#
+# Tạo sự cố:  python demo/loadtest.py
+
+name: p035-demo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  service-thanh-toan:
+    build:
+      context: ./demo
+    command: sh -c "exec uvicorn service_thanh_toan.main:app --host 0.0.0.0 --port 8001"
+    environment:
+      DATABASE_URL: postgresql://demo:demo@postgres:5432/demo
+      PORT: "8001"
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  service-dat-hang:
+    build:
+      context: ./demo
+    command: sh -c "exec uvicorn service_dat_hang.main:app --host 0.0.0.0 --port 8002"
+    environment:
+      # Tên host = tên service trong file này, không phải localhost.
+      PAYMENT_SERVICE_URL: http://service-thanh-toan:8001
+      PORT: "8002"
+    ports:
+      - "8002:8002"
+    depends_on:
+      - service-thanh-toan
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - service-thanh-toan
+      - service-dat-hang

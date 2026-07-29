@@ -73,7 +73,8 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(' ', d.get\\('baseUrl','?'\\), '|', d.get\\('deploymentType','?'\\)\\)\")",
       "Bash(.venv/bin/pip -q install \"httpx>=0.28.0\")",
       "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/test_real_hitl.py)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(../.venv/bin/python -c ' *)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",
