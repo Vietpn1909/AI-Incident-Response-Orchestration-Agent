@@ -257,8 +257,7 @@ npx -y -p @mermaid-js/mermaid-cli mmdc -i docs/architecture_diagram.md -o out.md
 ### Việc tuần này
 
 - [ ] Deploy `/health` lên Render → lấy public URL (**cần cho Jira webhook**, không chỉ để có deliverable #5)
-- [ ] Tạo Jira Cloud workspace: project, issue type `Incident`, custom field (`severity`, `affected_service`)
-- [ ] Cấu hình Workflow có bước `Awaiting Approval` bắt buộc người duyệt
+- [ ] Tạo Jira Cloud workspace + workflow — làm theo [docs/jira-setup.md](jira-setup.md)
 - [ ] **Verify quota Jira Automation free plan (~100 lần/tháng)** — nếu chật thì chuyển escalation vào Agent
 - [ ] Pair với Trung phần cấu hình Jira (đừng giao khoán — chỗ này encode HITL, sai là sai ràng buộc cứng)
 - [ ] Cuối 30/07 xem kết quả task probe của Trung để quyết phần việc tuần 2

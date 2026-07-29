@@ -60,7 +60,8 @@
       "Bash(grep -iE \"^\\\\.env$|\\\\.env\\\\.|secret|credential|token\")",
       "Bash(sed -i '' 's/^### 4\\\\. Không tự sửa 4 file contract$/### 5. Không tự sửa 4 file contract/' /dev/null 2>/dev/null; grep -n \"^### \" docs/START-HERE.md | head -8)",
       "Bash(echo \"org    : $\\(gh api repos/AI20K-Build-Phase-Cohort-3/P-035/commits/develop --jq '.sha[0:7]'\\)\")",
-      "Bash(echo \"mirror : $\\(gh api repos/TruongDuke/P-035-deploy/commits/develop --jq '.sha[0:7]'\\)\")"
+      "Bash(echo \"mirror : $\\(gh api repos/TruongDuke/P-035-deploy/commits/develop --jq '.sha[0:7]'\\)\")",
+      "Bash(cp P-035-ho-so-quan-ly-du-an.xlsx ~/Downloads/)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",
