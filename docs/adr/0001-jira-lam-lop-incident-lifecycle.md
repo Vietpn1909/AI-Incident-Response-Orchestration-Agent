@@ -98,6 +98,40 @@ Vẫn cần **hai account Jira** như quyết định gốc — một cho Agent,
 - Agent vẫn *chuyển được* trạng thái issue sang `Remediating` trên Jira, chỉ là hành động khắc phục không được thi hành. Trạng thái trên Jira có thể gây nhầm lẫn khi xem bằng mắt → cần comment cảnh báo khi phát hiện trường hợp này
 - Phụ thuộc `jira_agent_account_id` được cấu hình đúng. Thiếu giá trị này thì `assert_human_approved()` raise `ValueError` chứ không cho qua — cấu hình sai phải fail to
 
+## Cập nhật 2026-07-29 (2) — dùng label thay custom field
+
+Đã kiểm chứng trên site Jira thật, không phải suy đoán:
+
+| Thử | Kết quả |
+|---|---|
+| `POST /rest/api/3/field` tạo global custom field `severity` | ✅ Tạo được (`customfield_10042`) |
+| Field đó xuất hiện trên `createmeta` của team-managed project? | ❌ **KHÔNG** |
+| Tạo issue với `labels: [incident, severity-P2, service-service-thanh-toan]` | ✅ Được |
+| Đọc lại label | ✅ `['incident', 'service-service-thanh-toan', 'severity-P2']` |
+| JQL `labels = "severity-P2"` | ✅ Tìm thấy đúng issue |
+| `GET /rest/api/3/issue/{key}/changelog` | ✅ OK — nền tảng của cổng HITL |
+
+Team-managed project quản lý field riêng và **không nhận global custom field**. Nên bỏ hẳn custom field, chuyển sang label:
+
+| Dữ liệu | Trước | Sau |
+|---|---|---|
+| `severity` | custom field | label `severity-P2` |
+| `affected_service` | custom field | label `service-<tên>` |
+| `root_cause_confidence` | custom field | nằm trong comment cùng bằng chứng số — không cần lên Jira |
+| Đánh dấu issue của Agent | — | label `incident` |
+
+Quy ước và hàm chuyển đổi ở [`src/services/jira_mapping.py`](../../src/services/jira_mapping.py).
+
+**Được:** bớt hẳn một lớp phức tạp — không phải quản field ID, context, option, screen configuration. Label truy vấn được bằng JQL nên vẫn đủ cho chống mở trùng và tìm incident cũ. Không phụ thuộc loại project.
+
+**Mất:** label là chuỗi phẳng, không có validation kiểu dữ liệu như custom field. Nhập sai `severity-P9` thì Jira vẫn nhận, chỉ phía code phát hiện được — đã có [`severity_from_labels()`](../../src/services/jira_mapping.py) trả `None` và test cho trường hợp này. Trên UI Jira, severity hiện dưới dạng label chứ không phải một trường riêng, nhìn kém gọn hơn.
+
+### Trạng thái workflow
+
+Project team-managed có sẵn 5 status: `Idea`, `To Do`, `In Progress`, `In Review`, `Done`. Map trong `JIRA_STATUS` dùng đúng tên đang có nên **code chạy được ngay không cần đổi gì trên Jira**.
+
+Đổi tên 5 cột trên board thành đúng tên `IncidentState` sẽ làm demo dễ hiểu hơn — nhất là `Awaiting Approval`, vì đó là cổng HITL người chấm cần thấy. Đổi rồi thì chỉ sửa `JIRA_STATUS`, không phải sửa chỗ khác. Đây là việc tuỳ chọn, không chặn.
+
 ## Phần Jira không giải quyết được — vẫn phải tự xây
 
 - Tương quan với lịch sử deploy → bảng `deploy_history` giả lập riêng

@@ -37,39 +37,38 @@ Loại team-managed hay company-managed **không còn quan trọng**.
 
 ---
 
-## Phần 2 — Trạng thái workflow
+## Phần 2 — Trạng thái workflow (tuỳ chọn)
 
-- [ ] Mở board của project → cấu hình cột/trạng thái → tạo đúng 5 status, **tên viết chính xác như dưới** (khớp `IncidentState` trong [src/models/incident.py](../src/models/incident.py)):
+**Không bắt buộc.** Project đã có sẵn 5 status `Idea · To Do · In Progress · In Review · Done`, và [`JIRA_STATUS`](../src/services/jira_mapping.py) map thẳng vào 5 trạng thái incident nên code chạy được ngay.
+
+Nhưng đổi tên 5 cột trên board thành đúng tên dưới đây sẽ làm **demo dễ hiểu hơn nhiều** — nhất là `Awaiting Approval`, vì đó là cổng HITL người chấm cần nhìn thấy:
 
 ```
 Open  ·  Investigating  ·  Awaiting Approval  ·  Remediating  ·  Resolved
 ```
 
-Trên team-managed, thêm status làm ở ngay board: thêm cột mới rồi đặt tên. Không cần cấu hình transition — team-managed cho chuyển tự do giữa các trạng thái, và điều đó **không sao**, vì hàng rào đã nằm ở backend.
+- [ ] Board của project → bấm vào tên cột → đổi tên (team-managed cho đổi trực tiếp)
+- [ ] Sau khi đổi, sửa dict `JIRA_STATUS` trong `src/services/jira_mapping.py` cho khớp — chỉ một chỗ đó
 
-- [ ] Kiểm tra tên viết đúng từng chữ, kể cả khoảng trắng trong `Awaiting Approval`
+Không cần cấu hình transition. Team-managed cho chuyển tự do giữa mọi trạng thái, và điều đó **không sao** vì hàng rào phê duyệt nằm ở backend.
 
 ---
 
-## Phần 3 — Custom field
+## Phần 3 — Custom field: KHÔNG CẦN LÀM
 
-- [ ] Tạo 3 field và gắn vào work type dùng cho incident:
+Đã thử và **không dùng được**: global custom field tạo qua API thành công nhưng không xuất hiện trên team-managed project, vì loại này quản field riêng.
 
-| Tên field | Kiểu | Giá trị |
-|---|---|---|
-| `severity` | Select list (single choice) | `P1`, `P2`, `P3`, `P4` |
-| `affected_service` | Short text | (để trống) |
-| `root_cause_confidence` | Number | (để trống) |
+Thay bằng **label**, đã verify chạy đủ trên site thật:
 
-- [ ] Ghi lại **field ID** của từng field: ⚙️ → Issues → Custom fields → hover vào field, URL chứa `customFieldId=10050` → ID là `customfield_10050`
+| Dữ liệu | Label |
+|---|---|
+| Severity | `severity-P2` |
+| Service ảnh hưởng | `service-service-thanh-toan` |
+| Đánh dấu issue của Agent | `incident` |
 
-REST API dùng ID chứ không dùng tên, nên thiếu bước này là không tích hợp được:
+`root_cause_confidence` nằm trong comment cùng bằng chứng số, không cần lên Jira.
 
-```
-severity              = customfield_____
-affected_service      = customfield_____
-root_cause_confidence = customfield_____
-```
+Quy ước ở [`src/services/jira_mapping.py`](../src/services/jira_mapping.py), chi tiết đánh đổi trong [ADR-0001](adr/0001-jira-lam-lop-incident-lifecycle.md#cập-nhật-2026-07-29-2--dùng-label-thay-custom-field).
 
 ---
 
@@ -123,17 +122,26 @@ Không còn là bắt buộc. Nếu quota gói Free đủ thì làm, không thì
 
 Token và accountId gửi riêng, không đăng group chat:
 
+Đã xác định xong ngày 2026-07-29:
+
 ```
-JIRA_BASE_URL         = https://______.atlassian.net
-JIRA_PROJECT_KEY      = ______
-severity              = customfield_____
-affected_service      = customfield_____
-root_cause_confidence = customfield_____
-JIRA_AGENT_ACCOUNT_ID = ______
-5 status đã tạo đúng tên?                  có / chưa
-Send web request dùng được trên Free?      có / không
-Quota automation:                          ___/100
+JIRA_BASE_URL         = https://jibinarybro.atlassian.net
+JIRA_PROJECT_KEY      = KAN
+account người duyệt   = thaiduc200427@gmail.com
+                        712020:fd2ca790-fbc0-4c1a-9def-2538883643a8
+account Agent         = thaiduc0201@gmail.com
+                        712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7
 ```
+
+Còn thiếu: **API token của account Agent** (`thaiduc0201@gmail.com`). Đăng nhập bằng account đó → https://id.atlassian.com/manage-profile/security/api-tokens → tạo token → điền vào `.env`:
+
+```
+JIRA_EMAIL=thaiduc0201@gmail.com
+JIRA_API_TOKEN=<token của account Agent>
+JIRA_AGENT_ACCOUNT_ID=712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7
+```
+
+⚠️ Phải là token của **account Agent**, không phải account chính. Nếu Agent dùng token của người duyệt thì cổng HITL không phân biệt được ai với ai và mất hiệu lực.
 
 ---
 
