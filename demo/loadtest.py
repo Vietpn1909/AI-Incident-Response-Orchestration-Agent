@@ -29,29 +29,61 @@ PROFILE_FULL = [(5, 30), (20, 30), (50, 60), (100, 60), (200, 90), (400, 120)]
 
 
 async def one_request(client: httpx.AsyncClient, index: int) -> tuple[int, float]:
-    """Gửi một request, trả (status_code, thời gian tính bằng giây).
-
-    TODO(Trung):
-      POST tới PAYMENT_URL với body {"order_id": f"load-{index}", "amount": 100}
-      Đo thời gian bằng time.perf_counter(). Bắt mọi exception và trả
-      (0, elapsed) để timeout cũng được tính vào thống kê.
-    """
-    raise NotImplementedError("TODO(Trung): xem docstring")
+    """Gửi một request, trả (status_code, thời gian tính bằng giây)."""
+    start_t = time.perf_counter()
+    try:
+        resp = await client.post(
+            PAYMENT_URL,
+            json={"order_id": f"load-{index}", "amount": 100},
+        )
+        elapsed = time.perf_counter() - start_t
+        return resp.status_code, elapsed
+    except Exception:
+        elapsed = time.perf_counter() - start_t
+        return 0, elapsed
 
 
 async def run_stage(concurrency: int, seconds: int) -> None:
-    """Giữ `concurrency` request đồng thời trong `seconds` giây.
+    """Giữ `concurrency` request đồng thời trong `seconds` giây."""
+    print(f"🚀 [STAGE] Concurrency: {concurrency:3d} | Thời gian: {seconds}s")
+    times: list[float] = []
+    statuses: list[int] = []
 
-    TODO(Trung):
-      1. Tạo httpx.AsyncClient với timeout khoảng 10s
-      2. Vòng lặp tới khi hết `seconds`: mỗi vòng tạo `concurrency` task
-         one_request rồi asyncio.gather
-      3. Gom kết quả, in ra sau mỗi bậc:
-             concurrency, tổng request, p95 (giây), tỷ lệ lỗi (%)
-         p95 tính bằng sorted(times)[int(len(times) * 0.95)]
-      4. In cảnh báo khi p95 vượt 2s — đó là ngưỡng Agent dùng để mở incident
-    """
-    raise NotImplementedError("TODO(Trung): xem docstring")
+    stage_start = time.perf_counter()
+    req_index = 0
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while time.perf_counter() - stage_start < seconds:
+            tasks = [one_request(client, req_index + i) for i in range(concurrency)]
+            req_index += concurrency
+
+            results = await asyncio.gather(*tasks)
+            for status, elapsed in results:
+                statuses.append(status)
+                times.append(elapsed)
+
+            await asyncio.sleep(0.05)  # Tránh tràn loop quá nhanh
+
+    if not times:
+        print("⚠️  Không có request nào được hoàn thành.")
+        return
+
+    sorted_times = sorted(times)
+    p95_idx = int(len(sorted_times) * 0.95)
+    p95 = sorted_times[min(p95_idx, len(sorted_times) - 1)]
+
+    err_count = sum(1 for status in statuses if status != 200)
+    err_rate = (err_count / len(statuses)) * 100 if statuses else 0.0
+
+    print(
+        f"📊 [KẾT QUẢ] Concurrency: {concurrency:3d} | Tổng req: {len(times):5d} | "
+        f"p95: {p95:.3f}s | Lỗi: {err_rate:.1f}%"
+    )
+
+    if p95 > 2.0:
+        print(f"⚠️  [CẢNH BÁO] p95 ({p95:.3f}s) đã VƯỢT NGƯỠNG 2.0s! Agent của Việt sẽ kích hoạt mở Incident!\n")
+    else:
+        print()
 
 
 async def main() -> None:
