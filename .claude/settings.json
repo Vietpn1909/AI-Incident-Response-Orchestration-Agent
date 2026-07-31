@@ -84,7 +84,9 @@
       "Bash(curl -sSL -o sheet_now.xlsx -w 'xlsx: HTTP %{http_code}  %{size_download} bytes\\\\n' https://docs.google.com/spreadsheets/d/__TRACKED_VAR__/export?format=xlsx)",
       "Bash(curl -sSL -o gid_1518137437.csv -w 'sheet gid=1518137437: HTTP %{http_code}  %{size_download} bytes\\\\n' 'https://docs.google.com/spreadsheets/d/__TRACKED_VAR__/export?format=csv&gid=1518137437')",
       "Bash(sed -i '' 's/Mentor: Đặng Hải Lộc/Mentor: Trần Thanh Trung/' README.md)",
-      "Bash(echo \"org=$\\(gh api repos/AI20K-Build-Phase-Cohort-3/P-035/commits/develop --jq '.sha[0:7]'\\)  mirror=$\\(gh api repos/TruongDuke/P-035-deploy/commits/develop --jq '.sha[0:7]'\\)\")"
+      "Bash(echo \"org=$\\(gh api repos/AI20K-Build-Phase-Cohort-3/P-035/commits/develop --jq '.sha[0:7]'\\)  mirror=$\\(gh api repos/TruongDuke/P-035-deploy/commits/develop --jq '.sha[0:7]'\\)\")",
+      "Bash(grep -E \"\\\\.sh$|Dockerfile|\\\\.cmd$\")",
+      "Bash(git log *)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",
