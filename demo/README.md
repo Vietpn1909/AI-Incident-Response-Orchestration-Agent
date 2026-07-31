@@ -86,8 +86,8 @@ python demo/loadtest.py
 **Ghi lại mức tải làm p95 vượt 2s trên máy sẽ dùng demo** và điền vào cuối file này. Không có số đó thì hôm Demo Day phải mò.
 
 ```
-Mức tải làm p95 > 2s trên máy demo:  ______ request/giây, ______ concurrent
-Đo ngày: ______   Máy: ______
+Mức tải làm p95 > 2s trên máy demo: ~285 request/giây, 200 concurrent (Lỗi 51%)
+Đo ngày: 30/07/2026   Máy: LAPTOP-240I2QTN (Windows)
 ```
 
 ## Vì sao pool = 5

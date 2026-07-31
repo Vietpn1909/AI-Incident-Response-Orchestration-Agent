@@ -51,25 +51,37 @@ class OrderRequest(BaseModel):
 
 @app.post("/orders")
 async def create_order(request: OrderRequest) -> dict:
-    """Tạo đơn, rồi gọi sang service-thanh-toan để thanh toán.
+    """Tạo đơn, rồi gọi sang service-thanh-toan để thanh toán."""
+    import uuid
 
-    TODO(Trung):
-      1. Sinh `order_id` (uuid4 là đủ)
-      2. Gọi POST {PAYMENT_SERVICE_URL}/pay với `order_id` và `amount`,
-         dùng `httpx.AsyncClient(timeout=PAYMENT_TIMEOUT_SECONDS)`
-      3. Bắt `httpx.TimeoutException` → raise HTTPException(504, ...).
-         ĐỪNG bắt rồi trả 200 — cần lỗi 5xx để Prometheus ghi nhận và Agent
-         phát hiện được lan truyền.
-      4. Trả {"ok": True, "order_id": ...}
+    order_id = str(uuid.uuid4())
 
-    Xong là thế nào:
-        curl -X POST localhost:8002/orders -H "Content-Type: application/json" \\
-          -d '{"items":["ao"],"amount":100}'
+    try:
+        async with httpx.AsyncClient(timeout=PAYMENT_TIMEOUT_SECONDS) as client:
+            resp = await client.post(
+                f"{PAYMENT_SERVICE_URL}/pay",
+                json={"order_id": order_id, "amount": request.amount},
+            )
+            resp.raise_for_status()
+            payment_result = resp.json()
+    except httpx.TimeoutException:
+        # Bắt TimeoutException -> Trả về 504 Gateway Timeout để Prometheus ghi nhận lỗi 5xx
+        raise HTTPException(
+            status_code=504,
+            detail=f"Service thanh toán bị timeout sau {PAYMENT_TIMEOUT_SECONDS}s",
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Lỗi từ service thanh toán: {e.response.text}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Không thể kết nối tới service thanh toán: {str(e)}",
+        )
 
-    Kiểm tra lan truyền: bắn tải vào 8001 cho nó chậm, rồi gọi 8002 —
-    phải thấy 504.
-    """
-    raise HTTPException(501, "TODO(Trung): chưa cài đặt — xem docstring")
+    return {"ok": True, "order_id": order_id, "payment_result": payment_result}
 
 
 @app.get("/health")

@@ -49,11 +49,16 @@ pool: asyncpg.Pool | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global pool
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
-    db_pool_size.set(POOL_SIZE)
-    print(f"{SERVICE_NAME} khởi động — pool tối đa {POOL_SIZE} connection")
+    try:
+        pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
+        db_pool_size.set(POOL_SIZE)
+        print(f"✅ {SERVICE_NAME} khởi động — pool tối đa {POOL_SIZE} connection")
+    except Exception as e:
+        print(f"⚠️ Chưa kết nối được Postgres tại {DATABASE_URL}: {e}")
+        print("💡 Vui lòng bật Postgres bằng Docker lệnh: docker compose -f docker-compose.demo.yml up -d postgres")
     yield
-    await pool.close()
+    if pool is not None:
+        await pool.close()
 
 
 app = FastAPI(title=SERVICE_NAME, lifespan=lifespan)
@@ -82,28 +87,28 @@ class PayRequest(BaseModel):
 
 @app.post("/pay")
 async def pay(request: PayRequest) -> dict:
-    """Ghi một payment vào Postgres.
-
-    TODO(Trung):
-      1. Lấy connection từ pool: `async with pool.acquire() as conn:`
-      2. Cập nhật gauge NGAY SAU khi acquire và trong `finally` — Agent đọc
-         gauge này để biết pool có đang cạn:
-             db_pool_in_use.set(POOL_SIZE - pool.get_idle_size())
-      3. INSERT vào bảng `payments` (order_id, amount, created_at)
-      4. Thêm MỘT truy vấn cố tình chưa tối ưu để độ chậm lộ rõ hơn khi tải
-         tăng — ví dụ đếm payment của order đó mà KHÔNG có index trên order_id:
-             SELECT count(*) FROM payments WHERE order_id = $1
-         (schema trong seed.py cố ý không tạo index cho cột này)
-      5. Trả {"ok": True, "payment_id": ...}
-
-    Xong là thế nào:
-        curl -X POST localhost:8001/pay -H "Content-Type: application/json" \\
-          -d '{"order_id":"1","amount":100}'
-    """
+    """Ghi một payment vào Postgres."""
     if pool is None:
         raise HTTPException(503, "Pool chưa khởi tạo")
 
-    raise HTTPException(501, "TODO(Trung): chưa cài đặt — xem docstring")
+    try:
+        async with pool.acquire() as conn:
+            # get_size() = số connection ĐÃ TẠO, không phải trần POOL_SIZE
+            db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
+
+            row = await conn.fetchrow(
+                "INSERT INTO payments (order_id, amount) VALUES ($1, $2) RETURNING id",
+                request.order_id,
+                request.amount,
+            )
+            await conn.fetchval(
+                "SELECT count(*) FROM payments WHERE order_id = $1",
+                request.order_id,
+            )
+            return {"ok": True, "payment_id": str(row["id"])}
+    finally:
+        # finally NGOÀI async with → connection đã trả về pool mới đo
+        db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
 
 
 @app.get("/health")
