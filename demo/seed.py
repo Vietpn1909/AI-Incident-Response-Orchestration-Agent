@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 
@@ -67,7 +67,7 @@ async def main() -> None:
     except ImportError:
         fake = None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Sinh 3000 dòng orders
     orders_data = []
