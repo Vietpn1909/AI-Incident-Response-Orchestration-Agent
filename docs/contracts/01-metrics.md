@@ -81,24 +81,39 @@ Không có 2 metric này thì Agent chỉ kết luận được "latency cao", k
 
 Đã verify trên Prometheus thật. Định nghĩa dùng chung ở [`src/services/prometheus.py`](../../src/services/prometheus.py) — import từ đó, đừng chép lại.
 
-⚠️ **Mọi câu query đều phải lọc `handler!="/metrics"`.** Prometheus tự scrape endpoint đó mỗi 5s, request rất nhanh nên không lọc thì nó kéo avg latency sai **40 lần** lúc rảnh.
+Hai quy tắc áp cho **mọi** câu:
+
+1. ⚠️ **Lọc `handler!="/metrics"`.** Prometheus tự scrape endpoint đó mỗi 5s, request rất nhanh nên không lọc thì nó kéo avg latency sai **40 lần** lúc rảnh.
+2. ⚠️ **Câu nào có phép chia thì phải gắn `and on(service) (_HAS_TRAFFIC)`** — xem mục cảnh báo NaN bên dưới.
 
 ```promql
+# Bộ lọc dùng chung: "service có request trong phút vừa rồi".
+# Gắn vào mọi câu có phép chia để câu đó trả RỖNG thay vì NaN lúc không tải.
+_HAS_TRAFFIC:
+  sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) > 0
+
 # p95 latency theo service — tín hiệu chính để phát hiện sự cố
-histogram_quantile(0.95,
-  sum(rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])) by (le, service)
+(
+  histogram_quantile(0.95,
+    sum(rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])) by (le, service)
+  )
 )
+and on(service) (_HAS_TRAFFIC)
 
 # tỷ lệ lỗi 5xx. Vế `or ... * 0` là CỐ Ý: thiếu nó thì service khoẻ trả RỖNG
 # thay vì 0, Agent không phân biệt được "không lỗi" với "mất metric".
+# `or ... * 0` chống RỖNG, `and on(service)` chống NaN — cần cả hai.
 (
-  sum by (service) (rate(http_requests_total{handler!="/metrics", status=~"5.."}[1m]))
-  or
-  sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) * 0
+  (
+    sum by (service) (rate(http_requests_total{handler!="/metrics", status=~"5.."}[1m]))
+    or
+    sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) * 0
+  )
+  / sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m]))
 )
-/ sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m]))
+and on(service) (_HAS_TRAFFIC)
 
-# mức dùng pool hiện tại
+# mức dùng pool hiện tại — gauge/gauge, không sinh NaN nên không cần bộ lọc
 db_pool_connections_in_use / db_pool_size
 
 # đỉnh mức dùng pool 5 phút qua — DÙNG BẢN NÀY khi làm bằng chứng cho Hypothesis.
@@ -106,15 +121,30 @@ db_pool_connections_in_use / db_pool_size
 # đó đã cạn kiệt, bằng chứng sẽ nói ngược sự thật.
 max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])
 
-# baseline: p95 trung bình 30 phút trước
-avg_over_time((
-  histogram_quantile(0.95,
-    sum(rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])) by (le, service)
-  )
-)[30m:1m])
+# baseline: p95 trung bình 30 phút trước.
+# Kế thừa bộ lọc từ câu p95 ở trên, nên chỉ lấy trung bình những phút có request.
+avg_over_time((<câu p95 ở trên>)[30m:1m])
 ```
 
 *Ghi chú:* instrumentator gom status thành `2xx`/`5xx` chứ không giữ `500`. Regex `5..` vẫn khớp `5xx` nên đúng — **đừng "sửa" thành `status="500"`**, sẽ không khớp gì cả.
+
+### 🔴 Vì sao mọi câu có phép chia phải lọc theo traffic
+
+**Sửa 2026-07-30.** Không có request nào trong cửa sổ `[1m]` thì `rate` = 0, và mọi câu có phép chia thành 0/0 = **`NaN`**. Prometheus không báo lỗi — query vẫn "chạy", vẫn trả ra một con số.
+
+Đây là cùng loại lỗi với bucket mặc định, và cũng nguy hiểm y như vậy vì nó hỏng im lặng:
+
+- `NaN > x` **và** `NaN < x` đều là `False`, nên mọi so sánh ngưỡng rơi tọt qua → Agent bỏ lọt sự cố mà không có dấu hiệu gì. Riêng mức **P4 hoàn toàn không kích hoạt được** vì nó dựa trọn vào độ lệch baseline
+- `MetricEvidence.deviation_ratio` thành `NaN`
+- Pydantic serialize `NaN` thành `null`, nên bằng chứng số biến mất khỏi war-room view của Long mà không báo gì
+
+Bốn câu bị ảnh hưởng: **p95 latency, tỷ lệ lỗi, avg latency, và baseline**. Câu pool không bị vì nó là gauge chia gauge, cả hai luôn có giá trị.
+
+Vế `and on(service) (_HAS_TRAFFIC)` bỏ hẳn series khi service không có request, nên câu trả **rỗng** thay vì `NaN`. Nhờ đó `PrometheusClient.query()` chỉ phải xử lý **một** trạng thái "không có dữ liệu" thay vì hai.
+
+Phát hiện khi Việt bắn các hằng đang được ship trong `src/services/prometheus.py` vào Prometheus thật, lúc service đứng im: câu baseline trả `NaN` với toàn bộ điểm mẫu trong cửa sổ 30 phút đều `NaN`; sau khi sửa baseline thì lộ tiếp ba câu instant cũng `NaN` theo cùng cơ chế. Sau khi gắn bộ lọc: lúc rảnh cả bốn trả rỗng, dưới tải cả sáu trả số đúng (p95 1.95s, lỗi 2.1%, pool 1.00, baseline 1.46s, avg 1.53s).
+
+**Ràng buộc kịch bản kèm theo — việc của Trung:** sửa query không tạo ra baseline từ hư không. Script load test phải có **pha warm-up traffic nhẹ trước khi tăng tải**. Chạy load test từ trạng thái im lìm thì baseline ≈ p95 hiện tại — đo được độ lệch chỉ **1.3x** thay vì 4.0x khi có traffic nền — và tính năng "so baseline" mất ý nghĩa kể cả sau khi sửa `NaN`. `spike/spike_promql.py` sẽ cảnh báo khi độ lệch dưới 1.5x.
 
 ## Ngưỡng và severity
 

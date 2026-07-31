@@ -123,8 +123,21 @@ Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bư�
 | Phan Hoàng Long | Cài đặt `ui/status_page.py` — trạng thái tổng theo đúng thứ tự `StatusPage.overall_health`, giờ Việt Nam, nút tải lại | ✅ Done | `642685c` | - |
 | Phan Hoàng Long | Cài đặt `ui/war_room.py` — danh sách + chi tiết incident, bằng chứng kèm PromQL, timeline, postmortem, incident liên quan bấm chuyển được | ✅ Done | `0c9a508` | - |
 | Phan Hoàng Long | Mở PR #6 vào `develop` | ✅ Done | PR #6 | - |
+| Việt | Đổi `spike_promql.py` sang bắn thẳng các hằng trong `src/services/prometheus.py`, bỏ bản sao câu query | ✅ Done | `spike/spike_promql.py` | - |
+| Việt | **Tìm ra lỗi thứ 5 của contract ①**: mọi câu có phép chia trả `NaN` khi service không có request | ✅ Done | 4 câu bị: p95, tỷ lệ lỗi, avg latency, baseline | - |
+| Việt | Sửa: gắn `and on(service) (_HAS_TRAFFIC)`, cập nhật contract ① + `spike/README.md` | ✅ Done | rỗng lúc rảnh, 6/6 câu trả số dưới tải | - |
 
 **Tổng kết ngày:** Cả Trung và Long hoàn thành phần việc của mình và mở PR — đội có PR đầu tiên đi qua quy trình review đúng chuẩn. Long làm xong **cả hai** trang UI trong tuần 1, tức đi trước lịch (kế hoạch là tuần 2–3), nên tuần 2 có thời gian dồn cho video demo và pitch deck.
+
+Việt gộp `spike_promql.py` về đúng một nguồn query — trước đó script giữ bản sao của contract ①, nên nó verify bản sao chứ không verify thứ đang chạy thật. Đổi xong thì **ngay lập tức lộ ra lỗi thứ 5**, cùng họ với lỗi bucket hôm 29/07: không có request nào trong cửa sổ `[1m]` thì `rate` = 0, mọi phép chia thành 0/0 = `NaN`. Query vẫn "chạy", vẫn trả ra số, không exception nào.
+
+`NaN` nguy hiểm hơn kết quả rỗng vì `NaN > x` **và** `NaN < x` đều là `False` — mọi so sánh ngưỡng rơi tọt qua, Agent bỏ lọt sự cố mà không có dấu hiệu gì. Riêng mức **P4 không kích hoạt được** vì nó dựa trọn vào độ lệch baseline; thêm nữa Pydantic serialize `NaN` thành `null` nên bằng chứng số biến mất khỏi war-room view của Long. Câu baseline nặng nhất: chỉ cần **một** phút im lặng trong 30 phút là cả cửa sổ trả `NaN`, tức gần như luôn luôn trong lúc phát triển.
+
+Sửa bằng cách gắn bộ lọc `and on(service) (_HAS_TRAFFIC)` vào mọi câu có phép chia, để câu trả **rỗng** thay vì `NaN` — nhờ vậy `PrometheusClient.query()` chỉ phải xử lý một trạng thái "không có dữ liệu" thay vì hai. Kiểm chứng trên Prometheus thật: lúc rảnh cả 4 câu trả rỗng đúng thiết kế, dưới tải 150 request đồng thời thì 6/6 câu trả số (p95 1.95s, lỗi 2.1%, pool 1.00, baseline 1.46s, avg 1.53s).
+
+Bài học lặp lại lần thứ hai trong hai ngày: **hai bản sao của cùng một thứ thì bản được kiểm tra không phải bản đang chạy.** Lỗi bucket hôm qua lọt lưới cũng vì spike verify bản sao của chính nó, và may mắn chạy đúng lúc có traffic liên tục nên câu baseline trả ra số.
+
+Một việc phát sinh cho Trung: script load test cần **pha warm-up traffic nhẹ trước khi tăng tải**. Sửa query không tạo ra baseline từ hư không — chạy load test từ trạng thái im lìm thì baseline ≈ p95 hiện tại, đo được độ lệch chỉ 1.3x so với 4.0x khi có traffic nền, và tính năng "so baseline" mất ý nghĩa.
 
 ---
 

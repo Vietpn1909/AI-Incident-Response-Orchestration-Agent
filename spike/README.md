@@ -1,6 +1,8 @@
 # Spike — verify giả định Prometheus/PromQL trước khi viết Agent
 
-**Người làm:** Việt · **Ngày:** 2026-07-29 · **Trạng thái:** Đã chạy, có kết quả
+**Người làm:** Việt · **Ngày:** 2026-07-29, cập nhật 2026-07-30 · **Trạng thái:** Đã chạy, có kết quả
+
+> `spike_promql.py` nay bắn thẳng các hằng trong [`src/services/prometheus.py`](../src/services/prometheus.py) vào Prometheus, không giữ bản sao câu query nữa. Nhờ vậy nó thành **kiểm tra hồi quy cho code đang chạy thật**, và chính nó đã bắt được lỗi thứ 5 dưới đây.
 
 Việc tuần này của Việt theo [START-HERE](../docs/START-HERE.md#việt--agent-phát-hiện--chẩn-đoán) là verify giả định kỹ thuật cốt lõi *trước* khi kiến trúc phụ thuộc vào nó. Đây là kết quả.
 
@@ -14,7 +16,7 @@ cd spike && docker compose up -d --build
 python spike/spike_promql.py
 ```
 
-Không có tải thì mọi con số đều ~0 và không chứng minh được gì. Sinh tải trước:
+Chưa có traffic thì script dừng ở bước 2 và thoát với mã 2 — các câu có phép chia trả rỗng, đó là đúng thiết kế chứ không phải hỏng. Sinh tải trước:
 
 ```bash
 python spike/loadgen.py --concurrency 150 --seconds 90
@@ -24,9 +26,9 @@ python spike/loadgen.py --concurrency 150 --seconds 90
 
 ## Kết luận ngắn
 
-**Kiến trúc không phải đổi.** Bốn câu PromQL của [contract ①](../docs/contracts/01-metrics.md) chạy được, trả số dùng được, và phân biệt rõ lúc rảnh với lúc nghẽn. Agent query được từ Python.
+**Kiến trúc không phải đổi.** Các câu PromQL của [contract ①](../docs/contracts/01-metrics.md) chạy được, trả số dùng được, và phân biệt rõ lúc rảnh với lúc nghẽn. Agent query được từ Python.
 
-**Nhưng contract ① có 4 chỗ phải sửa trước khi viết node `detect`** — trong đó một chỗ làm 2 mức severity không bao giờ kích hoạt được.
+**Nhưng contract ① có 5 chỗ phải sửa trước khi viết node `detect`.** Hai trong số đó làm cả ba mức severity P1, P2 và P4 không bao giờ kích hoạt được — và không lỗi nào ném exception, query vẫn trả ra số.
 
 ## Số đo được
 
@@ -40,7 +42,7 @@ python spike/loadgen.py --concurrency 150 --seconds 90
 
 Nút cổ chai là thật, không phải số giả: pool 5 connection × truy vấn 80ms → trần khoảng 62 req/s. Bắn 150 request đồng thời thì đo được đúng 61 req/s và phần dư xếp hàng, latency tăng 20 lần. Đây chính là cơ chế ADR-0003 mô tả, thu nhỏ lại.
 
-## Bốn vấn đề của contract ①
+## Năm vấn đề của contract ①
 
 ### 1. 🔴 Ngưỡng P1 và P2 không bao giờ kích hoạt được
 
@@ -111,6 +113,44 @@ Phép chia `db_pool_connections_in_use / db_pool_size` **vẫn chạy** vì hai 
 
 **Sửa** — bỏ `["service"]` khỏi Gauge, để `prometheus.yml` là nguồn duy nhất của label `service`, nhất quán với các metric `http_*`.
 
+### 5. 🔴 Mọi câu có phép chia trả `NaN` khi service không có request
+
+*(Tìm ra 2026-07-30, sau khi 4 lỗi trên đã được sửa và merge.)*
+
+Không có request nào trong cửa sổ `[1m]` thì `rate` = 0, và phép chia thành 0/0 = `NaN`. Query vẫn "chạy", vẫn trả ra số — không có exception nào.
+
+Bốn câu bị: **p95 latency, tỷ lệ lỗi, avg latency, baseline**. Câu pool không bị vì là gauge chia gauge.
+
+Nguy hiểm hơn kết quả rỗng, vì `NaN > x` **và** `NaN < x` đều là `False`:
+
+- Mọi so sánh ngưỡng rơi tọt qua → Agent bỏ lọt sự cố mà không có dấu hiệu gì
+- Mức **P4 hoàn toàn không kích hoạt được**, nó dựa trọn vào độ lệch baseline
+- `MetricEvidence.deviation_ratio` thành `NaN`
+- Pydantic serialize `NaN` thành `null` → bằng chứng số biến mất khỏi war-room view của Long
+
+Câu baseline nặng nhất: chỉ cần **một** phút im lặng trong 30 phút là cả cửa sổ trả `NaN`, tức gần như luôn luôn trong lúc phát triển.
+
+**Sửa** — gắn bộ lọc traffic vào mọi câu có phép chia, để câu trả **rỗng** thay vì `NaN`. Nhờ đó `PrometheusClient.query()` chỉ phải xử lý một trạng thái "không có dữ liệu" thay vì hai:
+
+```promql
+_HAS_TRAFFIC = sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) > 0
+
+(<câu gốc>) and on(service) (_HAS_TRAFFIC)
+```
+
+Kiểm chứng sau khi sửa — lúc rảnh cả bốn câu trả rỗng (đúng thiết kế), dưới tải cả sáu trả số:
+
+```
+P95_LATENCY ............ 1.9496 s
+ERROR_RATE ............. 0.0208
+POOL_SATURATION ........ 1.0000
+POOL_SATURATION_PEAK_5M  1.0000
+P95_BASELINE_30M ....... 1.4618 s
+AVG_LATENCY ............ 1.5250 s
+```
+
+**Ràng buộc kịch bản kèm theo — việc của Trung:** sửa query không tạo ra baseline từ hư không. Load test cần **pha warm-up** trước khi tăng tải. Chạy từ trạng thái im lìm thì baseline ≈ p95 hiện tại: đo được độ lệch chỉ **1.3x**, so với **4.0x** khi có traffic nền. `spike_promql.py` cảnh báo khi độ lệch dưới 1.5x.
+
 ## Ba điểm nhỏ khác
 
 - **`http_requests_inprogress` phải bật tay.** `should_instrument_requests_inprogress` mặc định là `False`; contract ① có liệt kê metric này nhưng không nói phải bật. Không bật thì query trả rỗng, im lặng.
@@ -119,9 +159,12 @@ Phép chia `db_pool_connections_in_use / db_pool_size` **vẫn chạy** vì hai 
 
 ## Việc kế tiếp
 
-1. Mở PR sửa [contract ①](../docs/contracts/01-metrics.md) với 4 điểm trên — cần Trung review vì điểm 1 và 4 đổi code service của Trung
-2. Chuyển `PrometheusQuerier` trong [spike_promql.py](spike_promql.py) thành `src/services/prometheus.py`
-3. Viết node `detect` + `classify_severity` dựa trên câu query **đã sửa**
+Bốn vấn đề đầu đã sửa và merge (`3b5b6eb`). Vấn đề 5 sửa ngày 2026-07-30. Còn lại:
+
+1. Báo Trung thêm **pha warm-up** vào script load test — không có nó thì "so baseline" vô nghĩa, và đây là việc duy nhất trong danh sách cần người khác làm
+2. Cài `PrometheusClient.query()` trong `src/services/prometheus.py` — chuyển thẳng từ `PrometheusQuerier` ở [spike_promql.py](spike_promql.py)
+3. Cài 3 hàm trong `src/services/rules.py`, và **xử lý danh sách rỗng tường minh** — sau khi sửa vấn đề 5, "không có dữ liệu" luôn về dưới dạng rỗng, không bao giờ là `NaN`
+4. Viết node `detect` + `classify_severity`
 
 ## File trong thư mục này
 
@@ -131,4 +174,4 @@ Phép chia `db_pool_connections_in_use / db_pool_size` **vẫn chạy** vì hai 
 | [prometheus.yml](prometheus.yml) | Scrape config — chép được sang stack thật của Trung |
 | [dummy_service/app.py](dummy_service/app.py) | Service giả, pool 5 mô phỏng bằng `Semaphore`, expose đủ metric contract ① |
 | [loadgen.py](loadgen.py) | Sinh tải cho spike (không thay k6/Locust của Trung) |
-| [spike_promql.py](spike_promql.py) | Script verify — chứa `PrometheusQuerier`, hạt giống của service thật |
+| [spike_promql.py](spike_promql.py) | Kiểm tra hồi quy: bắn các hằng trong `src/services/prometheus.py` vào Prometheus. Rỗng và `NaN` đều tính là FAIL. Exit 2 nếu chưa có traffic để đo |
