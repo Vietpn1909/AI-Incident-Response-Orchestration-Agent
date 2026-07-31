@@ -28,6 +28,11 @@ from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-thanh-toan"
 
+# Tài khoản cố định chỉ dùng cho UC-3 trong môi trường demo local. Đây không
+# phải cơ chế xác thực dùng cho production.
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "demo"
+
 # ⚠️ Nút cổ chai cố ý. Đây là CHỦ ĐÍCH, không phải nhầm — xem ADR-0003.
 # Tải cao → 5 chỗ này cạn → request phải xếp hàng → latency tăng thật.
 POOL_SIZE = 5
@@ -44,6 +49,21 @@ db_pool_in_use = Gauge("db_pool_connections_in_use", "Số connection đang đư
 db_pool_size = Gauge("db_pool_size", "Kích thước pool tối đa")
 
 pool: asyncpg.Pool | None = None
+
+# ⚠️ RÒ RỈ BỘ NHỚ CÓ CHỦ ĐÍCH CHO UC-2 — KHÔNG DÙNG TRONG PRODUCTION.
+#
+# Mỗi lần gọi POST /pay/batch, một batch kết quả truy vấn mới được giữ lại ở
+# đây. Vì list là biến toàn cục nên dữ liệu không được garbage collector thu
+# hồi giữa các request; RAM tăng dần cho tới khi Docker áp giới hạn 128 MB và
+# OOM-kill container. Container restart thì list trở về rỗng, đúng với vòng đời
+# của một process mới.
+memory_leak_store: list[list[dict[str, object]]] = []
+
+# 5.000 dòng khớp dữ liệu do seed.py tạo. Padding là một cột của KẾT QUẢ TRUY
+# VẤN, giúp mức tăng RAM đủ ổn định để demo không phụ thuộc cách Python cấp phát
+# object trên từng máy.
+MEMORY_LEAK_BATCH_ROWS = 5_000
+MEMORY_PADDING_BYTES = 2_048
 
 
 @asynccontextmanager
@@ -116,6 +136,45 @@ async def pay(request: PayRequest) -> dict:
         db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
 
 
+@app.post("/pay/batch")
+async def pay_batch() -> dict:
+    """Giữ kết quả truy vấn trong RAM để chủ động tạo OOM cho UC-2.
+
+    Endpoint này chỉ tồn tại trong demo local. Mỗi request giữ khoảng 10 MB dữ
+    liệu mới; gọi lặp lại sẽ làm container chạm `mem_limit: 128m`, bị OOM-kill
+    và khởi động lại theo restart policy trong docker-compose.demo.yml.
+    """
+    if pool is None:
+        raise HTTPException(503, "Pool chưa khởi tạo")
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, order_id, amount, created_at,
+                   repeat('x', $1) AS memory_padding
+            FROM payments
+            ORDER BY id
+            LIMIT $2
+            """,
+            MEMORY_PADDING_BYTES,
+            MEMORY_LEAK_BATCH_ROWS,
+        )
+
+    if not rows:
+        raise HTTPException(409, "Chưa có dữ liệu payments — hãy chạy python demo/seed.py trước")
+
+    # Copy từng record thành dict riêng rồi giữ toàn bộ batch trong biến global.
+    # Không clear list: sự tích luỹ này chính là memory leak có chủ đích của UC-2.
+    retained_batch = [dict(row) for row in rows]
+    memory_leak_store.append(retained_batch)
+
+    return {
+        "ok": True,
+        "retained_batches": len(memory_leak_store),
+        "retained_rows": sum(len(batch) for batch in memory_leak_store),
+    }
+
+
 @app.post("/login")
 async def login(request: LoginRequest) -> dict:
     """Xác thực — endpoint cho UC-3 (burst tấn công).
@@ -135,7 +194,10 @@ async def login(request: LoginRequest) -> dict:
         curl -X POST localhost:8001/login -H "Content-Type: application/json" \
           -d '{"username":"demo","password":"sai"}'   → 401
     """
-    raise HTTPException(501, "TODO(Trung): chưa cài đặt — xem docstring")
+    if request.username != DEMO_USERNAME or request.password != DEMO_PASSWORD:
+        raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")
+
+    return {"ok": True, "token": "fake-token"}
 
 
 @app.get("/health")

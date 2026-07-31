@@ -19,8 +19,8 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install backend and demo dependencies
+        run: pip install -r requirements.txt -r demo/requirements.txt
 
       - name: Lint with ruff
         run: ruff check src/ tests/ demo/ ui/

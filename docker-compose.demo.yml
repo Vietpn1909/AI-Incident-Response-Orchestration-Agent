@@ -32,6 +32,11 @@ services:
     build:
       context: ./demo
     command: sh -c "exec uvicorn service_thanh_toan.main:app --host 0.0.0.0 --port 8001"
+    # UC-2: giới hạn thấp có chủ đích để /pay/batch tạo OOM trong thời gian demo.
+    mem_limit: 128m
+    # Nếu thiếu restart policy, OOM chỉ để container ở Exited (137), không tạo
+    # được tín hiệu restart loop mà Agent cần quan sát.
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://demo:demo@postgres:5432/demo
       PORT: "8001"
