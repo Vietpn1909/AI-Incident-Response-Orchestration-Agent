@@ -9,11 +9,21 @@ Dữ liệu đã có sẵn, không cần chờ Agent hay Jira. Xem ui/README.md.
 """
 
 import os
+from datetime import datetime, timedelta, timezone
 
 import requests
 import streamlit as st
 
 API = os.getenv("API_URL", "https://p-035-incident-agent.onrender.com")
+
+VN_TZ = timezone(timedelta(hours=7))  # Việt Nam không có DST, luôn UTC+7
+
+
+def fmt_time_vn(iso: str) -> str:
+    """Định dạng một chuỗi ISO 8601 (UTC) sang giờ Việt Nam, kiểu vi-VN."""
+    dt = datetime.fromisoformat(iso).astimezone(VN_TZ)
+    return dt.strftime("%H:%M:%S %d/%m/%Y")
+
 
 # Ánh xạ trạng thái sang cách hiển thị. `health` là một trong 4 giá trị này —
 # contract ④, sẽ không đổi.
@@ -43,24 +53,34 @@ except requests.RequestException as error:
     st.caption("Render free tier ngủ sau 15 phút — lần gọi đầu có thể mất ~50 giây. Thử tải lại trang.")
     st.stop()
 
-# TODO(Long):
-#   1. Hiện trạng thái TỔNG ở trên cùng (một dòng lớn, dễ thấy):
-#      - nếu có service nào `down`   → 🔴 "Một số dịch vụ đang gặp sự cố"
-#      - nếu có service nào `degraded` → 🟡 "Một số dịch vụ suy giảm"
-#      - còn lại                     → 🟢 "Tất cả dịch vụ hoạt động bình thường"
-#
-#   2. Liệt kê từng service trong data["services"]:
-#      for svc in data["services"]:
-#          icon, label = HEALTH_DISPLAY[svc["health"]]
-#          st.write(f"{icon} **{svc['name']}** — {svc['message']}")
-#
-#   3. Hiện data["updated_at"] ở cuối, dạng "Cập nhật lúc ...".
-#
-#   4. Thêm st.button("Tải lại") gọi load_status.clear() rồi st.rerun().
-#
-# Xong là thế nào: mở được trang, thấy 2 service với màu đúng theo `health`.
+services = data["services"]
+has_down = any(svc["health"] == "down" for svc in services)
+has_degraded = any(svc["health"] == "degraded" for svc in services)
+has_maintenance = any(svc["health"] == "maintenance" for svc in services)
 
-st.warning("TODO(Long): chưa hiển thị — xem TODO trong file này")
+# Thứ tự ưu tiên khớp StatusPage.overall_health (src/models/incident.py):
+# down > degraded > maintenance > operational.
+if has_down:
+    st.error("🔴 Một số dịch vụ đang gặp sự cố")
+elif has_degraded:
+    st.warning("🟡 Một số dịch vụ suy giảm")
+elif has_maintenance:
+    st.info("🔧 Một số dịch vụ đang bảo trì")
+else:
+    st.success("🟢 Tất cả dịch vụ hoạt động bình thường")
+
+for svc in services:
+    icon, label = HEALTH_DISPLAY[svc["health"]]
+    with st.container(border=True):
+        st.write(f"{icon} **{svc['name']}** — {svc['message']}")
+        if svc["active_incident"]:
+            st.caption(f"Incident: {svc['active_incident']} · {label}")
+
+st.caption(f"Cập nhật lúc {fmt_time_vn(data['updated_at'])}")
+
+if st.button("🔄 Tải lại"):
+    load_status.clear()
+    st.rerun()
 
 with st.expander("Dữ liệu API trả về (để tham khảo khi code)"):
     st.json(data)
