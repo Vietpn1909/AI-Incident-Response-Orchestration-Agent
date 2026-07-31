@@ -23,10 +23,15 @@ Vì sao gấp: `.git/hooks/` **không nằm trong repo**, nên mỗi người ph
 ### 2. Chạy được server
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
+# macOS / Linux
+python3.11 -m venv .venv && source .venv/bin/activate
+
+# Windows — Long, Trung, Việt dùng mấy dòng này
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+
 pip install -r requirements.txt
-cp .env.example .env                # rồi điền OPENAI_API_KEY
+cp .env.example .env                # Windows PowerShell: copy .env.example .env
 uvicorn src.main:app --reload --port 8000
 ```
 

@@ -96,8 +96,11 @@ ls -l .git/hooks/pre-push        # verify: file phải tồn tại và executabl
 cp .env.example .env             # rồi điền OPENAI_API_KEY
 
 # 4. Cài dependencies
-python3.11 -m venv .venv
-source .venv/bin/activate
+# macOS / Linux
+python3.11 -m venv .venv && source .venv/bin/activate
+# Windows (PowerShell hoặc Git Bash)
+#   py -3.11 -m venv .venv
+#   .venv\Scripts\activate
 pip install -r requirements.txt
 
 # 5. Chạy server

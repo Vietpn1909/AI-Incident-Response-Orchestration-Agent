@@ -18,6 +18,8 @@ Vì vậy thư mục này có `requirements.txt` và `Dockerfile` riêng.
 
 ## Chạy
 
+> **Windows:** cần **Docker Desktop đang chạy** trước khi gõ `docker compose`. Các lệnh `python ...` bên dưới giả định đã activate venv (`.venv\Scripts\activate`) và đã `pip install -r demo/requirements.txt`.
+
 ```bash
 docker compose -f ../docker-compose.demo.yml up --build     # từ trong demo/
 # hoặc từ thư mục gốc:

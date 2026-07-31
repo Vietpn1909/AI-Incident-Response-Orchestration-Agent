@@ -80,8 +80,10 @@ Quy ước ở [`src/services/jira/mapping.py`](../src/services/jira/mapping.py)
 
 ```bash
 curl -sS -u "<email-agent>:<token>" \
-  "https://<site>.atlassian.net/rest/api/3/myself" | python3 -m json.tool | grep accountId
+  "https://<site>.atlassian.net/rest/api/3/myself" | python -m json.tool | grep accountId
 ```
+
+> Trên Windows chạy trong **Git Bash** (PowerShell không có `grep`). Hoặc bỏ phần `| grep accountId` rồi tự tìm bằng mắt.
 
 - [ ] Điền vào `.env` local **và** Render → service → Environment:
 
