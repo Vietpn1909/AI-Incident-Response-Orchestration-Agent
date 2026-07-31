@@ -28,21 +28,23 @@ python spike/loadgen.py --concurrency 150 --seconds 90
 
 **Kiến trúc không phải đổi.** Các câu PromQL của [contract ①](../docs/contracts/01-metrics.md) chạy được, trả số dùng được, và phân biệt rõ lúc rảnh với lúc nghẽn. Agent query được từ Python.
 
-**Nhưng contract ① có 5 chỗ phải sửa trước khi viết node `detect`.** Hai trong số đó làm cả ba mức severity P1, P2 và P4 không bao giờ kích hoạt được — và không lỗi nào ném exception, query vẫn trả ra số.
+**Nhưng contract ① có 6 chỗ phải sửa trước khi viết node `detect`.** Hai trong số đó làm cả ba mức severity P1, P2 và P4 không bao giờ kích hoạt được — và không lỗi nào ném exception, query vẫn trả ra số.
 
 ## Số đo được
 
-| Đại lượng | Lúc rảnh | Lúc nghẽn (150 request đồng thời) |
+| Đại lượng | Traffic nền (5 đồng thời) | Lúc nghẽn (150 đồng thời) |
 |---|---|---|
-| p95 latency | 0.095 s | **1.95 s** |
-| avg latency | 0.083 s | 1.56 s |
-| Tỷ lệ lỗi 5xx | *(rỗng)* | 2.1 % |
-| Mức dùng pool | 0.00 | **1.00** — cạn kiệt |
-| Lệch so baseline 30m | 1.0x | **4.0x** |
+| p95 latency | 0.18 s | **1.94 s** |
+| avg latency | 0.17 s | 1.42 s |
+| Tỷ lệ lỗi 5xx | 2.2 % | 1.7 % |
+| Mức dùng pool | 1.00 | **1.00** — cạn kiệt |
+| Lệch so baseline 30m | 1.0x | **10.8x** |
+
+Khi service **không nhận request nào**, bốn câu có phép chia trả **rỗng** — đúng thiết kế, xem vấn đề 5.
 
 Nút cổ chai là thật, không phải số giả: pool 5 connection × truy vấn 80ms → trần khoảng 62 req/s. Bắn 150 request đồng thời thì đo được đúng 61 req/s và phần dư xếp hàng, latency tăng 20 lần. Đây chính là cơ chế ADR-0003 mô tả, thu nhỏ lại.
 
-## Năm vấn đề của contract ①
+## Sáu vấn đề của contract ①
 
 ### 1. 🔴 Ngưỡng P1 và P2 không bao giờ kích hoạt được
 
@@ -145,11 +147,33 @@ P95_LATENCY ............ 1.9496 s
 ERROR_RATE ............. 0.0208
 POOL_SATURATION ........ 1.0000
 POOL_SATURATION_PEAK_5M  1.0000
-P95_BASELINE_30M ....... 1.4618 s
+P95_BASELINE_30M ....... 1.4618 s   <- vẫn còn sai, xem vấn đề 6
 AVG_LATENCY ............ 1.5250 s
 ```
 
-**Ràng buộc kịch bản kèm theo — việc của Trung:** sửa query không tạo ra baseline từ hư không. Load test cần **pha warm-up** trước khi tăng tải. Chạy từ trạng thái im lìm thì baseline ≈ p95 hiện tại: đo được độ lệch chỉ **1.3x**, so với **4.0x** khi có traffic nền. `spike_promql.py` cảnh báo khi độ lệch dưới 1.5x.
+### 6. 🔴 Baseline dùng `avg_over_time` bị chính sự cố kéo lên
+
+*(Tìm ra 2026-07-30, khi truy tại sao độ lệch chỉ ra 1.3x.)*
+
+Cửa sổ 30 phút của baseline **bao gồm cả khoảng đang xảy ra sự cố**. Lấy trung bình thì sự cố càng kéo dài, baseline càng cao, độ lệch càng teo — bằng chứng yếu dần đúng lúc sự cố nghiêm trọng nhất.
+
+Đo thật: 4 phút traffic nền rồi tăng tải, p95 giữ nguyên 1.95s suốt.
+
+| Thời điểm | p95 | `avg_over_time` | lệch | `quantile 0.1` | lệch |
+|---|---|---|---|---|---|
+| Bình thường | 0.181 s | 0.181 s | 1.0x | 0.181 s | 1.0x |
+| +60s | 1.950 s | 0.531 s | 3.7x | 0.179 s | **10.9x** |
+| +170s | 1.950 s | 0.936 s | **2.1x** | 0.180 s | **10.9x** |
+
+Trung bình tụt 3.7x → 2.1x chỉ sau 2 phút. Phân vị đứng yên tuyệt đối.
+
+**Sửa** — `quantile_over_time(0.1, ...)` thay `avg_over_time(...)`.
+
+Chọn `0.1` thay vì trung vị `0.5`: trung vị bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), `0.1` chịu được tới ~27 phút. Kịch bản demo có bước **chờ người duyệt trên Jira**, thời gian chờ không đoán trước được nên lấy biên rộng hơn. Lúc bình thường hai cách chênh nhau 1.7%, không đáng kể.
+
+*Giới hạn đã biết:* phép đo trên chỉ chạy tới ~3 phút sự cố. Con số "~27 phút" là suy ra từ độ rộng cửa sổ, chưa đo.
+
+**Ràng buộc kịch bản kèm theo — việc của Trung:** đổi sang phân vị vẫn không tạo baseline từ hư không. `PROFILE_DEMO` trong `demo/loadtest.py` đã có bậc đầu `(5, 20)` — chỉ cần **kéo dài bậc đó lên vài phút** để cửa sổ 30 phút có đủ dữ liệu bình thường. `spike_promql.py` cảnh báo khi độ lệch dưới 1.5x.
 
 ## Ba điểm nhỏ khác
 

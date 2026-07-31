@@ -96,17 +96,36 @@ POOL_SATURATION = "db_pool_connections_in_use / db_pool_size"
 #: trả 0 dù ngay trước đó đã cạn kiệt — bằng chứng sẽ nói ngược sự thật.
 POOL_SATURATION_PEAK_5M = f"max_over_time(({POOL_SATURATION})[5m:5s])"
 
-#: p95 trung bình 30 phút trước — dùng làm baseline để so lệch.
+#: Phân vị dùng làm mức nền. Xem giải thích ở `P95_BASELINE_30M`.
+_BASELINE_QUANTILE = 0.1
+
+#: Mức p95 "thường ngày" trong 30 phút qua — dùng làm baseline để so lệch.
 #:
-#: Kế thừa bộ lọc chống NaN từ `P95_LATENCY`, nên chỉ lấy trung bình trên những
-#: phút thực sự có request. Không có bộ lọc đó thì chỉ cần MỘT phút im lặng
-#: trong 30 phút là cả câu trả NaN — mà mức P4 ("lệch baseline nhưng chưa vượt
-#: ngưỡng cứng") hoàn toàn dựa vào con số này.
+#: ⚠️ KHÔNG dùng `avg_over_time` ở đây, dù tên gọi "baseline" nghe như trung
+#: bình. Cửa sổ 30 phút **bao gồm cả khoảng thời gian đang xảy ra sự cố**, nên
+#: trung bình bị chính sự cố kéo lên: sự cố càng kéo dài, baseline càng cao và
+#: độ lệch càng teo — tức bằng chứng yếu dần đúng lúc sự cố nghiêm trọng nhất.
 #:
-#: Đi kèm là một ràng buộc kịch bản, không phải lỗi code: baseline chỉ có nghĩa
-#: khi TRƯỚC lúc tăng tải đã có traffic nền. Chạy load test từ trạng thái im
-#: lìm thì baseline ≈ p95 hiện tại và độ lệch ra 1.0x.
-P95_BASELINE_30M = f"avg_over_time(({P95_LATENCY})[30m:1m])"
+#: Đo được trên Prometheus thật (2026-07-30), p95 giữ nguyên 1.95s suốt:
+#:
+#:     thời điểm      avg_over_time   lệch     quantile 0.1   lệch
+#:     bình thường    0.181 s         1.0x     0.181 s        1.0x
+#:     +60s           0.531 s         3.7x     0.179 s       10.9x
+#:     +170s          0.936 s         2.1x     0.180 s       10.9x
+#:
+#: Phân vị thấp bỏ qua phần đuôi do sự cố tạo ra, nên nó giữ đúng nghĩa "mức
+#: thường ngày". Chọn 0.1 thay vì trung vị 0.5 vì cửa sổ là 30 phút: trung vị
+#: bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), còn 0.1 chịu được tới
+#: ~27 phút. Kịch bản demo có bước chờ người duyệt trên Jira, thời gian chờ đó
+#: không đoán trước được, nên chọn biên an toàn rộng hơn.
+#:
+#: Kế thừa bộ lọc chống NaN từ `P95_LATENCY`, nên chỉ tính trên những phút thực
+#: sự có request.
+#:
+#: Vẫn còn một ràng buộc kịch bản, không phải lỗi code: baseline cần có traffic
+#: nền TRƯỚC lúc tăng tải. Chạy load test từ trạng thái im lìm thì không có
+#: "mức thường ngày" nào để so, dù dùng phân vị hay trung bình.
+P95_BASELINE_30M = f"quantile_over_time({_BASELINE_QUANTILE}, ({P95_LATENCY})[30m:1m])"
 
 #: Số request xác thực thất bại mỗi giây — tín hiệu của UC-3 (burst tấn công).
 #:

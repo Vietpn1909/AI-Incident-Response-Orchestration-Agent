@@ -121,9 +121,10 @@ db_pool_connections_in_use / db_pool_size
 # đó đã cạn kiệt, bằng chứng sẽ nói ngược sự thật.
 max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])
 
-# baseline: p95 trung bình 30 phút trước.
-# Kế thừa bộ lọc từ câu p95 ở trên, nên chỉ lấy trung bình những phút có request.
-avg_over_time((<câu p95 ở trên>)[30m:1m])
+# baseline: mức p95 "thường ngày" trong 30 phút qua.
+# KHÔNG dùng avg_over_time — cửa sổ 30 phút bao gồm cả lúc đang có sự cố, nên
+# trung bình bị chính sự cố kéo lên. Xem mục cảnh báo bên dưới.
+quantile_over_time(0.1, (<câu p95 ở trên>)[30m:1m])
 ```
 
 *Ghi chú:* instrumentator gom status thành `2xx`/`5xx` chứ không giữ `500`. Regex `5..` vẫn khớp `5xx` nên đúng — **đừng "sửa" thành `status="500"`**, sẽ không khớp gì cả.
@@ -144,7 +145,23 @@ Vế `and on(service) (_HAS_TRAFFIC)` bỏ hẳn series khi service không có r
 
 Phát hiện khi Việt bắn các hằng đang được ship trong `src/services/prometheus.py` vào Prometheus thật, lúc service đứng im: câu baseline trả `NaN` với toàn bộ điểm mẫu trong cửa sổ 30 phút đều `NaN`; sau khi sửa baseline thì lộ tiếp ba câu instant cũng `NaN` theo cùng cơ chế. Sau khi gắn bộ lọc: lúc rảnh cả bốn trả rỗng, dưới tải cả sáu trả số đúng (p95 1.95s, lỗi 2.1%, pool 1.00, baseline 1.46s, avg 1.53s).
 
-**Ràng buộc kịch bản kèm theo — việc của Trung:** sửa query không tạo ra baseline từ hư không. Script load test phải có **pha warm-up traffic nhẹ trước khi tăng tải**. Chạy load test từ trạng thái im lìm thì baseline ≈ p95 hiện tại — đo được độ lệch chỉ **1.3x** thay vì 4.0x khi có traffic nền — và tính năng "so baseline" mất ý nghĩa kể cả sau khi sửa `NaN`. `spike/spike_promql.py` sẽ cảnh báo khi độ lệch dưới 1.5x.
+### 🔴 Vì sao baseline dùng phân vị, không dùng trung bình
+
+**Sửa 2026-07-30.** Cửa sổ 30 phút của baseline **bao gồm cả khoảng đang xảy ra sự cố**. Dùng `avg_over_time` thì trung bình bị chính sự cố kéo lên: sự cố càng kéo dài, baseline càng cao và độ lệch càng teo — bằng chứng yếu dần đúng lúc sự cố nghiêm trọng nhất.
+
+Đo trên Prometheus thật, 4 phút traffic nền rồi tăng tải, p95 giữ nguyên 1.95s suốt:
+
+| Thời điểm | p95 | `avg_over_time` | lệch | `quantile 0.1` | lệch |
+|---|---|---|---|---|---|
+| Bình thường | 0.181 s | 0.181 s | 1.0x | 0.181 s | 1.0x |
+| +60s | 1.950 s | 0.531 s | 3.7x | 0.179 s | **10.9x** |
+| +170s | 1.950 s | 0.936 s | **2.1x** | 0.180 s | **10.9x** |
+
+Trung bình tụt từ 3.7x xuống 2.1x chỉ sau 2 phút. Phân vị đứng yên.
+
+Chọn `0.1` thay vì trung vị `0.5`: trung vị bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), còn `0.1` chịu được tới ~27 phút. Kịch bản demo có bước **chờ người duyệt trên Jira** — thời gian chờ đó không đoán trước được, nên lấy biên an toàn rộng hơn.
+
+**Ràng buộc kịch bản kèm theo — việc của Trung:** đổi sang phân vị vẫn không tạo ra baseline từ hư không. Load test cần **traffic nền trước khi tăng tải** — `PROFILE_DEMO` trong [`demo/loadtest.py`](../../demo/loadtest.py) đã có bậc đầu `(5, 20)`, chỉ cần **kéo dài bậc đó lên vài phút** để cửa sổ 30 phút có đủ dữ liệu "bình thường". Chạy từ trạng thái im lìm thì không có mức thường ngày nào để so, dù dùng phân vị hay trung bình. `spike/spike_promql.py` cảnh báo khi độ lệch dưới 1.5x.
 
 ## Ngưỡng và severity
 
