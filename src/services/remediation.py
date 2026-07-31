@@ -20,7 +20,19 @@ logger = logging.getLogger(__name__)
 
 #: Các hành động Agent được phép đề xuất. Hành động ngoài danh sách này bị từ
 #: chối ngay — tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù.
-SUPPORTED_ACTIONS = frozenset({"rollback", "restart", "scale_up", "increase_pool"})
+SUPPORTED_ACTIONS = frozenset(
+    {
+        "rollback",
+        "restart",
+        "scale_up",
+        "increase_pool",
+        # UC-3: chặn burst xác thực thất bại. Đây là hành động ảnh hưởng người
+        # dùng thật (chặn truy cập), nên vẫn phải qua cổng HITL như mọi hành
+        # động khác — một hành động bảo mật cũng không được để AI tự quyết.
+        "rate_limit",
+        "block_ip",
+    }
+)
 
 
 class UnsupportedActionError(ValueError):
@@ -107,4 +119,8 @@ def _describe(action: str, target: str, params: dict[str, Any]) -> str:
         return f"Tăng số instance của {target} lên {params.get('replicas', '?')}."
     if action == "increase_pool":
         return f"Tăng connection pool của {target} lên {params.get('pool_size', '?')}."
+    if action == "rate_limit":
+        return f"Giới hạn tốc độ {target} ở {params.get('limit', '?')} request/phút."
+    if action == "block_ip":
+        return f"Chặn nguồn {params.get('ip', '?')} truy cập {target}."
     return f"{action} trên {target}."

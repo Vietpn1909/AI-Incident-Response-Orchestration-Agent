@@ -85,6 +85,11 @@ class PayRequest(BaseModel):
     amount: int = Field(..., gt=0)
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 @app.post("/pay")
 async def pay(request: PayRequest) -> dict:
     """Ghi một payment vào Postgres."""
@@ -109,6 +114,28 @@ async def pay(request: PayRequest) -> dict:
     finally:
         # finally NGOÀI async with → connection đã trả về pool mới đo
         db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
+
+
+@app.post("/login")
+async def login(request: LoginRequest) -> dict:
+    """Xác thực — endpoint cho UC-3 (burst tấn công).
+
+    TODO(Trung):
+      1. So `username`/`password` với một cặp hardcode (vd. demo/demo)
+      2. Sai → `raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")`
+      3. Đúng → trả {"ok": True, "token": "fake-token"}
+
+    Cố ý để endpoint RIÊNG, không gắn xác thực vào /pay — như vậy UC-3 không
+    ảnh hưởng UC-1 và loadtest.py không phải sửa gì.
+
+    Agent phát hiện UC-3 qua prometheus.AUTH_FAILURE_RATE, đếm request 4xx
+    trên chính handler này. Xem docs/use-cases.md UC-3.
+
+    Xong là thế nào:
+        curl -X POST localhost:8001/login -H "Content-Type: application/json" \
+          -d '{"username":"demo","password":"sai"}'   → 401
+    """
+    raise HTTPException(501, "TODO(Trung): chưa cài đặt — xem docstring")
 
 
 @app.get("/health")

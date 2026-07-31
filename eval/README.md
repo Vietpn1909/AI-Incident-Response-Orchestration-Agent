@@ -56,4 +56,15 @@ Nói thẳng giới hạn đáng tin hơn là để người chấm tự phát h
 
 ## Use case đo trên
 
-Xem [docs/use-cases.md](../docs/use-cases.md) — chốt dưới 3 UC theo góp ý của mentor.
+Đã chốt **3 UC** — xem [docs/use-cases.md](../docs/use-cases.md):
+
+| UC | Ground truth để đối chiếu | Severity đúng |
+|---|---|---|
+| **UC-1** Cạn pool | Pool giới hạn 5 bị chiếm hết + truy vấn thiếu index. Nói "service chậm" **không tính** — đó là triệu chứng | P2 |
+| **UC-1a** Lan truyền | `service-dat-hang` suy giảm **do phụ thuộc**, không độc lập | P1 (≥2 service) |
+| **UC-2** OOM restart | Container bị OOM-kill vì vượt limit 128MB | P1 |
+| **UC-3** Burst xác thực | Vấn đề **bảo mật**, không phải quá tải. Kết luận "quá tải" là **SAI** | P1 hoặc P2 |
+
+**Số lần chạy:** 10 lần UC-1 · 8 lần UC-2 và UC-3 = **26 lần**. UC-1 nhiều hơn vì nó xuất hiện trong video demo. Ghi rõ `n` trong báo cáo — số liệu có `n=8` và nói thẳng đáng tin hơn số liệu không ghi `n`.
+
+UC-3 là phép thử khó nhất: hệ thống **hoàn toàn khoẻ** về mọi chỉ số hiệu năng, nên nếu Agent kết luận "quá tải" thì lộ ra rule engine chỉ khớp mẫu chứ không thực sự chẩn đoán.

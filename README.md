@@ -60,7 +60,7 @@ Ba quyết định định hình toàn bộ dự án (ADR chi tiết trong [docs
 
 Luồng end-to-end: load test → pool cạn → Prometheus ghi nhận → Agent phát hiện vượt ngưỡng & phân loại severity → tạo Jira Issue + comment bối cảnh → đối chiếu deploy history, sinh giả thuyết + runbook → phát hiện lan truyền, link issue → **on-call duyệt** → webhook → Agent thực thi remediation → status page cập nhật → sinh postmortem.
 
-📐 Sơ đồ đầy đủ: [docs/architecture_diagram.md](docs/architecture_diagram.md) (container · agent flow · sequence) · Chi tiết thành phần: [ARCHITECTURE.md](ARCHITECTURE.md) · Interface giữa 4 người: [docs/contracts/](docs/contracts/)
+📐 Sơ đồ đầy đủ: [docs/architecture_diagram.md](docs/architecture_diagram.md) (container · agent flow · sequence) · Chi tiết thành phần: [ARCHITECTURE.md](ARCHITECTURE.md) · Interface giữa 4 người: [docs/contracts/](docs/contracts/) · **3 use case sự cố: [docs/use-cases.md](docs/use-cases.md)**
 
 ### Trong phạm vi MVP vs. tuỳ chọn
 

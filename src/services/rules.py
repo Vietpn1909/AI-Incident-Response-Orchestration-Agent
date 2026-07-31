@@ -27,6 +27,11 @@ ERROR_RATE_THRESHOLD = 0.10
 #: Thiếu quy tắc này thì một spike đơn lẻ lúc load test cũng mở incident.
 SUSTAINED_SECONDS = 30.0
 
+# Ngưỡng cho UC-3 (burst xác thực thất bại). Dùng SỐ TUYỆT ĐỐI request thất bại
+# mỗi giây, không dùng tỷ lệ — xem docs/use-cases.md UC-3 để biết vì sao.
+AUTH_FAILURE_P1 = 50.0  # nghi đang bị tấn công chủ động
+AUTH_FAILURE_P2 = 10.0
+
 
 def classify_severity(
     p95: float,
@@ -79,6 +84,27 @@ def detect(
     raise NotImplementedError("TODO(Việt): xem docstring")
 
 
+def classify_auth_burst(failures_per_second: float, breached_for_seconds: float) -> Severity | None:
+    """Phân loại UC-3 — burst xác thực thất bại. Trả `None` nếu bình thường.
+
+    Nhánh RIÊNG, không dùng `classify_severity()`, vì UC-3 có hình thái khác
+    hẳn: hệ thống hoàn toàn khoẻ (latency bình thường, không lỗi 5xx, pool
+    không cạn), chỉ hình thái truy cập là bất thường.
+
+    TODO(Việt):
+      - `breached_for_seconds < SUSTAINED_SECONDS` → None
+      - `>= AUTH_FAILURE_P1` → P1  (nghi tấn công chủ động)
+      - `>= AUTH_FAILURE_P2` → P2
+      - trên baseline nhưng dưới P2 → P3
+      - còn lại → None
+
+    Bằng chứng kèm theo phải dùng `prometheus.AUTH_FAILURE_RATE`, và giả thuyết
+    phải nêu được đây là **vấn đề bảo mật**, không phải quá tải. Nếu Agent kết
+    luận "service quá tải" thì SAI — xem docs/use-cases.md UC-3.
+    """
+    raise NotImplementedError("TODO(Việt): xem docstring")
+
+
 def is_spreading(signals: list[IncidentSignal], within_seconds: float = 60.0) -> bool:
     """Có dấu hiệu sự cố lan sang service khác không?
 
@@ -93,10 +119,13 @@ def is_spreading(signals: list[IncidentSignal], within_seconds: float = 60.0) ->
 
 
 __all__ = [
+    "AUTH_FAILURE_P1",
+    "AUTH_FAILURE_P2",
     "ERROR_RATE_THRESHOLD",
     "P95_THRESHOLD_SECONDS",
     "SUSTAINED_SECONDS",
     "MetricEvidence",
+    "classify_auth_burst",
     "classify_severity",
     "detect",
     "is_spreading",

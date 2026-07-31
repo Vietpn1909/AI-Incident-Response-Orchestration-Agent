@@ -60,6 +60,17 @@ POOL_SATURATION_PEAK_5M = f"max_over_time(({POOL_SATURATION})[5m:5s])"
 #: p95 trung bình 30 phút trước — dùng làm baseline để so lệch.
 P95_BASELINE_30M = f"avg_over_time(({P95_LATENCY})[30m:1m])"
 
+#: Số request xác thực thất bại mỗi giây — tín hiệu của UC-3 (burst tấn công).
+#:
+#: ⚠️ `ERROR_RATE` KHÔNG bắt được UC-3 vì nó chỉ khớp `status=~"5.."`, còn 401
+#: là 4xx. Đây là tín hiệu riêng, và severity của UC-3 dựa trên **số lượng
+#: tuyệt đối** chứ không phải tỷ lệ — nếu kẻ tấn công là nguồn traffic duy nhất
+#: thì tỷ lệ lỗi là 100% ngay từ request đầu, chưa nói được gì về mức nghiêm
+#: trọng. Xem docs/use-cases.md UC-3.
+AUTH_FAILURE_RATE = """
+sum by (service) (rate(http_requests_total{handler="/login", status=~"4.."}[1m]))
+"""
+
 #: avg latency — dùng để đối chiếu, không dùng làm ngưỡng (p95 nhạy hơn).
 AVG_LATENCY = """
 sum(rate(http_request_duration_seconds_sum{handler!="/metrics"}[1m])) by (service)

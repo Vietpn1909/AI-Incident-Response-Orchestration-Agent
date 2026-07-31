@@ -129,6 +129,8 @@ Bạn cũng sở hữu [`eval/`](../eval/) — deliverable #10, xem [eval/README
 
 [docs/contracts/01-metrics.md](contracts/01-metrics.md) — quy định tên metric bạn phải expose.
 
+[docs/use-cases.md](use-cases.md) — **3 UC**. UC-2 (OOM) và UC-3 (`/login` + `attack.py`) là việc mới của Trung, mỗi cái độ nửa ngày.
+
 ### Việc tuần này (28–31/07)
 
 Viết `service-thanh-toan`:
@@ -171,6 +173,7 @@ Cả hai lệnh phải ra kết quả. Báo Đức khi xong.
 
 ### Đọc
 
+- [docs/use-cases.md](use-cases.md) — **3 UC đã chốt**: sự cố nào, tín hiệu nào, severity đúng, nguyên nhân gốc
 - [docs/contracts/01-metrics.md](contracts/01-metrics.md) — câu PromQL và ngưỡng severity
 - [src/models/incident.py](../src/models/incident.py) — model bạn sinh ra
 - [src/services/jira/client.py](../src/services/jira/client.py) — cách gọi Jira
