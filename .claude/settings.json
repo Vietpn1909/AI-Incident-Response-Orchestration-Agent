@@ -74,7 +74,13 @@
       "Bash(.venv/bin/pip -q install \"httpx>=0.28.0\")",
       "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/test_real_hitl.py)",
       "Bash(git mv *)",
-      "Bash(../.venv/bin/python -c ' *)"
+      "Bash(../.venv/bin/python -c ' *)",
+      "Bash(git worktree *)",
+      "Bash(curl -sf http://localhost:18001/health)",
+      "Bash(break)",
+      "Bash(curl -s http://localhost:18001/health)",
+      "Bash(DATABASE_URL=postgresql://demo:demo@localhost:55432/demo /Users/duc/VIN_AI/P-035/.venv/bin/python -c ' *)",
+      "Bash(awk '{print \"  main thiếu \"$2\" commit so với develop\"}')"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",

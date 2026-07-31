@@ -113,6 +113,44 @@ Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bư�
 
 ---
 
+## 2026-07-30
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trung | Cài đặt `service-thanh-toan` (pool = 5, ghi Postgres, truy vấn thiếu index) + `seed.py` sinh dữ liệu Faker | ✅ Done | `80e70fc` | - |
+| Trung | Cài đặt `service-dat-hang` gọi chéo (timeout → 504), `loadtest.py`, unit test cho demo | ✅ Done | `60ef1e1`, `88a66eb` | - |
+| Trung | Mở PR #4 vào `develop` | ✅ Done | PR #4 | - |
+| Phan Hoàng Long | Cài đặt `ui/status_page.py` — trạng thái tổng theo đúng thứ tự `StatusPage.overall_health`, giờ Việt Nam, nút tải lại | ✅ Done | `642685c` | - |
+| Phan Hoàng Long | Cài đặt `ui/war_room.py` — danh sách + chi tiết incident, bằng chứng kèm PromQL, timeline, postmortem, incident liên quan bấm chuyển được | ✅ Done | `0c9a508` | - |
+| Phan Hoàng Long | Mở PR #6 vào `develop` | ✅ Done | PR #6 | - |
+
+**Tổng kết ngày:** Cả Trung và Long hoàn thành phần việc của mình và mở PR — đội có PR đầu tiên đi qua quy trình review đúng chuẩn. Long làm xong **cả hai** trang UI trong tuần 1, tức đi trước lịch (kế hoạch là tuần 2–3), nên tuần 2 có thời gian dồn cho video demo và pitch deck.
+
+---
+
+## 2026-07-31
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Review PR #6 (Long) → **approve và merge** | ✅ Done | `dc33e2e`, CI pass | - |
+| Trương Công Thái Đức | Review PR #4 (Trung) → **request changes**, 3 điểm | ✅ Done | PR #4 `CHANGES_REQUESTED` | - |
+| Trương Công Thái Đức | Dựng service của Trung từ branch, chạy Postgres thật để **đo gauge pool** → phát hiện báo cạn 100% vĩnh viễn sau 1 request | ✅ Done | đã verify bản sửa: rảnh 0.0 → tải 5.0 → hết tải 0.0 | - |
+| Trương Công Thái Đức | Phát hiện Trung và Việt sửa cùng file `scripts/_pyrun.sh` theo hai hướng ngược nhau | ✅ Done | chọn bản của Việt | - |
+| Trương Công Thái Đức | Đồng bộ mirror sau khi merge PR trên web | ✅ Done | hai repo cùng `dc33e2e` | - |
+| Việt | Mở PR cho bản sửa `_pyrun.sh` | ⏳ Todo | đang chặn Trung | - |
+| Trung | Sửa 3 điểm ở PR #4 | ⏳ Todo | - | - |
+| Phan Hoàng Long | Xác nhận đã cài `pre-push` hook | ⏳ Todo | chưa có dấu vết nào | - |
+
+**Tổng kết ngày:** Ngày review. Hai bài học đáng ghi.
+
+**Thứ nhất — bug nghiêm trọng nhất trong PR của Trung là do đặc tả của tôi sai.** TODO tôi viết trong skeleton ghi `POOL_SIZE - pool.get_idle_size()`, nhưng `POOL_SIZE` là *trần* còn pool khởi động với `min_size=1`, nên phải dùng `pool.get_size()` (số connection đã tạo). Cộng thêm `finally` nằm bên trong `async with` nên đo lúc connection còn bị giữ. Kết quả đo được: sau đúng 1 request lúc hệ thống rảnh, gauge báo `5.0/5.0` và nằm mãi ở đó — tức bằng chứng "pool cạn kiệt" trở thành **luôn đúng**, phá chính ràng buộc "chẩn đoán có bằng chứng". Trung làm theo hướng dẫn hoàn toàn đúng.
+
+**Thứ hai — hai người sửa cùng một file dùng chung theo hai hướng ngược nhau.** Cả Trung và Việt đều vá `scripts/_pyrun.sh` cho vấn đề Python trên Windows. Việt thêm `--version` để loại alias giả của Windows Store, giữ nguyên fallback `python3`/`python`. Trung thay cả chuỗi bằng đường dẫn `.venv` và bỏ hai fallback đó — làm hook chết im lặng trên macOS/Linux, tức mất deliverable #4. Lấy bản của Việt.
+
+Long đi trước tiến độ; việc gấp duy nhất còn của 3 bạn là xác nhận hook của Long.
+
+---
+
 ## [YYYY-MM-DD]
 
 | Member | Task | Status | Output | Time |

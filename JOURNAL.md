@@ -19,8 +19,8 @@
 - [x] Viết README của đội (problem / solution / target user / features / phân vai) — deliverable #2
 - [x] Vẽ architecture diagram thật (3 sơ đồ Mermaid) + `ARCHITECTURE.md` + 3 ADR — deliverable #3
 - [x] Chốt 4 contract giữa 4 người để làm song song được từ tuần 2
-- [ ] Setup môi trường Python 3.11 (venv + dependencies), chạy được server local — **cả 4 người**
-- [ ] Cài `pre-push` hook trên clone của Long, Trung, Việt
+- [x] Setup môi trường Python 3.11 — cả 4 người (bằng chứng: Trung, Long, Việt đều đã push code chạy được)
+- [x] Cài `pre-push` hook — Đức ✅, Việt ✅, Trung ✅ (cả hai đều đã *sửa* `_pyrun.sh`, tức đã chạy hook và gặp lỗi), **Long chưa có dấu vết**
 
 ### Đã hoàn thành
 - Trung khởi tạo repo từ template AI20K (`7b59cf7`); Long tạo branch `docs`, cập nhật worklog và merge PR #2 (`9c1cfd0`); Việt tạo branch `viet` và fix pre-push hook cho Git Bash trên Windows (CRLF → LF)
@@ -49,21 +49,43 @@
 - **Contract là thứ mở khoá làm song song, và phải viết trước logic.** Bốn workstream của đề bài có chuỗi phụ thuộc Trung → Việt → Đức → Long; để tự nhiên thì Long ngồi chờ tới tuần 4 rồi làm gấp trong 1 tuần. Chốt 4 interface trước (kèm `FakeJiraClient` và fixture JSON) thì cả 4 người bắt đầu cùng ngày. Chi phí ~250 dòng, gần như toàn bộ là khai báo type.
 - **Ràng buộc bắt buộc nên được thực thi bằng cấu trúc, không bằng thiện chí.** HITL không nằm ở chỗ "nhớ đừng cho Agent tự duyệt" mà ở chỗ `JiraClient` không có method nào duyệt, và `FakeJiraClient.transition(..., REMEDIATING)` raise `PermissionError`. Viết sai luồng thì CI đỏ ngay, không phải phát hiện lúc demo.
 - **Contract dễ vỡ nhất là contract không báo lỗi.** Nếu Trung đặt tên metric khác với câu PromQL Việt viết, Prometheus trả về kết quả rỗng chứ không phải exception — Agent im lặng không phát hiện gì và không có gì để lần theo. Vì vậy tên metric và label được chốt thành văn bản trước khi ai viết code.
+- **Đặc tả sai thì người làm theo đúng vẫn ra bug — và lỗi thuộc về người viết đặc tả.** TODO tôi viết trong skeleton ghi `POOL_SIZE - pool.get_idle_size()`, Trung làm theo chính xác, kết quả gauge báo pool cạn 100% vĩnh viễn sau một request. Đúng phải là `pool.get_size()` vì pool khởi động với `min_size=1`. Bài học kép: (a) khi viết TODO cho người khác thì phải **chạy thử công thức mình đưa ra**, đừng viết từ suy luận; (b) khi review thì **đo, đừng đọc** — bug này không thể phát hiện bằng cách đọc code, phải dựng Postgres lên và curl.
+- **Hai người sửa cùng một file dùng chung theo hai hướng ngược nhau.** Trung và Việt đều vá `scripts/_pyrun.sh` cho vấn đề Python trên Windows. Việt thêm `--version` để loại alias giả của Windows Store, giữ nguyên fallback cho macOS/Linux. Trung thay cả chuỗi bằng đường dẫn `.venv` và bỏ fallback — làm hook chết im lặng trên máy khác. Không ai sai về ý định, nhưng thiếu một quy tắc: **file dùng chung thì phải nói trong group trước khi sửa**, vì người sửa chỉ thấy máy của mình.
+- **Review là chỗ contract chứng minh giá trị lần thứ hai.** Contract ① giúp 4 người làm song song (giá trị thứ nhất), rồi chính nó cho Việt cơ sở để đo và bắt được 4 lỗi trong đặc tả trước khi ai xây lên (giá trị thứ hai). Cả hai lần đều là lỗi của tôi, và cả hai lần đều được bắt trước khi thành đắt.
 - Dọn dẹp cho "gọn" (xoá branch đã merge, đổi default branch) nghe hợp lý nhưng phải cân với cái giá thật: branch biến mất dưới tay người chưa quen Git là lỗi mất cả buổi, còn đổi default sang `develop` sẽ khiến `main` stale suốt 5 tuần — trái với chương 2 (`main` luôn ổn định, deploy được). Giữ `main` làm default và merge `develop` → `main` cuối mỗi tuần.
 
-### Kế hoạch tuần sau
-- [ ] **Long, Trung, Việt: `bash scripts/setup_hooks.sh`** trên clone của mình — việc gấp nhất, thiếu nó là mất deliverable #4
-- [ ] Mỗi người tạo venv Python 3.11, `pip install -r requirements.txt`, verify Swagger UI tại `/docs`
-- [ ] Chuyển hết về workflow `feature/*` → `develop` → `main`, ngừng push lên branch cá nhân
-- [ ] Deploy sớm lên Render — **không phải để có deliverable #5 mà vì Jira Automation không gọi được `localhost`**, thiếu public URL thì bước duyệt → webhook → remediation không chạy được
-- [ ] Trung: task probe `service-thanh-toan` (pool = 5, `/metrics` + `db_pool_*`) — cuối 30/07 Đức xem kết quả để quyết phần việc tuần 2
-- [ ] Việt: spike Prometheus + PromQL từ Python, verify giả định kỹ thuật cốt lõi trước khi kiến trúc phụ thuộc vào nó
-- [ ] Long: Streamlit status page đọc `GET /api/status`
-- [ ] Đức + Trung: tạo Jira Cloud workspace, cấu hình workflow `Awaiting Approval`, **verify quota automation free plan (~100 lần/tháng)**
+### Kết quả tuần 1
+
+Toàn bộ việc code/spike của cả 4 người **đã xong**. Ba trong bốn deliverable dễ mất điểm nhất đã có: README (#2), Architecture + 3 ADR (#3), Live URL (#5).
+
+| Người | Kết quả |
+|---|---|
+| Đức | Contract ①–④, kiến trúc + 3 ADR, deploy Render, Jira Cloud, `RealJiraClient`, cổng HITL, `POST /webhooks/jira`, scaffolding 3 thư mục |
+| Việt | Spike Prometheus/PromQL — verify được kiến trúc không phải đổi, **và tìm ra 4 lỗi trong contract ①** |
+| Trung | 2 service demo có nút cổ chai thật, `seed.py`, `loadtest.py` (PR #4, đang sửa 3 điểm) |
+| Long | 2 trang UI hoàn chỉnh — **đi trước lịch**, kế hoạch là tuần 2–3 |
+
+Cổng HITL đã verify trên Jira thật, không phải mock: Agent tự chuyển sang `Remediating` → Jira cho chuyển (team-managed không chặn được) → backend đọc changelog, thấy tác giả là Agent và **từ chối thi hành**.
+
+Còn tồn sang tuần 2: `main` thiếu 28 commit so với `develop` (chưa mở PR đóng tuần), PR #4 chờ Trung sửa, Việt chưa mở PR cho `_pyrun.sh`, và chưa xác nhận hook của Long.
+
+### Kế hoạch tuần 2 (02/08 – 08/08)
+
+**Đường găng: Agent.** Ba khối kia đã có, cái nối chúng lại vẫn trống.
+
+- [ ] **Việt — `src/services/prometheus.py`**: chuyển `PrometheusQuerier` từ `spike/spike_promql.py` sang. Gần như copy, làm trước vì mọi thứ sau phụ thuộc nó
+- [ ] **Việt — `src/services/rules.py`**: `detect()`, `classify_severity()`, `is_spreading()`. Rule thuần, không LLM, để đo được độ chính xác
+- [ ] **Việt — 3 node đầu**: `detect` → `classify_severity` → `open_war_room`, chạy với `FakeJiraClient`
+- [ ] **Trung — sửa 3 điểm PR #4** rồi merge, sau đó chạy `loadtest.py` và **ghi lại mức tải làm p95 vượt 2s** vào `demo/README.md`
+- [ ] **Long — video demo + pitch deck** (deliverable #6, #7), dùng sơ đồ sequence 22 bước làm storyboard
+- [ ] **Đức — nối end-to-end**: cấu hình Jira Automation rule gọi webhook, chạy thử trọn luồng duyệt → thi hành
+- [ ] **Đức — `docs/use-cases.md`**: chốt dưới 3 UC theo góp ý mentor (cạn pool · OOM restart · burst xác thực)
+- [ ] Hỏi mentor: `MIE`/`MIP` là viết tắt gì, và tấn công dạng metric-visible có được chấp nhận
+- [ ] Mốc kiểm tra giữa tuần: **Agent mở được Jira issue thật từ tín hiệu Prometheus thật**
 
 ---
 
-## Week 2: [Ngày bắt đầu] - [Ngày kết thúc]
+## Week 2: 2026-08-02 - 2026-08-08
 
 ### Mục tiêu tuần này
 - [ ] [Mục tiêu 1]
