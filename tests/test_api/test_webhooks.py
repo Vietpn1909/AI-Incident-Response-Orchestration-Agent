@@ -19,7 +19,7 @@ from src.models.incident import (
     RemediationProposal,
     Severity,
 )
-from src.services.jira import FakeJiraClient
+from src.services.jira import FakeJiraClient, JiraApiError
 
 SECRET = "test-secret-123"
 AGENT = FakeJiraClient.AGENT_ACCOUNT_ID
@@ -180,3 +180,49 @@ def test_nhan_ca_ba_dang_payload_cua_jira(jira: FakeJiraClient, incident_key: st
 
 def test_payload_khong_co_issue_key_thi_422(incident_key: str):
     assert _post({"foo": "bar"}).status_code == 422
+
+
+# ─────────────────────────────────── lỗi Jira
+
+class _BrokenJira(FakeJiraClient):
+    """FakeJiraClient nhưng ném JiraApiError với mã cho trước."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(verbose=False)
+        self._code = status_code
+
+    def get_transition_author(self, jira_key, to_state):  # noqa: ANN001, ANN201
+        raise JiraApiError(f"GET /issue/{jira_key} → HTTP {self._code}", status_code=self._code)
+
+
+@pytest.mark.parametrize(
+    ("jira_code", "expected_http", "expected_text"),
+    [
+        (404, 404, "Không tìm thấy issue"),
+        (401, 502, "JIRA_API_TOKEN"),
+        (403, 502, "JIRA_API_TOKEN"),
+        (429, 502, "rate limit"),
+        (500, 502, "Jira lỗi"),
+    ],
+)
+def test_loi_jira_khong_thanh_500_trong_rong(
+    monkeypatch: pytest.MonkeyPatch, jira_code: int, expected_http: int, expected_text: str
+):
+    """Mỗi loại lỗi Jira phải ra HTTP riêng kèm gợi ý chỗ cần kiểm.
+
+    Trước khi sửa, mọi lỗi Jira đều thành 500 "Internal Server Error" giống
+    nhau — token sai, issue không tồn tại, Jira down đều một thông báo. Lúc demo
+    thì không biết tắc ở đâu. Phát hiện khi probe bản deploy với issue KAN-99999.
+    """
+    broken = _BrokenJira(jira_code)
+
+    def fake_settings() -> Settings:
+        return Settings(jira_webhook_secret=SECRET, jira_agent_account_id=AGENT)
+
+    monkeypatch.setattr(webhooks, "get_settings", fake_settings)
+    monkeypatch.setattr(webhooks, "build_jira_client", lambda: broken)
+
+    response = _post({"issue": {"key": "KAN-99999"}})
+
+    assert response.status_code == expected_http
+    assert expected_text in response.json()["detail"]

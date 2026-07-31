@@ -28,7 +28,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from src.config import get_settings
 from src.services.hitl import ApprovalError, assert_human_approved
-from src.services.jira import JiraClient, RealJiraClient
+from src.services.jira import JiraApiError, JiraClient, RealJiraClient
 from src.services.remediation import UnsupportedActionError, execute
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,11 @@ async def jira_webhook(
         approved_by = assert_human_approved(
             client, jira_key, agent_account_id=settings.jira_agent_account_id
         )
+    except JiraApiError as exc:
+        # Không để lỗi Jira thành HTTP 500 trống rỗng — lúc demo sẽ không biết
+        # tắc ở token, ở issue không tồn tại, hay ở Jira đang down.
+        logger.error("Jira lỗi khi kiểm phê duyệt %s: %s", jira_key, exc)
+        raise _jira_http_error(jira_key, exc) from exc
     except ApprovalError as exc:
         logger.warning("Từ chối remediation cho %s: %s", jira_key, exc)
         # Cảnh báo ngay trên war room, để trạng thái Remediating không gây hiểu nhầm
@@ -116,7 +121,11 @@ async def jira_webhook(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
 
     # ---- Lớp 3: thi hành ----
-    incident = client.get_incident(jira_key)
+    try:
+        incident = client.get_incident(jira_key)
+    except JiraApiError as exc:
+        logger.error("Jira lỗi khi đọc %s: %s", jira_key, exc)
+        raise _jira_http_error(jira_key, exc) from exc
     proposal = incident.proposal if incident else None
     if proposal is None:
         # RealJiraClient chưa dựng lại được `proposal` từ comment (xem docstring
@@ -150,6 +159,32 @@ async def jira_webhook(
         "succeeded": result.succeeded,
         "simulated": result.simulated,
     }
+
+
+def _jira_http_error(jira_key: str, exc: JiraApiError) -> HTTPException:
+    """Đổi lỗi Jira thành HTTP có nghĩa, kèm gợi ý chỗ cần kiểm.
+
+    Không có hàm này thì mọi lỗi Jira đều thành 500 giống nhau: token sai, issue
+    không tồn tại, Jira rate limit, Jira down — cùng một thông báo trống rỗng.
+    """
+    code = exc.status_code
+    if code == 404:
+        return HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Không tìm thấy issue {jira_key} trên Jira.",
+        )
+    if code in (401, 403):
+        return HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Jira từ chối xác thực — kiểm JIRA_EMAIL và JIRA_API_TOKEN trên Render. "
+            "Token phải là của account Agent.",
+        )
+    if code == 429:
+        return HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Jira rate limit. Thử lại sau ít phút.",
+        )
+    return HTTPException(status.HTTP_502_BAD_GATEWAY, f"Jira lỗi: {exc}")
 
 
 def _try_comment(client: JiraClient, jira_key: str, body: str) -> None:

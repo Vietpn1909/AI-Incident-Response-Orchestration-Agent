@@ -54,7 +54,17 @@ _FALLBACK_SEVERITY = Severity.P4
 
 
 class JiraApiError(RuntimeError):
-    """Jira trả lỗi. Giữ nguyên body để debug được, vì message của Jira khá kín."""
+    """Jira trả lỗi. Giữ nguyên body để debug được, vì message của Jira khá kín.
+
+    `status_code` để chỗ gọi phân biệt được nguyên nhân mà không phải parse chuỗi:
+    404 là issue không tồn tại, 401/403 là token sai hoặc thiếu quyền, 429 là
+    rate limit. Không có nó thì mọi lỗi Jira đều thành HTTP 500 giống nhau và
+    lúc demo không biết tắc ở đâu.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def _adf(text: str) -> dict[str, Any]:
@@ -122,7 +132,10 @@ class RealJiraClient:
     def _call(self, method: str, path: str, json: dict[str, Any] | None = None) -> Any:
         response = self._client.request(method, path, json=json)
         if response.status_code >= 400:
-            raise JiraApiError(f"{method} {path} → HTTP {response.status_code}: {response.text[:400]}")
+            raise JiraApiError(
+                f"{method} {path} → HTTP {response.status_code}: {response.text[:400]}",
+                status_code=response.status_code,
+            )
         if response.status_code == 204 or not response.content:
             return {}
         return response.json()
