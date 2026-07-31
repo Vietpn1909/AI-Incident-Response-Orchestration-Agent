@@ -171,9 +171,19 @@ def main() -> int:
         except ApprovalError:
             ok("backend từ chối, đúng")
 
+        # Đưa issue về lại Awaiting Approval trước khi nhờ người duyệt.
+        #
+        # Bước 4 vừa đẩy nó sang Remediating (với vai Agent). Không reset thì
+        # issue đã nằm sẵn ở trạng thái đích, người duyệt không còn gì để bấm,
+        # và changelog không sinh thêm bản ghi nào với tác giả là người —
+        # bước 5 sẽ luôn fail dù bạn làm đúng.
+        jira.transition(key, IncidentState.AWAITING_APPROVAL)
+
         # ── 5. Người duyệt thật ───────────────────────────────────────────
         step(5, "Chờ BẠN duyệt trên Jira")
+        awaiting = jira_status_for(IncidentState.AWAITING_APPROVAL)
         remediating = jira_status_for(IncidentState.REMEDIATING)
+        print(f"   Issue đã được đưa về '{awaiting}' (= Awaiting Approval).")
         print(f"   Mở {env['JIRA_BASE_URL']}/browse/{key}")
         print("   Đăng nhập bằng account CỦA BẠN (không phải account Agent),")
         print(f"   chuyển issue sang cột  '{remediating}'  (= Remediating).")
@@ -184,8 +194,12 @@ def main() -> int:
         author = jira.get_transition_author(key, IncidentState.REMEDIATING)
         if author and author != agent_id:
             ok(f"changelog ghi người duyệt = {author}")
+        elif author == agent_id:
+            fail("author vẫn là Agent — bạn chưa chuyển trạng thái, hoặc đang")
+            print("      đăng nhập bằng account Agent thay vì account của bạn.")
+            failures += 1
         else:
-            fail(f"author = {author} — vẫn là Agent, hoặc bạn chưa chuyển trạng thái")
+            fail("changelog chưa có bản ghi nào chuyển sang trạng thái này")
             failures += 1
 
         # ── 6. Gọi webhook ────────────────────────────────────────────────

@@ -92,7 +92,12 @@
       "Bash(grep -vE \"^\\\\s*#|^$\" scripts/setup_hooks.sh)",
       "Bash(grep -vE \"^\\\\s*#|^$\")",
       "Bash(.venv/bin/python scripts/verify_e2e.py)",
-      "Bash(.venv/bin/python scripts/verify_e2e.py --local)"
+      "Bash(.venv/bin/python scripts/verify_e2e.py --local)",
+      "Bash(lsof -nP -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(curl -sS --max-time 5 http://localhost:8000/health)",
+      "Bash(curl -sS --max-time 5 -o /dev/null -w \" /docs → HTTP %{http_code}\\\\n\" http://localhost:8000/docs)",
+      "Bash(curl -sS --max-time 10 http://localhost:8000/openapi.json)",
+      "Bash(ps -o lstart=,command= -p 10155)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",
