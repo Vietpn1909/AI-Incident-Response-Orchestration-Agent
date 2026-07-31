@@ -212,7 +212,7 @@ Rồi mở http://localhost:9090 và query p95 — xem [demo/README.md](demo/REA
 ## Liên kết
 
 - 📖 [Technical Guidebook](https://phoenix.note.transformerlabs.ai/technical-book) — cũng có offline trong `docs/guide/`
-- 👨‍🏫 Mentor: Đặng Hải Lộc
+- 👨‍🏫 Mentor: Trần Thanh Trung
 
 ## License
 
