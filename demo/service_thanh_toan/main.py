@@ -91,28 +91,24 @@ async def pay(request: PayRequest) -> dict:
     if pool is None:
         raise HTTPException(503, "Pool chưa khởi tạo")
 
-    async with pool.acquire() as conn:
-        try:
-            # Cập nhật gauge NGAY SAU khi acquire
-            db_pool_in_use.set(POOL_SIZE - pool.get_idle_size())
+    try:
+        async with pool.acquire() as conn:
+            # get_size() = số connection ĐÃ TẠO, không phải trần POOL_SIZE
+            db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
 
-            # INSERT vào bảng payments
             row = await conn.fetchrow(
                 "INSERT INTO payments (order_id, amount) VALUES ($1, $2) RETURNING id",
                 request.order_id,
                 request.amount,
             )
-
-            # Truy vấn chưa tối ưu (không có index trên order_id) để tạo độ trễ khi tải tăng
             await conn.fetchval(
                 "SELECT count(*) FROM payments WHERE order_id = $1",
                 request.order_id,
             )
-
             return {"ok": True, "payment_id": str(row["id"])}
-        finally:
-            # Cập nhật gauge trong finally khi trả connection về pool
-            db_pool_in_use.set(POOL_SIZE - pool.get_idle_size())
+    finally:
+        # finally NGOÀI async with → connection đã trả về pool mới đo
+        db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
 
 
 @app.get("/health")

@@ -1,19 +1,19 @@
-# Deps rieng cua demo/ - KHONG gop vao requirements.txt o goc.
-# demo/ la ung dung doc lap, backend khong can Faker hay driver Postgres async.
+# Deps riêng của demo/ — KHÔNG gộp vào requirements.txt ở gốc.
+# demo/ là ứng dụng độc lập, backend không cần Faker hay driver Postgres async.
 
 fastapi>=0.115.0
 uvicorn[standard]>=0.34.0
 pydantic>=2.10.0
 
-# Tu expose /metrics - bat buoc, la contract 1
+# Tự expose /metrics — bắt buộc, là contract ①
 prometheus-fastapi-instrumentator>=7.0.0
 prometheus-client>=0.21.0
 
-# Postgres async, de gioi han pool duoc chinh xac
+# Postgres async, để giới hạn pool được chính xác
 asyncpg>=0.30.0
 
-# service-dat-hang goi cheo sang service-thanh-toan
+# service-dat-hang gọi chéo sang service-thanh-toan
 httpx>=0.28.0
 
-# Sinh du lieu mau
+# Sinh dữ liệu mẫu
 faker>=33.0.0
