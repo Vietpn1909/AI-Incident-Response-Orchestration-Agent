@@ -73,6 +73,7 @@ Luồng end-to-end: load test → pool cạn → Prometheus ghi nhận → Agent
 | Layer | Technology |
 |-------|-----------|
 | AI Agent | LangGraph + LangChain |
+| LLM | Qwen (Alibaba Cloud Model Studio) qua endpoint tương thích OpenAI |
 | Backend | FastAPI + Python 3.11 |
 | Observability | Prometheus + `prometheus-fastapi-instrumentator` |
 | Incident lifecycle | Jira Cloud REST API + Workflow + Automation |

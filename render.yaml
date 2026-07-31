@@ -36,7 +36,18 @@ services:
       - key: CORS_ORIGINS
         value: http://localhost:8501
 
+      # LLM — dùng langchain-openai cho provider tương thích OpenAI.
+      # Đội dùng Alibaba Cloud Model Studio vì có quota miễn phí.
+      - key: LLM_BASE_URL
+        value: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      - key: MODEL_NAME
+        value: qwen-plus
+      # Nhiệt độ thấp để chẩn đoán ổn định, đo được độ chính xác trong eval/.
+      - key: LLM_TEMPERATURE
+        value: "0.2"
+
       # Điền tay ở Dashboard → Environment (sync:false = không lưu vào repo).
+      # Với Alibaba thì đây là API key của DashScope, không phải của OpenAI.
       - key: OPENAI_API_KEY
         sync: false
 

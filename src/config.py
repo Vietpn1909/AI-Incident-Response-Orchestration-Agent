@@ -22,9 +22,26 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # LLM
+    #
+    # Dùng thư viện `langchain-openai` cho mọi provider có endpoint tương thích
+    # OpenAI — không phải nhất thiết là OpenAI. Đội đang dùng Alibaba Cloud
+    # Model Studio (DashScope) vì có quota miễn phí.
+    #
+    # Đổi provider = đổi 3 biến trong .env, KHÔNG sửa code:
+    #   Alibaba (quốc tế): LLM_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    #                      MODEL_NAME=qwen-plus
+    #   Alibaba (TQ):      LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+    #   OpenAI:            để LLM_BASE_URL trống, MODEL_NAME=gpt-4o-mini
     openai_api_key: str = ""
-    model_name: str = "gpt-4o-mini"
-    llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+
+    #: Trống = dùng endpoint mặc định của OpenAI.
+    llm_base_url: str = ""
+
+    model_name: str = "qwen-plus"
+
+    #: Chẩn đoán cần ổn định để đo được độ chính xác trong `eval/`. Nhiệt độ cao
+    #: làm cùng một bằng chứng ra kết luận khác nhau mỗi lần chạy, không đo được.
+    llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
     # Database
     database_url: str = "sqlite:///./data/app.db"
