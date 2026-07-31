@@ -49,11 +49,23 @@ services:
       - key: LANGCHAIN_API_KEY
         sync: false
 
-      # Jira — điền khi workspace đã tạo (tuần 1–2).
+      # Jira — workspace đã tạo. Giá trị không bí mật thì khai luôn ở đây để
+      # không phải điền tay và không ai quên.
       - key: JIRA_BASE_URL
-        sync: false
+        value: https://jibinarybro.atlassian.net
+      - key: JIRA_PROJECT_KEY
+        value: KAN
       - key: JIRA_EMAIL
-        sync: false
+        value: thaiduc0201@gmail.com
+
+      # accountId của account Agent. Cổng HITL so giá trị này với người đã
+      # chuyển issue sang Remediating — trùng nhau nghĩa là Agent tự duyệt và
+      # hành động bị từ chối. Thiếu biến này thì assert_human_approved() raise
+      # ValueError chứ không cho qua, nên bắt buộc phải có.
+      - key: JIRA_AGENT_ACCOUNT_ID
+        value: "712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7"
+
+      # Bí mật — điền tay ở Dashboard → Environment.
       - key: JIRA_API_TOKEN
         sync: false
 
