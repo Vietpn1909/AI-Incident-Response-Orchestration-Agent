@@ -174,10 +174,20 @@ Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có b�
 |--------|------|--------|--------|------|
 | Việt | Review và merge PR #10 (`fix/promql-baseline-nan`) vào `develop` | ✅ Done | `9bfaa80`, CI pass | - |
 | Trung | Kéo dài bậc warm-up trong `PROFILE_DEMO` | ⏳ Todo | cần cho baseline có nghĩa | - |
-| Việt | Cài `PrometheusClient.query()` — chuyển từ `PrometheusQuerier` trong spike | ⏳ Todo | - | - |
+| Việt | **Cài `PrometheusClient.query()` + `query_range()`** — đường găng tuần 2 | ✅ Done | `query(P95_LATENCY)` → `[MetricSample(service='service-thanh-toan', value=1.93)]` | - |
+| Việt | Thêm `PrometheusError` — phân biệt "không có dữ liệu" với "không biết tình hình" | ✅ Done | Prometheus chết thì raise, không trả rỗng | - |
+| Việt | 9 test cho `PrometheusClient` bằng `httpx.MockTransport`, chạy được trong CI | ✅ Done | 68 test pass, ruff clean | - |
 | Việt | Cài 3 hàm trong `src/services/rules.py`, xử lý danh sách rỗng tường minh | ⏳ Todo | - | - |
 
 **Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
+
+Xong **đường găng tuần 2**: `PrometheusClient` hết `NotImplementedError`, `rules.py` và node `detect` hết bị chặn. Phần gọi API gần như chép từ `PrometheusQuerier` đã chạy trong spike, nhưng có thêm một quyết định thiết kế đáng ghi.
+
+**Ranh giới giữa "không có dữ liệu" và "không biết tình hình".** `query()` trả **danh sách rỗng** khi Prometheus chạy tốt nhưng không có series nào — service chưa nhận request, đó là trạng thái bình thường. Còn khi Prometheus chết, sai địa chỉ, hoặc câu PromQL sai cú pháp thì **raise `PrometheusError`**. Nuốt lỗi và trả rỗng ở nhóm thứ hai là nguy hiểm nhất: Agent sẽ hiểu "mọi thứ bình thường" đúng lúc nó mù hoàn toàn. Có 3 test riêng gác ranh giới này.
+
+Client cũng **loại bỏ mẫu `NaN`** kèm warning, dù các câu trong `prometheus.py` đã chặn NaN bằng `_HAS_TRAFFIC`. Đây là lớp phòng thủ thứ hai: hôm 31/07 đã có 4 câu lọt NaN, nếu sau này ai thêm câu mới mà quên bộ lọc thì client vẫn không để NaN chạm tới rule engine.
+
+9 test dùng `httpx.MockTransport` nên **chạy được trong CI mà không cần Prometheus** — phần verify với Prometheus thật vẫn nằm ở `spike/spike_promql.py`, chạy tay khi có docker. Verify thật: cả 7 hằng đều trả đúng qua client (p95 1.93s, lỗi 2.4%, pool 1.00), riêng `AUTH_FAILURE_RATE` trả rỗng kèm warning vì service dummy không có endpoint `/login` — đúng như thiết kế.
 
 ---
 
