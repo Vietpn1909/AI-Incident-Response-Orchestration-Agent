@@ -25,26 +25,65 @@ from dataclasses import dataclass
 # đó mỗi 5s và request rất nhanh, không lọc thì nó kéo avg latency sai 40 lần
 # lúc rảnh. Việt đo được và ghi ở spike/README.md.
 
-#: p95 latency theo service — tín hiệu chính để phát hiện sự cố.
-P95_LATENCY = """
+# ⚠️ NaN — đọc trước khi sửa bất kỳ câu nào ở dưới.
+#
+# Không có request nào trong cửa sổ `[1m]` thì `rate` = 0, và mọi câu có phép
+# chia thành 0/0 = `NaN`. Prometheus không báo lỗi, query vẫn "chạy", vẫn trả
+# ra một con số.
+#
+# NaN nguy hiểm hơn kết quả rỗng vì nó hỏng im lặng:
+#   - `NaN > x` VÀ `NaN < x` đều là False, nên mọi so sánh ngưỡng rơi tọt qua
+#     → Agent bỏ lọt sự cố mà không có dấu hiệu gì
+#   - `MetricEvidence.deviation_ratio` thành NaN
+#   - Pydantic serialize NaN thành `null`, nên bằng chứng số biến mất khỏi
+#     war-room view của Long mà không báo gì
+#
+# Vì vậy mọi câu có phép chia đều gắn `and on(service) (_HAS_TRAFFIC)`. Vế này
+# bỏ hẳn series khi service không có request, nên câu trả **rỗng** thay vì NaN
+# — và rỗng là trạng thái duy nhất `PrometheusClient.query()` phải xử lý.
+#
+# Đo được 2026-07-30 trên Prometheus thật, xem spike/README.md.
+
+#: Điều kiện "service có request trong phút vừa rồi".
+#:
+#: Chỉ dùng làm bộ lọc chống NaN, không dùng trực tiếp làm tín hiệu.
+_HAS_TRAFFIC = """
+sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) > 0
+"""
+
+_P95_LATENCY_RAW = """
 histogram_quantile(0.95,
   sum(rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])) by (le, service)
 )
 """
 
+#: p95 latency theo service — tín hiệu chính để phát hiện sự cố.
+P95_LATENCY = f"""
+({_P95_LATENCY_RAW})
+and on(service) ({_HAS_TRAFFIC})
+"""
+
 #: Tỷ lệ lỗi 5xx theo service (0.0 – 1.0).
 #:
 #: Vế `or ... * 0` là cố ý: không có vế đó thì khi service khoẻ, không series
-#: nào khớp `status=~"5.."` nên cả phép chia trả RỖNG thay vì 0 — Agent không
-#: phân biệt được "không có lỗi" với "mất metric / service chết", hai tình
-#: huống cần xử lý ngược nhau. Có vế này rồi thì rỗng = mất metric = đáng báo động.
-ERROR_RATE = """
+#: nào khớp `status=~"5.."` nên tử số rỗng và cả phép chia trả RỖNG — Agent
+#: không phân biệt được "không có lỗi" với "mất metric / service chết", hai
+#: tình huống cần xử lý ngược nhau.
+#:
+#: Vế `or ... * 0` xử lý trường hợp rỗng, vế `and on(service)` xử lý trường hợp
+#: NaN. Cần cả hai, chúng không thay được nhau.
+_ERROR_RATE_RAW = """
 (
   sum by (service) (rate(http_requests_total{handler!="/metrics", status=~"5.."}[1m]))
   or
   sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m])) * 0
 )
 / sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m]))
+"""
+
+ERROR_RATE = f"""
+({_ERROR_RATE_RAW})
+and on(service) ({_HAS_TRAFFIC})
 """
 
 #: Mức sử dụng connection pool (0.0 – 1.0) — bằng chứng cho nguyên nhân gốc.
@@ -57,8 +96,36 @@ POOL_SATURATION = "db_pool_connections_in_use / db_pool_size"
 #: trả 0 dù ngay trước đó đã cạn kiệt — bằng chứng sẽ nói ngược sự thật.
 POOL_SATURATION_PEAK_5M = f"max_over_time(({POOL_SATURATION})[5m:5s])"
 
-#: p95 trung bình 30 phút trước — dùng làm baseline để so lệch.
-P95_BASELINE_30M = f"avg_over_time(({P95_LATENCY})[30m:1m])"
+#: Phân vị dùng làm mức nền. Xem giải thích ở `P95_BASELINE_30M`.
+_BASELINE_QUANTILE = 0.1
+
+#: Mức p95 "thường ngày" trong 30 phút qua — dùng làm baseline để so lệch.
+#:
+#: ⚠️ KHÔNG dùng `avg_over_time` ở đây, dù tên gọi "baseline" nghe như trung
+#: bình. Cửa sổ 30 phút **bao gồm cả khoảng thời gian đang xảy ra sự cố**, nên
+#: trung bình bị chính sự cố kéo lên: sự cố càng kéo dài, baseline càng cao và
+#: độ lệch càng teo — tức bằng chứng yếu dần đúng lúc sự cố nghiêm trọng nhất.
+#:
+#: Đo được trên Prometheus thật (2026-07-30), p95 giữ nguyên 1.95s suốt:
+#:
+#:     thời điểm      avg_over_time   lệch     quantile 0.1   lệch
+#:     bình thường    0.181 s         1.0x     0.181 s        1.0x
+#:     +60s           0.531 s         3.7x     0.179 s       10.9x
+#:     +170s          0.936 s         2.1x     0.180 s       10.9x
+#:
+#: Phân vị thấp bỏ qua phần đuôi do sự cố tạo ra, nên nó giữ đúng nghĩa "mức
+#: thường ngày". Chọn 0.1 thay vì trung vị 0.5 vì cửa sổ là 30 phút: trung vị
+#: bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), còn 0.1 chịu được tới
+#: ~27 phút. Kịch bản demo có bước chờ người duyệt trên Jira, thời gian chờ đó
+#: không đoán trước được, nên chọn biên an toàn rộng hơn.
+#:
+#: Kế thừa bộ lọc chống NaN từ `P95_LATENCY`, nên chỉ tính trên những phút thực
+#: sự có request.
+#:
+#: Vẫn còn một ràng buộc kịch bản, không phải lỗi code: baseline cần có traffic
+#: nền TRƯỚC lúc tăng tải. Chạy load test từ trạng thái im lìm thì không có
+#: "mức thường ngày" nào để so, dù dùng phân vị hay trung bình.
+P95_BASELINE_30M = f"quantile_over_time({_BASELINE_QUANTILE}, ({P95_LATENCY})[30m:1m])"
 
 #: Số request xác thực thất bại mỗi giây — tín hiệu của UC-3 (burst tấn công).
 #:
@@ -71,10 +138,15 @@ AUTH_FAILURE_RATE = """
 sum by (service) (rate(http_requests_total{handler="/login", status=~"4.."}[1m]))
 """
 
-#: avg latency — dùng để đối chiếu, không dùng làm ngưỡng (p95 nhạy hơn).
-AVG_LATENCY = """
+_AVG_LATENCY_RAW = """
 sum(rate(http_request_duration_seconds_sum{handler!="/metrics"}[1m])) by (service)
   / sum(rate(http_request_duration_seconds_count{handler!="/metrics"}[1m])) by (service)
+"""
+
+#: avg latency — dùng để đối chiếu, không dùng làm ngưỡng (p95 nhạy hơn).
+AVG_LATENCY = f"""
+({_AVG_LATENCY_RAW})
+and on(service) ({_HAS_TRAFFIC})
 """
 
 
