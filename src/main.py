@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,16 +7,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.incidents import router as incidents_router
 from src.api.routes import router
 from src.api.webhooks import router as webhooks_router
-from src.config import configure_tracing, get_settings
+from src.config import configure_logging, configure_tracing, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Gọi trước mọi thứ khác: các dòng log bên dưới và trong lúc chạy đều là
+    # tiếng Việt, chưa ép UTF-8 thì console Windows in ra ký tự vỡ.
+    configure_logging()
+
     settings = get_settings()
     tracing = "on" if configure_tracing() else "off"
-    print(f"Starting {settings.app_name} in {settings.app_env} mode (LangSmith tracing: {tracing})")
+    logger.info("Khởi động %s ở chế độ %s (LangSmith tracing: %s)", settings.app_name, settings.app_env, tracing)
     yield
-    print("Shutting down...")
+    logger.info("Đang tắt...")
 
 
 app = FastAPI(
