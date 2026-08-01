@@ -123,23 +123,8 @@ Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bư�
 | Phan Hoàng Long | Cài đặt `ui/status_page.py` — trạng thái tổng theo đúng thứ tự `StatusPage.overall_health`, giờ Việt Nam, nút tải lại | ✅ Done | `642685c` | - |
 | Phan Hoàng Long | Cài đặt `ui/war_room.py` — danh sách + chi tiết incident, bằng chứng kèm PromQL, timeline, postmortem, incident liên quan bấm chuyển được | ✅ Done | `0c9a508` | - |
 | Phan Hoàng Long | Mở PR #6 vào `develop` | ✅ Done | PR #6 | - |
-| Việt | Đổi `spike_promql.py` sang bắn thẳng các hằng trong `src/services/prometheus.py`, bỏ bản sao câu query | ✅ Done | `spike/spike_promql.py` | - |
-| Việt | **Tìm ra lỗi thứ 5 của contract ①**: mọi câu có phép chia trả `NaN` khi service không có request | ✅ Done | 4 câu bị: p95, tỷ lệ lỗi, avg latency, baseline | - |
-| Việt | Sửa: gắn `and on(service) (_HAS_TRAFFIC)`, cập nhật contract ① + `spike/README.md` | ✅ Done | rỗng lúc rảnh, 6/6 câu trả số dưới tải | - |
-| Việt | **Tìm ra lỗi thứ 6**: baseline dùng `avg_over_time` bị chính sự cố kéo lên | ✅ Done | độ lệch tụt 3.7x → 2.1x sau 2 phút | - |
-| Việt | Sửa baseline sang `quantile_over_time(0.1, ...)` | ✅ Done | độ lệch đứng yên 10.9x | - |
 
 **Tổng kết ngày:** Cả Trung và Long hoàn thành phần việc của mình và mở PR — đội có PR đầu tiên đi qua quy trình review đúng chuẩn. Long làm xong **cả hai** trang UI trong tuần 1, tức đi trước lịch (kế hoạch là tuần 2–3), nên tuần 2 có thời gian dồn cho video demo và pitch deck.
-
-Việt gộp `spike_promql.py` về đúng một nguồn query — trước đó script giữ bản sao của contract ①, nên nó verify bản sao chứ không verify thứ đang chạy thật. Đổi xong thì **ngay lập tức lộ ra lỗi thứ 5**, cùng họ với lỗi bucket hôm 29/07: không có request nào trong cửa sổ `[1m]` thì `rate` = 0, mọi phép chia thành 0/0 = `NaN`. Query vẫn "chạy", vẫn trả ra số, không exception nào.
-
-`NaN` nguy hiểm hơn kết quả rỗng vì `NaN > x` **và** `NaN < x` đều là `False` — mọi so sánh ngưỡng rơi tọt qua, Agent bỏ lọt sự cố mà không có dấu hiệu gì. Riêng mức **P4 không kích hoạt được** vì nó dựa trọn vào độ lệch baseline; thêm nữa Pydantic serialize `NaN` thành `null` nên bằng chứng số biến mất khỏi war-room view của Long. Câu baseline nặng nhất: chỉ cần **một** phút im lặng trong 30 phút là cả cửa sổ trả `NaN`, tức gần như luôn luôn trong lúc phát triển.
-
-Sửa bằng cách gắn bộ lọc `and on(service) (_HAS_TRAFFIC)` vào mọi câu có phép chia, để câu trả **rỗng** thay vì `NaN` — nhờ vậy `PrometheusClient.query()` chỉ phải xử lý một trạng thái "không có dữ liệu" thay vì hai. Kiểm chứng trên Prometheus thật: lúc rảnh cả 4 câu trả rỗng đúng thiết kế, dưới tải 150 request đồng thời thì 6/6 câu trả số (p95 1.95s, lỗi 2.1%, pool 1.00, baseline 1.46s, avg 1.53s).
-
-Bài học lặp lại lần thứ hai trong hai ngày: **hai bản sao của cùng một thứ thì bản được kiểm tra không phải bản đang chạy.** Lỗi bucket hôm qua lọt lưới cũng vì spike verify bản sao của chính nó, và may mắn chạy đúng lúc có traffic liên tục nên câu baseline trả ra số.
-
-Một việc phát sinh cho Trung: script load test cần **pha warm-up traffic nhẹ trước khi tăng tải**. Sửa query không tạo ra baseline từ hư không — chạy load test từ trạng thái im lìm thì baseline ≈ p95 hiện tại, đo được độ lệch chỉ 1.3x so với 4.0x khi có traffic nền, và tính năng "so baseline" mất ý nghĩa.
 
 ---
 
@@ -152,7 +137,12 @@ Một việc phát sinh cho Trung: script load test cần **pha warm-up traffic 
 | Trương Công Thái Đức | Dựng service của Trung từ branch, chạy Postgres thật để **đo gauge pool** → phát hiện báo cạn 100% vĩnh viễn sau 1 request | ✅ Done | đã verify bản sửa: rảnh 0.0 → tải 5.0 → hết tải 0.0 | - |
 | Trương Công Thái Đức | Phát hiện Trung và Việt sửa cùng file `scripts/_pyrun.sh` theo hai hướng ngược nhau | ✅ Done | chọn bản của Việt | - |
 | Trương Công Thái Đức | Đồng bộ mirror sau khi merge PR trên web | ✅ Done | hai repo cùng `dc33e2e` | - |
-| Việt | Mở PR cho bản sửa `_pyrun.sh` | ⏳ Todo | đang chặn Trung | - |
+| Việt | Mở PR cho bản sửa `_pyrun.sh` | ✅ Done | `e2f7cf2` đã vào `develop`, hết chặn Trung | - |
+| Việt | Đổi `spike_promql.py` sang bắn thẳng các hằng trong `src/services/prometheus.py`, bỏ bản sao câu query | ✅ Done | `spike/spike_promql.py` | - |
+| Việt | **Tìm ra lỗi thứ 5 của contract ①**: mọi câu có phép chia trả `NaN` khi service không có request | ✅ Done | 4 câu bị: p95, tỷ lệ lỗi, avg latency, baseline | - |
+| Việt | Sửa: gắn `and on(service) (_HAS_TRAFFIC)`, cập nhật contract ① + `spike/README.md` | ✅ Done | rỗng lúc rảnh, 6/6 câu trả số dưới tải | - |
+| Việt | **Tìm ra lỗi thứ 6**: baseline dùng `avg_over_time` bị chính sự cố kéo lên | ✅ Done | độ lệch tụt 3.7x → 2.1x sau 2 phút | - |
+| Việt | Sửa baseline sang `quantile_over_time(0.1, ...)` | ✅ Done | độ lệch đứng yên 10.9x | - |
 | Trung | Sửa 3 điểm ở PR #4 | ⏳ Todo | - | - |
 | Phan Hoàng Long | Xác nhận đã cài `pre-push` hook | ⏳ Todo | chưa có dấu vết nào | - |
 
@@ -163,6 +153,31 @@ Một việc phát sinh cho Trung: script load test cần **pha warm-up traffic 
 **Thứ hai — hai người sửa cùng một file dùng chung theo hai hướng ngược nhau.** Cả Trung và Việt đều vá `scripts/_pyrun.sh` cho vấn đề Python trên Windows. Việt thêm `--version` để loại alias giả của Windows Store, giữ nguyên fallback `python3`/`python`. Trung thay cả chuỗi bằng đường dẫn `.venv` và bỏ hai fallback đó — làm hook chết im lặng trên macOS/Linux, tức mất deliverable #4. Lấy bản của Việt.
 
 Long đi trước tiến độ; việc gấp duy nhất còn của 3 bạn là xác nhận hook của Long.
+
+**Buổi tối — hai lỗi nữa trong contract ①, cùng loại "sai im lặng".** Việt gộp `spike_promql.py` về bắn thẳng các hằng đang ship trong `src/services/prometheus.py` thay vì giữ bản sao câu query. Đổi xong là lộ ngay hai lỗi mà bản sao che mất.
+
+**Lỗi 5 — `NaN`.** Không có request nào trong cửa sổ `[1m]` thì `rate` = 0, mọi phép chia thành 0/0 = `NaN`. Bốn câu bị: p95, tỷ lệ lỗi, avg latency, baseline. Nguy hiểm hơn kết quả rỗng vì `NaN > x` **và** `NaN < x` đều là `False` — mọi so sánh ngưỡng rơi tọt qua, Agent bỏ lọt sự cố mà không có dấu hiệu gì; mức P4 chết hẳn vì nó dựa trọn vào độ lệch baseline; Pydantic serialize `NaN` thành `null` nên bằng chứng số biến mất khỏi war-room view của Long. Sửa bằng `and on(service) (_HAS_TRAFFIC)` để câu trả **rỗng** thay vì `NaN`, nhờ đó `PrometheusClient.query()` chỉ phải xử lý một trạng thái "không có dữ liệu" thay vì hai.
+
+**Lỗi 6 — baseline tự nhiễm.** Cửa sổ 30 phút bao gồm cả khoảng đang có sự cố, nên `avg_over_time` bị chính sự cố kéo lên: sự cố càng lâu càng trông bình thường. Đo thật với p95 giữ nguyên 1.95s — trung bình cho độ lệch 3.7x ở phút thứ nhất rồi tụt còn 2.1x ở phút thứ ba, trong khi `quantile_over_time(0.1, ...)` đứng yên ở 10.9x. Chọn phân vị 0.1 thay vì trung vị 0.5 vì trung vị bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), còn 0.1 chịu được tới ~27 phút — kịch bản demo có bước chờ người duyệt trên Jira, thời gian chờ không đoán trước được.
+
+Sau hai lỗi này, spike chạy đủ 6/6 câu trả số và độ lệch đạt **10.8x** — đủ mạnh để làm bằng chứng cho `Hypothesis`.
+
+**Bài học lặp lại lần thứ hai trong ba ngày: hai bản sao của cùng một thứ thì bản được kiểm tra không phải bản đang chạy.** Lỗi bucket hôm 29/07 lọt lưới cũng vì spike verify bản sao của chính nó, và may chạy đúng lúc có traffic liên tục nên câu baseline vẫn trả ra số.
+
+Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có bậc đầu `(5, 20)` làm warm-up, chỉ cần **kéo dài bậc đó lên vài phút** để cửa sổ 30 phút có đủ dữ liệu bình thường. Đổi sang phân vị vẫn không tạo baseline từ hư không.
+
+---
+
+## 2026-08-01
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Việt | Review và merge PR #10 (`fix/promql-baseline-nan`) vào `develop` | ✅ Done | `9bfaa80`, CI pass | - |
+| Trung | Kéo dài bậc warm-up trong `PROFILE_DEMO` | ⏳ Todo | cần cho baseline có nghĩa | - |
+| Việt | Cài `PrometheusClient.query()` — chuyển từ `PrometheusQuerier` trong spike | ⏳ Todo | - | - |
+| Việt | Cài 3 hàm trong `src/services/rules.py`, xử lý danh sách rỗng tường minh | ⏳ Todo | - | - |
+
+**Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
 
 ---
 
