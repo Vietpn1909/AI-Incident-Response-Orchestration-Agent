@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import sys
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
@@ -114,4 +115,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # Console Windows mặc định CP1252 — xem chú thích trong attack.py.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     asyncio.run(main())

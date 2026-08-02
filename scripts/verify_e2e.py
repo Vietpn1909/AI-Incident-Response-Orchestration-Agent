@@ -28,6 +28,7 @@ import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+from src.config import force_utf8_console  # noqa: E402
 from src.models.incident import (  # noqa: E402
     IncidentSignal,
     IncidentState,
@@ -88,6 +89,11 @@ def fail(msg: str) -> None:
 
 
 def main() -> int:
+    # Trước parse_args(): argparse in `--help` và lỗi tham số bằng tiếng Việt
+    # thẳng ra stdout. Console Windows là CP1252 nên chưa ép UTF-8 thì chết
+    # bằng UnicodeEncodeError. 3/4 thành viên dùng Windows.
+    force_utf8_console()
+
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--local", action="store_true", help="webhook trên máy")

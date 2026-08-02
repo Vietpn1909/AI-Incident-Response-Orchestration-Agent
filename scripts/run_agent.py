@@ -25,7 +25,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from src.agents.detection_loop import run_cycle  # noqa: E402
-from src.config import configure_logging, get_settings  # noqa: E402
+from src.config import configure_logging, force_utf8_console, get_settings  # noqa: E402
 from src.services.jira import FakeJiraClient, JiraClient, RealJiraClient  # noqa: E402
 from src.services.prometheus import PrometheusClient  # noqa: E402
 
@@ -64,6 +64,12 @@ def build_jira(use_fake: bool) -> JiraClient:
 
 
 def main() -> int:
+    # PHẢI đứng trước parse_args(): argparse in `--help` và thông báo lỗi tham
+    # số thẳng ra stdout ngay trong parse_args(), tức trước cả configure_logging().
+    # Trên Windows (3/4 thành viên) chưa ép UTF-8 thì `--help` chết bằng
+    # UnicodeEncodeError chứ không phải in ra chữ xấu.
+    force_utf8_console()
+
     parser = argparse.ArgumentParser(description="Agent phát hiện sự cố")
     parser.add_argument("--fake", action="store_true", help="dùng FakeJiraClient, không gọi Jira thật")
     parser.add_argument("--prometheus", default=DEFAULT_PROMETHEUS)

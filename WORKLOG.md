@@ -286,6 +286,27 @@ Gọi trong `run_cycle()` **trước** `open_war_room` — severity đi vào ti�
 
 142 test pass, ruff sạch.
 
+**Rà toàn bộ bẫy Windows — 3/4 thành viên dùng Windows, chỉ Đức dùng macOS.**
+
+Kiểm tra: không còn conflict marker, working tree sạch, 142 test pass, `.gitattributes` khớp với line ending thực tế trên đĩa (`git add --renormalize` không sinh thay đổi nào), `.sh` là LF, `.cmd`/`.ps1` là CRLF, mọi `open()` đều có `encoding=` hoặc dùng chế độ nhị phân.
+
+Nhưng tìm ra **ba lỗi chỉ xảy ra trên Windows**, CI chạy Linux nên xanh hết:
+
+1. **`scripts/run_agent.py` — điểm khởi chạy Agent — chết ngay `--help`.** `configure_logging()` được gọi *sau* `parse_args()`, mà argparse in help và thông báo lỗi tham số thẳng ra stdout ngay trong `parse_args()`. Console Windows là CP1252 nên `UnicodeEncodeError: can't encode character 'ệ'` — chết hẳn, không phải in ra chữ xấu. Tách `force_utf8_console()` khỏi `configure_logging()` và gọi trước `parse_args()`.
+2. **`demo/loadtest.py` chết ngay dòng output đầu tiên** trên Windows — cùng nguyên nhân. Đây là script của Trung mà Trung cũng dùng Windows. `demo/attack.py` đã có cách vá đúng từ trước, chỉ `loadtest.py` và `seed.py` thiếu; áp cùng cách để `demo/` vẫn độc lập, không import `src`.
+3. **`scripts/verify_e2e.py`** cùng lỗi, đã vá.
+
+Cộng thêm lỗi `pip install -r demo/requirements.txt` fail trên Windows (ghi ở trên) — bốn lỗi cùng một họ: **file và luồng ra mặc định CP1252 gặp nội dung tiếng Việt**. Đội viết tài liệu và log bằng tiếng Việt nên bẫy này sẽ còn lặp lại; quy ước nên là mọi script có `print`/`argparse` tiếng Việt đều ép UTF-8 ở dòng đầu của `main()`.
+
+**Chạy trọn chuỗi trên Windows để xác nhận:** `docker compose -f docker-compose.demo.yml up` → 2 target Prometheus UP → `seed.py` 3000 orders + 5000 payments → `loadtest.py` in tiếng Việt bình thường → `run_agent.py --fake --once` chạy sạch, báo "Vòng 1: bình thường" (đúng, vì UC-1 chưa tái hiện được như Đức đã ghi).
+
+**Một khác biệt máy nữa:** Windows của tôi có Postgres native chiếm sẵn 5432 giống hệt máy Đức, nên `seed.py` nối nhầm vào đó và fail `InvalidPasswordError`. Đường vá `DEMO_POSTGRES_PORT` Đức thêm hôm nay **chạy đúng**, đã verify:
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
+
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
