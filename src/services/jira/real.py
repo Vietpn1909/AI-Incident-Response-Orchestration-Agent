@@ -45,6 +45,7 @@ from src.services.jira.mapping import (
     service_label,
     severity_from_labels,
     state_from_jira_status,
+    status_candidates,
 )
 
 # Severity khi issue không có label severity (vd. issue người tạo tay lạc vào
@@ -150,16 +151,25 @@ class RealJiraClient:
         self.close()
 
     def _transition_id(self, jira_key: str, to_state: IncidentState) -> str:
-        """Jira transition theo id, không theo tên trạng thái đích."""
-        target = jira_status_for(to_state)
+        """Jira transition theo id, không theo tên trạng thái đích.
+
+        Thử tên mong muốn trước, rồi tới tên mặc định của board team-managed —
+        nhờ vậy code chạy đúng cả trước lẫn sau khi đội đổi tên cột, không có
+        khoảng thời gian hỏng ở giữa.
+        """
         data = self._call("GET", f"/rest/api/3/issue/{jira_key}/transitions")
-        for transition in data.get("transitions", []):
-            if transition["to"]["name"] == target:
-                return transition["id"]
-        available = [t["to"]["name"] for t in data.get("transitions", [])]
+        available = {t["to"]["name"]: t["id"] for t in data.get("transitions", [])}
+
+        for candidate in status_candidates(to_state):
+            if candidate in available:
+                return available[candidate]
+
+        wanted = " hoặc ".join(status_candidates(to_state))
         raise JiraApiError(
-            f"{jira_key} không có transition sang '{target}'. Đang có: {available}. "
-            "Kiểm tra JIRA_STATUS trong jira/mapping.py có khớp tên status trên board không."
+            f"{jira_key} không có transition sang '{wanted}'. "
+            f"Đang có: {sorted(available)}. "
+            "Kiểm tra tên cột trên board có khớp JIRA_STATUS hoặc FALLBACK_STATUS "
+            "trong jira/mapping.py không."
         )
 
     # ------------------------------------------------------------ ghi dữ liệu

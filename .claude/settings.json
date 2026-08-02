@@ -97,7 +97,8 @@
       "Bash(curl -sS --max-time 5 http://localhost:8000/health)",
       "Bash(curl -sS --max-time 5 -o /dev/null -w \" /docs → HTTP %{http_code}\\\\n\" http://localhost:8000/docs)",
       "Bash(curl -sS --max-time 10 http://localhost:8000/openapi.json)",
-      "Bash(ps -o lstart=,command= -p 10155)"
+      "Bash(ps -o lstart=,command= -p 10155)",
+      "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/probe_status.py)"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",

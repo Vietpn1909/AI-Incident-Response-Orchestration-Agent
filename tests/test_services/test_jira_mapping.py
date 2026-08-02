@@ -6,6 +6,7 @@ tạo và đọc lại được, JQL tìm theo label ra đúng issue.
 
 from src.models.incident import IncidentState, Severity
 from src.services.jira import (
+    FALLBACK_STATUS,
     INCIDENT_LABEL,
     JIRA_STATUS,
     jira_status_for,
@@ -14,6 +15,7 @@ from src.services.jira import (
     service_from_labels,
     severity_from_labels,
     state_from_jira_status,
+    status_candidates,
 )
 
 
@@ -69,9 +71,35 @@ def test_jql_khong_loc_service_van_hop_le():
 
 
 def test_status_dau_tien_cua_board_phai_la_open():
-    """Jira đặt mọi issue mới ở status đầu tiên của board — hiện là `Idea`.
+    """Jira đặt mọi issue mới ở status đầu tiên của board — mặc định là `Idea`.
 
     Map `Idea` vào trạng thái khác thì incident vừa tạo đã hiện sai ngay. Bug
     này đã gặp thật ngày 2026-07-29: issue mới tạo báo là "Remediating".
     """
-    assert jira_status_for(IncidentState.OPEN) == "Idea"
+    assert FALLBACK_STATUS[IncidentState.OPEN] == "Idea"
+
+
+def test_nhan_ca_ten_moi_lan_ten_mac_dinh():
+    """Code phải chạy đúng cả trước lẫn sau khi đội đổi tên cột board.
+
+    Không có điều này thì lúc đổi tên sẽ có một khoảng thời gian hỏng: code
+    dùng tên mới nhưng board còn tên cũ, mọi transition đều fail.
+    """
+    assert state_from_jira_status("Awaiting Approval") is IncidentState.AWAITING_APPROVAL
+    assert state_from_jira_status("In Review") is IncidentState.AWAITING_APPROVAL
+    assert state_from_jira_status("Remediating") is IncidentState.REMEDIATING
+    assert state_from_jira_status("To Do") is IncidentState.REMEDIATING
+
+
+def test_status_candidates_uu_tien_ten_moi():
+    """Thử tên mong muốn trước — sau khi đổi tên board thì dùng ngay tên đó."""
+    for state in IncidentState:
+        preferred, fallback = status_candidates(state)
+        assert preferred == JIRA_STATUS[state]
+        assert fallback == FALLBACK_STATUS[state]
+
+
+def test_moi_state_deu_co_ca_hai_ten():
+    for state in IncidentState:
+        assert state in JIRA_STATUS, f"thiếu tên mong muốn cho {state}"
+        assert state in FALLBACK_STATUS, f"thiếu tên mặc định cho {state}"
