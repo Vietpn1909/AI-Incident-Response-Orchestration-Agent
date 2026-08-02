@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
 from src.agents.nodes.open_war_room import open_war_room
 from src.services.jira import JiraClient
@@ -51,6 +52,11 @@ def run_cycle(prometheus_client: PrometheusClient, jira: JiraClient) -> CycleRes
     except PrometheusError as exc:
         logger.error("Không đọc được Prometheus: %s", exc)
         return CycleResult(error=str(exc))
+
+    # Phải chạy TRƯỚC khi mở war room: vế "≥ 2 service → P1" của contract ① chỉ
+    # thấy được khi nhìn cả vòng quét, mà severity thì đi vào tiêu đề issue lúc
+    # tạo. Nâng sau khi đã tạo issue thì tiêu đề mang mức sai.
+    signals = escalate_spreading(signals)
 
     result = CycleResult(detected=len(signals))
     for signal in signals:

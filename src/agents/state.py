@@ -22,6 +22,11 @@ class AgentState(TypedDict, total=False):
 class IncidentAgentState(TypedDict, total=False):
     """State của Agent ứng phó sự cố — xem sơ đồ ở docs/architecture_diagram.md mục 2.
 
+    ⚠️ **Chưa có chỗ nào dùng.** Vòng quét hiện tại là `detection_loop.run_cycle()`
+    — một vòng lặp tuần tự truyền tham số trực tiếp, không đi qua state dict.
+    Schema này là chỗ dựa cho bước dựng LangGraph state machine, chưa tới.
+    Nếu tới cuối tuần 2 vẫn chưa dùng thì nên xoá thay vì để làm nhiễu.
+
     `total=False` nên mọi field đều tuỳ chọn: graph chạy được với vài node đầu,
     không cần có đủ node mới khởi động.
 

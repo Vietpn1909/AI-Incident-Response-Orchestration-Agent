@@ -270,4 +270,22 @@ Prometheus vẫn thấy sự cố, chỉ là bằng metric khác: `min_over_time
 
 ---
 
+**Việt (tối 02/08) — gỡ conflict và nối lại phần lan truyền.**
+
+Sáng 02/08 tôi cũng viết `detect` + `open_war_room` + graph LangGraph (`e4488ee`) nhưng **không push**, nên Đức không thấy và viết bản của mình lúc tối. Lỗi ở tôi: hôm 01/08 đã tự xếp "3 commit chưa push" là mục số 1 trong danh sách rà lỗi rồi vẫn để đó. Hai bản viết song song, và lúc merge `develop` vào `viet` thì branch vỡ — `detect.py` thành bản Đức trong khi `incident_graph.py` và 2 file test của tôi vẫn gọi `BreachTracker`, `detect_node`.
+
+Giữ bản Đức, bỏ bản mình. Cách đo `breached_for_seconds` bằng `min_over_time` **đúng hơn** `BreachTracker` của tôi ở cả ba điểm Đức nêu: restart mất state, nhiều instance mỗi con một số, test phải giả lập thời gian. Xoá `incident_graph.py`, `test_detect.py`, `test_incident_graph.py` — khôi phục được từ `e4488ee` khi dựng state machine.
+
+Port sang phần bản Đức chưa có: **`escalate_spreading()`**. `rules.detect()` gán severity dựa trên *một* service, còn vế "≥ 2 service bị ảnh hưởng → P1" của contract ① chỉ thấy được khi nhìn cả vòng quét — hai service mỗi cái p95 = 3s, xét riêng đều P2, xét cùng nhau là P1. Trước đó `is_spreading()` viết xong từ 01/08 nhưng **chưa chỗ nào gọi**, tức luật lan truyền đang là code chết.
+
+Gọi trong `run_cycle()` **trước** `open_war_room` — severity đi vào tiêu đề issue lúc tạo, nâng sau khi tạo thì tiêu đề mang mức sai. Vẫn mở **một war room cho mỗi service** như thiết kế của Đức, không gộp: đúng mẫu INC-12/INC-13 trong fixture, việc nối là của `link_incidents`.
+
+⚠️ **Mâu thuẫn contract cần Đức chốt:** contract ① ghi "≥ 2 service bị ảnh hưởng → P1", nhưng `fixtures/incidents.json` lại có INC-12 (P2) và INC-13 (P3) nối với nhau — hai service dính mà không cái nào P1. Tôi làm theo chữ trong contract ①. Nếu Đức muốn theo fixture (hiểu "≥ 2 service" là `affected_services` của **một** incident có 2 phần tử) thì sửa một dòng.
+
+**Bug mới, ảnh hưởng cả Trung:** `pip install -r demo/requirements.txt` **fail trên Windows** — pip đọc file bằng cp1252 mà file có comment tiếng Việt, `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8d`. CI chạy Linux nên xanh. Vá tạm bằng `PYTHONUTF8=1 pip install -r demo/requirements.txt`; nên bỏ dấu khỏi file hoặc ghi cách này vào README.
+
+142 test pass, ruff sạch.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
