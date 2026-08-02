@@ -81,7 +81,8 @@ Còn tồn sang tuần 2: `main` thiếu 28 commit so với `develop` (chưa m�
 - [ ] **Đức — nối end-to-end**: cấu hình Jira Automation rule gọi webhook, chạy thử trọn luồng duyệt → thi hành
 - [ ] **Đức — `docs/use-cases.md`**: chốt dưới 3 UC theo góp ý mentor (cạn pool · OOM restart · burst xác thực)
 - [ ] Hỏi mentor: `MIE`/`MIP` là viết tắt gì, và tấn công dạng metric-visible có được chấp nhận
-- [ ] Mốc kiểm tra giữa tuần: **Agent mở được Jira issue thật từ tín hiệu Prometheus thật**
+- [x] **Chuỗi HITL end-to-end thông trên Jira thật** (02/08, `KAN-11`) — vượt mốc kiểm tra giữa tuần
+- [ ] Nối Prometheus thật vào Agent: `detect` đọc PromQL → mở Jira issue, chưa qua script tay
 
 ---
 
@@ -99,7 +100,8 @@ Còn tồn sang tuần 2: `main` thiếu 28 commit so với `develop` (chưa m�
 - [ ] **Long — video demo + pitch deck** (deliverable #6, #7), dùng sơ đồ sequence làm storyboard
 - [ ] **Đức — nối end-to-end**: cấu hình Jira Automation rule gọi webhook, chạy thử trọn luồng duyệt → thi hành
 - [ ] Hỏi mentor: `MIE`/`MIP` là viết tắt gì, và tấn công dạng metric-visible có được chấp nhận
-- [ ] Mốc kiểm tra giữa tuần: **Agent mở được Jira issue thật từ tín hiệu Prometheus thật**
+- [x] **Chuỗi HITL end-to-end thông trên Jira thật** (02/08, `KAN-11`) — vượt mốc kiểm tra giữa tuần
+- [ ] Nối Prometheus thật vào Agent: `detect` đọc PromQL → mở Jira issue, chưa qua script tay
 
 ### Đã hoàn thành
 - **02/08 — Ba tài liệu Gate 1** ([`docs/brief.md`](docs/brief.md), [`docs/prd.md`](docs/prd.md), [`docs/ui-flow.md`](docs/ui-flow.md)) và bảng "Tài liệu nộp" ở đầu README. Kiến trúc, README, AI log hook đã có sẵn từ tuần 1 nên chỉ thiếu đúng 3 thứ này.

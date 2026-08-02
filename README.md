@@ -4,6 +4,8 @@
 
 **Team Binary Brothers** · Đề bài **PTNT-20** — Khối PTNT (Kiến trúc & Tích hợp)
 
+> ✅ **Cổng HITL đã verify end-to-end trên Jira thật** (02/08, issue `KAN-11`). Agent tự duyệt → backend từ chối; người duyệt → thi hành. Chạy lại bằng `python scripts/verify_e2e.py --local`.
+
 🌐 **Live:** https://p-035-incident-agent.onrender.com · [API docs](https://p-035-incident-agent.onrender.com/docs) · [status page (JSON)](https://p-035-incident-agent.onrender.com/api/status)
 
 > 👋 **Thành viên đội: mở [docs/START-HERE.md](docs/START-HERE.md) trước khi code** — việc của từng người, lệnh cụ thể, và tiêu chí "xong là thế nào".
