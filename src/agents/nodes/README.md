@@ -36,10 +36,10 @@ Node `await_approval` và `execute_remediation` **không cần viết** — Đ�
 ```python
 from src.services.jira import FakeJiraClient
 
-jira = FakeJiraClient()              # in ra console, không gọi mạng
+jira = FakeJiraClient()  # in ra console, không gọi mạng
 key = jira.create_incident(signal)
-jira.post_proposal(key, proposal)    # → Awaiting Approval
-jira.approve_as_human(key)           # mô phỏng người duyệt (chỉ bản giả có)
+jira.post_proposal(key, proposal)  # → Awaiting Approval
+jira.approve_as_human(key)  # mô phỏng người duyệt (chỉ bản giả có)
 ```
 
 Tuần sau đổi sang `RealJiraClient` — **code Agent không phải sửa một dòng**, đó là mục đích của Protocol.

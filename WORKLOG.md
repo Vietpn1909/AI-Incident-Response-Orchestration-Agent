@@ -180,6 +180,11 @@ Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có b�
 | Việt | Fix log tiếng Việt vỡ trên console Windows — `configure_logging()` ép UTF-8 cho cả stdout lẫn stderr | ✅ Done | `src/config.py`, gọi trong `lifespan` | - |
 | Việt | **Cài 4 hàm trong `src/services/rules.py`** (`classify_severity`, `detect`, `classify_auth_burst`, `is_spreading`) | ✅ Done | 39 test, 107 test toàn repo pass | - |
 | Việt | **Phát hiện mức P3 và P4 không đạt tới được** với ngưỡng ghi trong stub | ✅ Done | sửa cửa `detect` xuống ngưỡng P3 + thêm `BASELINE_DEVIATION_RATIO` | - |
+| Việt | Node `detect` + `BreachTracker` — quy tắc "liên tục ≥ 30s" bắc qua nhiều vòng poll | ✅ Done | `src/agents/nodes/detect.py` | - |
+| Việt | Node `classify_severity` — nâng P1 khi sự cố lan sang ≥ 2 service | ✅ Done | `src/agents/nodes/classify_severity.py` | - |
+| Việt | Node `open_war_room` — `find_open_incident()` TRƯỚC `create_incident()` | ✅ Done | `src/agents/nodes/open_war_room.py` | - |
+| Việt | Nối 3 node thành `incident_graph.py`, chạy thật trên Prometheus + load test | ✅ Done | 3 vòng đầu không mở incident, vòng 4 mở `INC-1`, vòng 5–7 dùng lại | - |
+| Việt | 28 test cho node và graph, dùng client giả nên chạy được trong CI | ✅ Done | 135 test toàn repo pass, ruff clean | - |
 
 **Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
 
@@ -198,6 +203,16 @@ Client cũng **loại bỏ mẫu `NaN`** kèm warning, dù các câu trong `prom
 Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đây là lớp thứ hai sau `PrometheusClient`: NaN không làm chương trình chết, nó làm `classify_severity` tụt xuống P4 vì `NaN > x` luôn False — một sự cố P1 bị xếp thành nhẹ nhất mà không có dấu hiệu gì.
 
 `classify_auth_burst` (UC-3) đi nhánh riêng, không dùng chung bảng với UC-1: burst credential-stuffing xảy ra khi hệ thống **hoàn toàn khoẻ**, nên severity dựa trên số tuyệt đối request/giây. Có test chứng minh cùng bộ số liệu đó `detect()` trả `None` còn `classify_auth_burst()` trả P1 — nếu hai nhánh dùng chung ngưỡng thì Agent sẽ kết luận "service quá tải" thay vì "vấn đề bảo mật", và theo use-cases.md thì đó là chẩn đoán SAI.
+
+**Ba node đầu của graph, và Agent đã chạy thật.** `detect` → `classify_severity` → `open_war_room`, nối trong `src/agents/incident_graph.py` (tách khỏi `graph.py` của template).
+
+Mảnh thiết kế phải giải trước khi viết `detect`: quy tắc "vượt ngưỡng liên tục ≥ 30s" bắc qua **nhiều vòng poll**, mà state của LangGraph chỉ sống trong một lần chạy graph. Nếu không có chỗ nhớ riêng thì `breached_for_seconds` luôn bằng 0 và quy tắc chống nhiễu quan trọng nhất trở thành vô hiệu. Giải bằng `BreachTracker` — một object sống ở module, nhớ mốc bắt đầu vượt ngưỡng của từng service, và **xoá mốc khi service hồi phục** để hai sự cố cách nhau một tiếng không bị cộng dồn thành một.
+
+`detect` **không hardcode danh sách service**: Prometheus trả mỗi service một series nên service nào có traffic thì tự xuất hiện. Thêm service mới chỉ cần sửa `prometheus.yml`, không đụng code Agent.
+
+`classify_severity` thoạt nhìn thừa vì `rules.detect()` đã gán severity rồi. Nhưng nó gán dựa trên **một** service, mà contract ① có vế "≥ 2 service bị ảnh hưởng → P1" — vế đó chỉ nhìn thấy khi đã có đủ tín hiệu cả vòng poll. Hai service mỗi cái p95 = 3s, xét riêng đều là P2; xét cùng nhau là P1.
+
+Chạy thật trên Prometheus + `loadgen` xác nhận **cả hai quy tắc chống nhiễu**: ba vòng poll đầu đã thấy vượt ngưỡng nhưng chưa đủ 30s nên không mở incident; vòng thứ tư (32s liên tục) mở `INC-1`; ba vòng sau dùng lại `INC-1` thay vì tạo trùng. Severity P3 đúng theo số đo, vì p95 = 1.90s còn dưới ngưỡng P2.
 
 ---
 

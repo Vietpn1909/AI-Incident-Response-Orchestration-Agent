@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     langchain_project: str = "P-035"
     langchain_tracing_v2: bool = False
 
+    # Prometheus — nguồn tín hiệu phát hiện sự cố (ADR-0002, không dùng Alertmanager)
+    prometheus_url: str = "http://localhost:9090"
+
     # Jira — lớp quản lý vòng đời incident (ADR-0001)
     jira_base_url: str = ""
     jira_email: str = ""
