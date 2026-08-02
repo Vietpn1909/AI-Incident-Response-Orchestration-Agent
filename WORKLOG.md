@@ -137,7 +137,12 @@ Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bư�
 | Trương Công Thái Đức | Dựng service của Trung từ branch, chạy Postgres thật để **đo gauge pool** → phát hiện báo cạn 100% vĩnh viễn sau 1 request | ✅ Done | đã verify bản sửa: rảnh 0.0 → tải 5.0 → hết tải 0.0 | - |
 | Trương Công Thái Đức | Phát hiện Trung và Việt sửa cùng file `scripts/_pyrun.sh` theo hai hướng ngược nhau | ✅ Done | chọn bản của Việt | - |
 | Trương Công Thái Đức | Đồng bộ mirror sau khi merge PR trên web | ✅ Done | hai repo cùng `dc33e2e` | - |
-| Việt | Mở PR cho bản sửa `_pyrun.sh` | ⏳ Todo | đang chặn Trung | - |
+| Việt | Mở PR cho bản sửa `_pyrun.sh` | ✅ Done | `e2f7cf2` đã vào `develop`, hết chặn Trung | - |
+| Việt | Đổi `spike_promql.py` sang bắn thẳng các hằng trong `src/services/prometheus.py`, bỏ bản sao câu query | ✅ Done | `spike/spike_promql.py` | - |
+| Việt | **Tìm ra lỗi thứ 5 của contract ①**: mọi câu có phép chia trả `NaN` khi service không có request | ✅ Done | 4 câu bị: p95, tỷ lệ lỗi, avg latency, baseline | - |
+| Việt | Sửa: gắn `and on(service) (_HAS_TRAFFIC)`, cập nhật contract ① + `spike/README.md` | ✅ Done | rỗng lúc rảnh, 6/6 câu trả số dưới tải | - |
+| Việt | **Tìm ra lỗi thứ 6**: baseline dùng `avg_over_time` bị chính sự cố kéo lên | ✅ Done | độ lệch tụt 3.7x → 2.1x sau 2 phút | - |
+| Việt | Sửa baseline sang `quantile_over_time(0.1, ...)` | ✅ Done | độ lệch đứng yên 10.9x | - |
 | Trung | Sửa 3 điểm ở PR #4 | ⏳ Todo | - | - |
 | Phan Hoàng Long | Xác nhận đã cài `pre-push` hook | ⏳ Todo | chưa có dấu vết nào | - |
 
@@ -148,6 +153,51 @@ Hoàn tất `POST /webhooks/jira` với 3 lớp bảo vệ, đóng luồng bư�
 **Thứ hai — hai người sửa cùng một file dùng chung theo hai hướng ngược nhau.** Cả Trung và Việt đều vá `scripts/_pyrun.sh` cho vấn đề Python trên Windows. Việt thêm `--version` để loại alias giả của Windows Store, giữ nguyên fallback `python3`/`python`. Trung thay cả chuỗi bằng đường dẫn `.venv` và bỏ hai fallback đó — làm hook chết im lặng trên macOS/Linux, tức mất deliverable #4. Lấy bản của Việt.
 
 Long đi trước tiến độ; việc gấp duy nhất còn của 3 bạn là xác nhận hook của Long.
+
+**Buổi tối — hai lỗi nữa trong contract ①, cùng loại "sai im lặng".** Việt gộp `spike_promql.py` về bắn thẳng các hằng đang ship trong `src/services/prometheus.py` thay vì giữ bản sao câu query. Đổi xong là lộ ngay hai lỗi mà bản sao che mất.
+
+**Lỗi 5 — `NaN`.** Không có request nào trong cửa sổ `[1m]` thì `rate` = 0, mọi phép chia thành 0/0 = `NaN`. Bốn câu bị: p95, tỷ lệ lỗi, avg latency, baseline. Nguy hiểm hơn kết quả rỗng vì `NaN > x` **và** `NaN < x` đều là `False` — mọi so sánh ngưỡng rơi tọt qua, Agent bỏ lọt sự cố mà không có dấu hiệu gì; mức P4 chết hẳn vì nó dựa trọn vào độ lệch baseline; Pydantic serialize `NaN` thành `null` nên bằng chứng số biến mất khỏi war-room view của Long. Sửa bằng `and on(service) (_HAS_TRAFFIC)` để câu trả **rỗng** thay vì `NaN`, nhờ đó `PrometheusClient.query()` chỉ phải xử lý một trạng thái "không có dữ liệu" thay vì hai.
+
+**Lỗi 6 — baseline tự nhiễm.** Cửa sổ 30 phút bao gồm cả khoảng đang có sự cố, nên `avg_over_time` bị chính sự cố kéo lên: sự cố càng lâu càng trông bình thường. Đo thật với p95 giữ nguyên 1.95s — trung bình cho độ lệch 3.7x ở phút thứ nhất rồi tụt còn 2.1x ở phút thứ ba, trong khi `quantile_over_time(0.1, ...)` đứng yên ở 10.9x. Chọn phân vị 0.1 thay vì trung vị 0.5 vì trung vị bị nhiễm khi sự cố chiếm quá nửa cửa sổ (~15 phút), còn 0.1 chịu được tới ~27 phút — kịch bản demo có bước chờ người duyệt trên Jira, thời gian chờ không đoán trước được.
+
+Sau hai lỗi này, spike chạy đủ 6/6 câu trả số và độ lệch đạt **10.8x** — đủ mạnh để làm bằng chứng cho `Hypothesis`.
+
+**Bài học lặp lại lần thứ hai trong ba ngày: hai bản sao của cùng một thứ thì bản được kiểm tra không phải bản đang chạy.** Lỗi bucket hôm 29/07 lọt lưới cũng vì spike verify bản sao của chính nó, và may chạy đúng lúc có traffic liên tục nên câu baseline vẫn trả ra số.
+
+Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có bậc đầu `(5, 20)` làm warm-up, chỉ cần **kéo dài bậc đó lên vài phút** để cửa sổ 30 phút có đủ dữ liệu bình thường. Đổi sang phân vị vẫn không tạo baseline từ hư không.
+
+---
+
+## 2026-08-01
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Việt | Review và merge PR #10 (`fix/promql-baseline-nan`) vào `develop` | ✅ Done | `9bfaa80`, CI pass | - |
+| Trung | Kéo dài bậc warm-up trong `PROFILE_DEMO` | ⏳ Todo | cần cho baseline có nghĩa | - |
+| Việt | **Cài `PrometheusClient.query()` + `query_range()`** — đường găng tuần 2 | ✅ Done | `query(P95_LATENCY)` → `[MetricSample(service='service-thanh-toan', value=1.93)]` | - |
+| Việt | Thêm `PrometheusError` — phân biệt "không có dữ liệu" với "không biết tình hình" | ✅ Done | Prometheus chết thì raise, không trả rỗng | - |
+| Việt | 9 test cho `PrometheusClient` bằng `httpx.MockTransport`, chạy được trong CI | ✅ Done | 68 test pass, ruff clean | - |
+| Việt | Fix log tiếng Việt vỡ trên console Windows — `configure_logging()` ép UTF-8 cho cả stdout lẫn stderr | ✅ Done | `src/config.py`, gọi trong `lifespan` | - |
+| Việt | **Cài 4 hàm trong `src/services/rules.py`** (`classify_severity`, `detect`, `classify_auth_burst`, `is_spreading`) | ✅ Done | 39 test, 107 test toàn repo pass | - |
+| Việt | **Phát hiện mức P3 và P4 không đạt tới được** với ngưỡng ghi trong stub | ✅ Done | sửa cửa `detect` xuống ngưỡng P3 + thêm `BASELINE_DEVIATION_RATIO` | - |
+
+**Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
+
+Xong **đường găng tuần 2**: `PrometheusClient` hết `NotImplementedError`, `rules.py` và node `detect` hết bị chặn. Phần gọi API gần như chép từ `PrometheusQuerier` đã chạy trong spike, nhưng có thêm một quyết định thiết kế đáng ghi.
+
+**Ranh giới giữa "không có dữ liệu" và "không biết tình hình".** `query()` trả **danh sách rỗng** khi Prometheus chạy tốt nhưng không có series nào — service chưa nhận request, đó là trạng thái bình thường. Còn khi Prometheus chết, sai địa chỉ, hoặc câu PromQL sai cú pháp thì **raise `PrometheusError`**. Nuốt lỗi và trả rỗng ở nhóm thứ hai là nguy hiểm nhất: Agent sẽ hiểu "mọi thứ bình thường" đúng lúc nó mù hoàn toàn. Có 3 test riêng gác ranh giới này.
+
+Client cũng **loại bỏ mẫu `NaN`** kèm warning, dù các câu trong `prometheus.py` đã chặn NaN bằng `_HAS_TRAFFIC`. Đây là lớp phòng thủ thứ hai: hôm 31/07 đã có 4 câu lọt NaN, nếu sau này ai thêm câu mới mà quên bộ lọc thì client vẫn không để NaN chạm tới rule engine.
+
+9 test dùng `httpx.MockTransport` nên **chạy được trong CI mà không cần Prometheus** — phần verify với Prometheus thật vẫn nằm ở `spike/spike_promql.py`, chạy tay khi có docker. Verify thật: cả 7 hằng đều trả đúng qua client (p95 1.93s, lỗi 2.4%, pool 1.00), riêng `AUTH_FAILURE_RATE` trả rỗng kèm warning vì service dummy không có endpoint `/login` — đúng như thiết kế.
+
+**Log tiếng Việt vỡ trên Windows.** Console Windows mặc định cp1252, mà `logging` ghi vào **stderr** chứ không phải stdout, nên cảnh báo của `prometheus.py` in ra thành `Kh�ng gọi được...`. Thêm `configure_logging()` vào `src/config.py`, ép UTF-8 cho cả hai luồng và gắn handler cho root logger — trước đó chưa ai gọi `basicConfig`, nên Python dùng handler "cứu hộ" chỉ in từ WARNING trở lên và `logger.info` biến mất không dấu vết. Nhân tiện hạ `httpx` xuống WARNING: nó log một dòng INFO mỗi request, mà Agent poll Prometheus vài giây một lần.
+
+**Cài `rules.py` — và phát hiện thêm một mức severity chết.** Stub bảo `detect()` chặn ở `P95_THRESHOLD_SECONDS = 2.0`. Nhưng 2.0 là ngưỡng của **P2**, nên mọi tín hiệu lọt qua cửa đó đều đã từ P2 trở lên, và **P3 với P4 trong bảng contract ① vĩnh viễn không đạt tới được**. Cùng loại lỗi với bucket mặc định hôm 29/07 — bảng có 4 mức, thực tế dùng được 2 — chỉ khác là lần này nằm trong Python thay vì PromQL. Sửa: cửa `detect` hạ xuống ngưỡng P3 (thấp nhất), và thêm `BASELINE_DEVIATION_RATIO = 2.0` làm đường vào cho P4 ("lệch baseline nhưng chưa vượt ngưỡng cứng") — không có nó thì P4 nằm trong bảng mà không có cách nào chạm tới. Có test `test_moi_muc_severity_deu_dat_toi_duoc` gác lại, để lần sau ai đổi ngưỡng mà làm chết một mức thì CI đỏ.
+
+Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đây là lớp thứ hai sau `PrometheusClient`: NaN không làm chương trình chết, nó làm `classify_severity` tụt xuống P4 vì `NaN > x` luôn False — một sự cố P1 bị xếp thành nhẹ nhất mà không có dấu hiệu gì.
+
+`classify_auth_burst` (UC-3) đi nhánh riêng, không dùng chung bảng với UC-1: burst credential-stuffing xảy ra khi hệ thống **hoàn toàn khoẻ**, nên severity dựa trên số tuyệt đối request/giây. Có test chứng minh cùng bộ số liệu đó `detect()` trả `None` còn `classify_auth_burst()` trả P1 — nếu hai nhánh dùng chung ngưỡng thì Agent sẽ kết luận "service quá tải" thay vì "vấn đề bảo mật", và theo use-cases.md thì đó là chẩn đoán SAI.
 
 ---
 

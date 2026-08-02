@@ -1,4 +1,6 @@
+import logging
 import os
+import sys
 from functools import lru_cache
 from typing import Literal
 
@@ -90,3 +92,45 @@ def configure_tracing() -> bool:
     os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
     os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project
     return True
+
+
+def configure_logging() -> None:
+    """Dựng logging cho toàn app, và ép console về UTF-8.
+
+    Hai việc, cùng một lý do là log phải đọc được:
+
+    1. **Ép UTF-8 cho stdout/stderr.** Console Windows mặc định dùng cp1252,
+       không có ký tự tiếng Việt. Log của đội viết bằng tiếng Việt nên nó ra
+       thành `Kh�ng g\\u1ecdi \\u0111\\u01b0\\u1ee3c...` — đọc không nổi, mà 2
+       trong 4 thành viên đang làm trên Windows. `logging` ghi vào **stderr**,
+       nên chỉ chỉnh stdout là không đủ.
+
+    2. **Gắn handler cho root logger.** Chưa gọi `basicConfig` thì Python dùng
+       handler "cứu hộ" chỉ in từ mức WARNING trở lên và không có timestamp,
+       nên `logger.info` của `webhooks.py` hay `prometheus.py` biến mất không
+       dấu vết.
+
+    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự gọi
+    `sys.stdout.reconfigure` của riêng nó vì không đi qua `main.py`.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
+        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+    settings = get_settings()
+    logging.basicConfig(
+        level=settings.log_level,
+        format="%(asctime)s %(levelname)-8s %(name)s | %(message)s",
+        datefmt="%H:%M:%S",
+        # uvicorn đã gắn handler trước khi lifespan chạy; không có force thì
+        # basicConfig lặng lẽ không làm gì và mọi cấu hình trên bị bỏ qua.
+        force=True,
+    )
+
+    # `httpx` log một dòng INFO cho MỖI request. Agent poll Prometheus vài giây
+    # một lần, nên để nguyên thì log của đội bị chôn dưới hàng nghìn dòng
+    # "HTTP Request: GET ... 200 OK". Lỗi thật vẫn hiện vì WARNING trở lên
+    # không bị chặn.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
