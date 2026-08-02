@@ -21,7 +21,11 @@ services:
       POSTGRES_PASSWORD: demo
       POSTGRES_DB: demo
     ports:
-      - "5432:5432"
+      # Máy nào đã có Postgres native chạy sẵn thì đổi port host:
+      #   DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+      #   DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+      # Các service demo nói chuyện với nhau qua mạng compose nên không bị ảnh hưởng.
+      - "${DEMO_POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U demo"]
       interval: 5s
