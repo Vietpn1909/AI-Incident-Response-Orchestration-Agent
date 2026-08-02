@@ -67,24 +67,31 @@ def service_from_labels(labels: list[str]) -> str | None:
 # ---------------------------------------------------------------------------
 # Map trạng thái
 # ---------------------------------------------------------------------------
-# Team-managed project của đội hiện có sẵn 5 status: Idea, To Do, In Progress,
-# In Review, Done. Map dưới đây dùng ĐÚNG tên đang có nên code chạy được ngay.
+# Tên trạng thái MONG MUỐN trên board — khớp đúng `IncidentState`.
 #
-# ⚠️ `Idea` PHẢI map vào OPEN, vì Jira đặt mọi issue mới ở status đầu tiên của
-# board — tức `Idea`. Map nó vào trạng thái khác thì incident vừa tạo đã hiện
-# sai ngay (bug đã gặp: issue mới báo là "Remediating").
-#
-# 🔧 KHUYẾN NGHỊ đổi tên 5 cột trên board thành đúng tên IncidentState. Không
-# chỉ để demo đẹp — với tên hiện tại, `REMEDIATING → "To Do"` đọc lên vô nghĩa
-# và người xem board sẽ hiểu sai trạng thái thật của incident. Sau khi đổi tên,
-# sửa đúng dict này là xong, không phải sửa chỗ nào khác:
-#
-#     IncidentState.OPEN:              "Open"
-#     IncidentState.INVESTIGATING:     "Investigating"
-#     IncidentState.AWAITING_APPROVAL: "Awaiting Approval"
-#     IncidentState.REMEDIATING:       "Remediating"
-#     IncidentState.RESOLVED:          "Resolved"
+# Đây là tên nên dùng: comment Agent post lên Jira sẽ ghi "chuyển sang trạng
+# thái Remediating để phê duyệt", đọc lên có nghĩa. Với tên mặc định của Jira
+# thì câu đó thành "chuyển sang trạng thái To Do để phê duyệt" — vô nghĩa, và
+# đã gây nhầm lẫn hai lần khi test thật.
 JIRA_STATUS: dict[IncidentState, str] = {
+    IncidentState.OPEN: "Open",
+    IncidentState.INVESTIGATING: "Investigating",
+    IncidentState.AWAITING_APPROVAL: "Awaiting Approval",
+    IncidentState.REMEDIATING: "Remediating",
+    IncidentState.RESOLVED: "Resolved",
+}
+
+# Tên mặc định của board team-managed khi CHƯA đổi tên cột.
+#
+# Giữ bảng này để code chạy đúng cả trước lẫn sau khi đổi tên — không có
+# khoảng thời gian hỏng ở giữa, và ai clone repo về mà chưa đổi tên board vẫn
+# chạy được ngay. `RealJiraClient` thử tên mong muốn trước, không có thì dùng
+# tên mặc định.
+#
+# ⚠️ `Idea` PHẢI map vào OPEN: Jira đặt mọi issue mới ở status đầu tiên của
+# board. Map sai thì incident vừa tạo đã hiện sai trạng thái ngay (bug đã gặp
+# thật: issue mới báo là "Remediating").
+FALLBACK_STATUS: dict[IncidentState, str] = {
     IncidentState.OPEN: "Idea",
     IncidentState.INVESTIGATING: "In Progress",
     IncidentState.AWAITING_APPROVAL: "In Review",
@@ -92,16 +99,31 @@ JIRA_STATUS: dict[IncidentState, str] = {
     IncidentState.RESOLVED: "Done",
 }
 
-_REVERSE_STATUS: dict[str, IncidentState] = {v: k for k, v in JIRA_STATUS.items()}
+_REVERSE_STATUS: dict[str, IncidentState] = {
+    **{name: state for state, name in FALLBACK_STATUS.items()},
+    **{name: state for state, name in JIRA_STATUS.items()},
+}
+
+
+def status_candidates(state: IncidentState) -> tuple[str, str]:
+    """Tên mong muốn trước, tên mặc định sau.
+
+    `RealJiraClient` thử lần lượt để không phụ thuộc board đã đổi tên hay chưa.
+    """
+    return JIRA_STATUS[state], FALLBACK_STATUS[state]
 
 
 def jira_status_for(state: IncidentState) -> str:
-    """`IncidentState.AWAITING_APPROVAL` → tên status trên Jira."""
+    """Tên mong muốn. Dùng cho thông báo cho người đọc.
+
+    Muốn biết tên ĐANG dùng thật trên board thì phải hỏi Jira — xem
+    `status_candidates()` và cách `RealJiraClient._transition_id()` giải quyết.
+    """
     return JIRA_STATUS[state]
 
 
 def state_from_jira_status(status_name: str) -> IncidentState | None:
-    """Tên status trên Jira → `IncidentState`. None nếu không nằm trong map.
+    """Tên status trên Jira → `IncidentState`. Nhận cả tên mới lẫn tên mặc định.
 
     Trả None thay vì raise, vì issue do người tạo tay có thể ở status bất kỳ và
     Agent phải bỏ qua chúng chứ không được crash.

@@ -216,13 +216,57 @@ Chạy thật trên Prometheus + `loadgen` xác nhận **cả hai quy tắc ch�
 
 ---
 
-## [YYYY-MM-DD]
+## 2026-08-02
 
 | Member | Task | Status | Output | Time |
 |--------|------|--------|--------|------|
-| | | | | |
+| Trương Công Thái Đức | Rà yêu cầu nộp Gate 1 của BTC, đối chiếu với repo → thiếu 3 tài liệu | ✅ Done | Brief, PRD, UI Flow chưa có; kiến trúc/README/AI log hook đã đủ | - |
+| Trương Công Thái Đức | Viết Project Brief — vấn đề, người dùng, phạm vi, 6 chỉ số thành công, ràng buộc, rủi ro | ✅ Done | `docs/brief.md` | - |
+| Trương Công Thái Đức | Viết PRD — 8 user story, 16 yêu cầu chức năng kèm tiêu chí nghiệm thu, 12 NFR, kế hoạch phát hành R0–R5 | ✅ Done | `docs/prd.md` | - |
+| Trương Công Thái Đức | Viết UI Flow + wireframe 2 trang Streamlit, ghi rõ lý do war room không có nút duyệt | ✅ Done | `docs/ui-flow.md` | - |
+| Trương Công Thái Đức | Thêm bảng "Tài liệu nộp" đầu README — mentor mở repo là thấy link, không phải đi tìm | ✅ Done | `README.md` | - |
+| Trương Công Thái Đức *(viết hộ Việt, Việt vắng)* | Node `detect` — đọc Prometheus, đo thời lượng bất thường không cần giữ state, gọi `rules.detect()` | ✅ Done | `src/agents/nodes/detect.py` | - |
+| Trương Công Thái Đức *(viết hộ Việt)* | Node `open_war_room` + vòng lặp quét + CLI chạy Agent | ✅ Done | `src/agents/nodes/open_war_room.py`, `src/agents/detection_loop.py`, `scripts/run_agent.py` | - |
+| Trương Công Thái Đức | 15 test cho chuỗi detect, gồm test canh chính bộ nhận diện PromQL của fake | ✅ Done | `tests/test_agents/test_detection.py` — 133/133 pass | - |
+| Trương Công Thái Đức | Đo thật trên stack demo: load test **không** tạo được sự cố latency, OOM **không** sinh 5xx nào | ⚠️ Blocker cho Việt | Số liệu ở dưới | - |
 
-**Tổng kết ngày:**
+**Tổng kết ngày:** Bổ sung 3 tài liệu Gate 1 còn thiếu. Ba chỗ đáng ghi lại vì chúng lộ ra khi viết chứ không phải khi code:
+
+**Chỉ số M3 (độ chính xác chẩn đoán) chỉ đo được nhờ ground truth đã chốt trước.** `use-cases.md` viết xong ngày 30/07, trước khi Việt viết `rules.py`. Nếu làm ngược lại — chạy Agent rồi mới ghi "nguyên nhân gốc là gì" — thì con số sẽ tự khớp 3/3 và không đo gì cả. Thứ tự ở đây là toàn bộ giá trị của phép đo.
+
+**Ba rủi ro trong brief đều là rủi ro "fail âm thầm".** Metric lệch tên → Prometheus trả rỗng chứ không lỗi. Rollback chỉ ghi log → `verify` không hồi phục → vòng lặp vô hạn giữa buổi demo. Agent mở incident trùng khi load test → war room thành rác. Cùng một họ với `setup_hooks.sh` tuần trước: không có exception nào để lần theo, nên phải chặn bằng tiêu chí nghiệm thu viết sẵn chứ không bằng việc nhớ ra lúc test.
+
+**Viết UI flow mới thấy phải nói rõ vì sao war room không có nút duyệt.** Người đọc mặc định coi đó là thiếu sót. Thật ra một nút duyệt trong Streamlit sẽ tạo đường thứ hai tới `execute_remediation` — mà FR-08 đòi mọi đường phải qua `assert_human_approved()`, và cổng đó xác minh danh tính bằng changelog Jira, cần một transition có tác giả thật. Streamlit không có đăng nhập nên nút đó là đường vòng qua cổng. Quyết định này đã nằm trong code từ đầu, nhưng chưa ở đâu ghi lý do — người review sẽ đọc là quên làm.
+
+### Chiều: viết hộ Việt phần `detect`
+
+Việt vắng, mà `src/agents/nodes/` mới chỉ có `example_node.py` của template — tức là `prometheus.py` và `rules.py` Việt viết xong tuần này vẫn chưa có ai gọi. Viết ba mảnh nối chúng lại: `detect` (đọc → quyết định), `open_war_room` (mở Jira, chống mở trùng), và một vòng lặp tuần tự tối thiểu. **Chưa phải LangGraph** — cố ý, để Việt về dựng state machine mà không phải gỡ thứ tôi làm dở.
+
+**Đo thời lượng bất thường không giữ state.** `rules.detect()` cần `breached_for_seconds`, mà Agent thì poll theo chu kỳ. Giữ mốc bắt đầu trong RAM là cách dễ nghĩ nhất nhưng sai ba chỗ: restart là mất, chạy nhiều instance thì mỗi con một số, và test phải giả lập thời gian. Thay vào đó hỏi thẳng Prometheus — `min_over_time(p95[30s])` mà vẫn trên ngưỡng nghĩa là suốt 30 giây đó chưa lúc nào tụt xuống. Thử 4 cửa sổ (30/60/120/300s) rồi lấy cửa sổ lớn nhất còn thoả.
+
+**Lỗi của chính tôi, tìm ra bằng cách đọc lại `rules.detect()` chứ không phải bằng test.** Bản đầu chỉ đo thời lượng theo p95. Nhưng cửa 1 của `detect()` (`breached_for_seconds >= 30`) chặn **trước** cả ba đường của cửa 2. Hệ quả: sự cố nào không làm chậm latency thì `breached_for_seconds` luôn bằng 0, và **đường error-rate cùng đường lệch baseline vĩnh viễn không với tới được** — tức là toàn bộ UC-2. Đúng cùng một họ lỗi mà Việt đã ghi trong docstring `rules.detect()` và tôi mắc trong bucket hôm 29/07: bảng có nhiều nhánh, thực tế chạy được một. **Cửa lọc "đủ lâu" phải đo đúng cái điều kiện mà nó đang lọc.** Sửa: đo cả ba đường, lấy cửa sổ lớn nhất trong ba.
+
+**Fake trong test sai hai lần liên tiếp, mà test vẫn xanh cả hai lần.** Bộ nhận diện câu PromQL của fake phân loại theo chuỗi đặc trưng. Lần một: xét `http_requests_total` trước → nhận nhầm mọi câu p95 thành câu error, vì `P95_LATENCY` có chứa `http_requests_total` — đó là bộ lọc `_HAS_TRAFFIC` chống NaN của Việt. Lần hai: xét "có chứa `histogram_quantile`" → nhận nhầm baseline thành câu đo lệch, vì `P95_BASELINE_30M` bọc một `histogram_quantile` bên trong. Cả hai lần test vẫn pass, chỉ là **pass vì lý do khác** — `NGHEN` có error 12% nên vẫn ra P2, đúng con số tôi assert. Đã thêm `test_fake_phan_loai_dung_tung_cau_promql` canh chính cái fake. Test giả mà sai thì cả file test thành vô nghĩa, và nó không đỏ để báo.
+
+### Đo thật trên stack demo — hai chỗ demo không tái hiện được sự cố
+
+Chạy `docker compose -f docker-compose.demo.yml up` + `demo/seed.py` + `demo/loadtest.py` để xem Agent có tự mở issue không. **Không mở.** Đào ra hai chuyện, cả hai đều là chuyện thật của demo chứ không phải của detect:
+
+**1. Load test không tạo được sự cố latency.** `loadtest.py` in ra `p95: 0.585s` ở bậc 200 concurrent, nhưng đó là **p95 đo phía client**. Server-side Prometheus đọc **0,048s** suốt cả 5 bậc, và histogram cho thấy 35.202/35.650 request xong dưới 50ms — service không hề chậm. Đã loại trừ từng nghi vấn:
+
+| Thử | rps đạt được | p95 server-side |
+|-----|--------------|-----------------|
+| `demo/loadtest.py` (200 concurrent, từ host) | 294 | 0,048s |
+| Bỏ hàng rào `gather`+`sleep`, nâng `max_connections` (từ host) | 294 | 0,050s |
+| 150 worker liên tục, chạy **trong** mạng compose | 421 | 0,048s |
+
+Trần ~294 rps từ host là port-forward của Docker Desktop trên macOS; vào trong mạng thì lên 421 rps và trần mới là uvicorn một worker. Nhưng p95 server-side **không nhúc nhích ở cả ba lần**, và `db_pool_connections_in_use` chỉ bằng 1 — pool 5 connection chưa bao giờ là nút thắt vì mỗi query xong trong ~3ms. Xếp hàng xảy ra ở socket backlog, **trước khi** ASGI app nhìn thấy request, nên histogram không đo được. Kết luận: câu TODO trong `loadtest.py` — "ghi lại mức tải làm p95 vượt 2s" — trên máy này **không có mức tải nào làm được**. Muốn UC-1 tái hiện thì phải làm việc trong `/pay` nặng lên, không phải bắn thêm tải.
+
+**2. OOM không sinh ra 5xx nào cả.** Gọi `/pay/batch` liên tục: `RestartCount` lên **7**, container chết và restart thật. Nhưng `http_requests_total{status=~"5.."}` **bằng 0 tuyệt đối** — process chết giữa request nên không kịp ghi metric, và counter trong process reset sạch sau restart. Tức là UC-2 hiện **không thể phát hiện được** bằng error-rate, dù `rules.detect()` có đường cho nó.
+
+Prometheus vẫn thấy sự cố, chỉ là bằng metric khác: `min_over_time(up[5m])` = **0**, và `changes(process_start_time_seconds[10m])` = **3**. Hai tín hiệu này có sẵn miễn phí, không cần service làm gì thêm. Nhưng nhận chúng thì phải thêm tham số vào `rules.detect()` — đó là chữ ký hàm của Việt, nên để Việt quyết chứ tôi không tự đổi. Đây là việc đầu tiên Việt cần xem khi về.
+
+**Chuyện nhỏ dọc đường:** máy tôi có Postgres native chiếm sẵn cổng 5432 nên compose không lên được. Đổi thành `${DEMO_POSTGRES_PORT:-5432}` — mặc định giữ nguyên nên cả nhóm không bị ảnh hưởng, ai trùng cổng thì set biến môi trường.
 
 ---
 

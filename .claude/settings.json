@@ -97,7 +97,13 @@
       "Bash(curl -sS --max-time 5 http://localhost:8000/health)",
       "Bash(curl -sS --max-time 5 -o /dev/null -w \" /docs → HTTP %{http_code}\\\\n\" http://localhost:8000/docs)",
       "Bash(curl -sS --max-time 10 http://localhost:8000/openapi.json)",
-      "Bash(ps -o lstart=,command= -p 10155)"
+      "Bash(ps -o lstart=,command= -p 10155)",
+      "Bash(.venv/bin/python /private/tmp/claude-502/-Users-duc-VIN-AI-P-035/f6c2a57b-5eb5-4c66-a9e2-cf6355584931/scratchpad/probe_status.py)",
+      "Bash(grep -nE \"^#{1,3} \" docs/use-cases.md)",
+      "Bash(grep -vE \"^Co-Authored|^$\")",
+      "Bash(perl -pi -e 's/ui-flow\\\\.md#vì-sao-war-room-không-có-nút-duyệt/ui-flow.md#4-vì-sao-war-room-không-có-nút-duyệt/g' docs/prd.md)",
+      "Bash(awk '{print \"main behind HEAD by \"$2\", HEAD behind main by \"$1}')",
+      "Bash(awk '{print \"  local hơn \"$1\" · remote hơn \"$2}')"
     ],
     "additionalDirectories": [
       "/Users/duc/Downloads",

@@ -10,20 +10,25 @@ Ràng buộc của team-managed project đã kiểm chứng ngày 2026-07-29 và
 - Không đặt được điều kiện phân quyền lên transition → cổng phê duyệt nằm ở
   [hitl.py](../hitl.py), dựa trên `get_transition_author()` đọc changelog
 
-Giới hạn hiện tại của đường đọc: `get_incident()` dựng lại được vòng đời
-(trạng thái, severity, service, timeline từ changelog) nhưng **chưa** dựng lại
-`hypotheses` và `proposal` — chúng đang nằm trong comment dưới dạng văn bản cho
-người đọc. Muốn đọc lại có cấu trúc thì nhúng thêm một block JSON có marker vào
-comment và parse ngược; chưa làm vì war-room view hiện đọc từ fixture.
+Đường đọc dựng lại được đầy đủ: vòng đời và timeline từ changelog, còn
+`hypotheses` và `proposal` từ **khối JSON Agent nhúng vào comment**. Comment vẫn
+là văn bản cho người đọc, khối JSON nằm ở cuối và người xem bỏ qua được.
+
+Vì sao cần: webhook nhận được issue key rồi phải biết thi hành hành động gì.
+Không đọc lại được `proposal` thì nó trả 422 "không có đề xuất khắc phục đọc lại
+được" — lỗi gặp thật khi chạy verify end-to-end ngày 2026-08-02. Đường đọc này
+cũng là thứ làm war-room view của Long hiện được dữ liệu thật thay vì fixture.
 """
 
 from __future__ import annotations
 
 import base64
+import json as json_module
 from datetime import datetime
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from src.models.incident import (
     ActionItem,
@@ -45,6 +50,7 @@ from src.services.jira.mapping import (
     service_label,
     severity_from_labels,
     state_from_jira_status,
+    status_candidates,
 )
 
 # Severity khi issue không có label severity (vd. issue người tạo tay lạc vào
@@ -67,21 +73,73 @@ class JiraApiError(RuntimeError):
         self.status_code = status_code
 
 
-def _adf(text: str) -> dict[str, Any]:
-    """Chuyển text thường sang Atlassian Document Format.
+#: Khoá đánh dấu khối JSON do Agent nhúng vào comment.
+#:
+#: Comment trên Jira trước hết là để NGƯỜI đọc, nên phần văn bản giữ nguyên.
+#: Nhưng backend cũng cần đọc lại `proposal` để biết thi hành hành động gì —
+#: không có nó thì webhook nhận được issue key mà không biết làm gì (lỗi 422
+#: gặp thật khi chạy verify end-to-end). Nên đính kèm một khối JSON ở cuối
+#: comment, người đọc bỏ qua được, máy parse lại được.
+_PAYLOAD_KEY = "p035"
 
-    Jira Cloud API v3 chỉ nhận ADF cho description và comment, không nhận string.
-    Mỗi dòng trống tách thành một paragraph.
+
+def _adf(text: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Text thường → Atlassian Document Format, kèm khối JSON máy đọc nếu có.
+
+    Jira Cloud API v3 chỉ nhận ADF cho description và comment, không nhận
+    string. Mỗi dòng trống tách thành một paragraph.
     """
     paragraphs = [p for p in text.split("\n\n") if p.strip()] or [""]
-    return {
-        "type": "doc",
-        "version": 1,
-        "content": [
-            {"type": "paragraph", "content": [{"type": "text", "text": p}] if p else []}
-            for p in paragraphs
-        ],
-    }
+    content: list[dict[str, Any]] = [
+        {"type": "paragraph", "content": [{"type": "text", "text": p}] if p else []}
+        for p in paragraphs
+    ]
+    if payload is not None:
+        content.append(
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "— dữ liệu máy đọc, bỏ qua khi xem bằng mắt —"}
+                ],
+            }
+        )
+        content.append(
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "json"},
+                "content": [{"type": "text", "text": json_module.dumps(payload, ensure_ascii=False)}],
+            }
+        )
+    return {"type": "doc", "version": 1, "content": content}
+
+
+def _extract_payloads(adf: Any) -> list[dict[str, Any]]:
+    """Duyệt ADF, lấy ra mọi khối JSON có khoá đánh dấu của mình.
+
+    Bỏ qua khối không parse được thay vì raise: comment do người gõ tay có thể
+    chứa code block bất kỳ, và một comment lạ không được làm vỡ cả war room.
+    """
+    found: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "codeBlock":
+                raw = "".join(c.get("text", "") for c in node.get("content", []))
+                try:
+                    data = json_module.loads(raw)
+                except (ValueError, TypeError):
+                    return
+                if isinstance(data, dict) and _PAYLOAD_KEY in data:
+                    found.append(data)
+                return
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(adf)
+    return found
 
 
 def _parse_jira_datetime(value: str | None) -> datetime | None:
@@ -150,16 +208,25 @@ class RealJiraClient:
         self.close()
 
     def _transition_id(self, jira_key: str, to_state: IncidentState) -> str:
-        """Jira transition theo id, không theo tên trạng thái đích."""
-        target = jira_status_for(to_state)
+        """Jira transition theo id, không theo tên trạng thái đích.
+
+        Thử tên mong muốn trước, rồi tới tên mặc định của board team-managed —
+        nhờ vậy code chạy đúng cả trước lẫn sau khi đội đổi tên cột, không có
+        khoảng thời gian hỏng ở giữa.
+        """
         data = self._call("GET", f"/rest/api/3/issue/{jira_key}/transitions")
-        for transition in data.get("transitions", []):
-            if transition["to"]["name"] == target:
-                return transition["id"]
-        available = [t["to"]["name"] for t in data.get("transitions", [])]
+        available = {t["to"]["name"]: t["id"] for t in data.get("transitions", [])}
+
+        for candidate in status_candidates(to_state):
+            if candidate in available:
+                return available[candidate]
+
+        wanted = " hoặc ".join(status_candidates(to_state))
         raise JiraApiError(
-            f"{jira_key} không có transition sang '{target}'. Đang có: {available}. "
-            "Kiểm tra JIRA_STATUS trong jira/mapping.py có khớp tên status trên board không."
+            f"{jira_key} không có transition sang '{wanted}'. "
+            f"Đang có: {sorted(available)}. "
+            "Kiểm tra tên cột trên board có khớp JIRA_STATUS hoặc FALLBACK_STATUS "
+            "trong jira/mapping.py không."
         )
 
     # ------------------------------------------------------------ ghi dữ liệu
@@ -200,7 +267,11 @@ class RealJiraClient:
             lines.append(f"Deploy liên quan: {deploy.service} {deploy.version} lúc {deploy.deployed_at:%H:%M:%S}")
         if hypothesis.reasoning:
             lines.append(hypothesis.reasoning)
-        self.add_comment(jira_key, "\n\n".join(lines))
+        self._comment_with_payload(
+            jira_key,
+            "\n\n".join(lines),
+            {_PAYLOAD_KEY: "hypothesis", "data": hypothesis.model_dump(mode="json")},
+        )
         self.transition(jira_key, IncidentState.INVESTIGATING)
 
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
@@ -215,8 +286,30 @@ class RealJiraClient:
             "CHỜ NGƯỜI DUYỆT — Agent không tự thực thi. Chuyển issue sang trạng thái "
             f"'{jira_status_for(IncidentState.REMEDIATING)}' để phê duyệt."
         )
-        self.add_comment(jira_key, "\n\n".join(lines))
+        self._comment_with_payload(
+            jira_key,
+            "\n\n".join(lines),
+            {_PAYLOAD_KEY: "proposal", "data": proposal.model_dump(mode="json")},
+        )
         self.transition(jira_key, IncidentState.AWAITING_APPROVAL)
+
+    def _comment_with_payload(self, jira_key: str, body: str, payload: dict[str, Any]) -> None:
+        """Post comment cho người đọc, kèm khối JSON cho backend đọc lại."""
+        self._call(
+            "POST",
+            f"/rest/api/3/issue/{jira_key}/comment",
+            {"body": _adf(body, payload)},
+        )
+
+    def _payloads_from_comments(self, jira_key: str) -> list[dict[str, Any]]:
+        """Mọi khối JSON Agent đã nhúng vào comment của issue, theo thứ tự thời gian."""
+        data = self._call(
+            "GET", f"/rest/api/3/issue/{jira_key}/comment?maxResults=100&orderBy=created"
+        )
+        payloads: list[dict[str, Any]] = []
+        for comment in data.get("comments", []):
+            payloads.extend(_extract_payloads(comment.get("body")))
+        return payloads
 
     def transition(self, jira_key: str, to_state: IncidentState) -> None:
         transition_id = self._transition_id(jira_key, to_state)
@@ -349,6 +442,25 @@ class RealJiraClient:
             return None
         incident = self._to_incident(issue)
         incident.timeline = self._timeline_from_changelog(jira_key)
+
+        # Dựng lại dữ liệu có cấu trúc từ khối JSON trong comment. Không có
+        # bước này thì `proposal` luôn None và webhook không biết thi hành hành
+        # động gì — lỗi 422 gặp thật khi chạy verify end-to-end.
+        for payload in self._payloads_from_comments(jira_key):
+            kind, data = payload.get(_PAYLOAD_KEY), payload.get("data")
+            if not isinstance(data, dict):
+                continue
+            try:
+                if kind == "hypothesis":
+                    incident.hypotheses.append(Hypothesis.model_validate(data))
+                elif kind == "proposal":
+                    # Lấy đề xuất MỚI NHẤT: incident có thể được đề xuất lại sau
+                    # khi hành động đầu không khắc phục được.
+                    incident.proposal = RemediationProposal.model_validate(data)
+            except ValidationError:
+                # Payload từ phiên bản code cũ hoặc bị sửa tay — bỏ qua, không
+                # để một comment lạ làm vỡ cả war room.
+                continue
         return incident
 
     def list_incidents(self, only_open: bool = False) -> list[Incident]:

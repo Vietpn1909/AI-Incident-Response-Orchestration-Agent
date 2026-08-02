@@ -37,7 +37,29 @@ Loại team-managed hay company-managed **không còn quan trọng**.
 
 ---
 
-## Phần 2 — Trạng thái workflow (tuỳ chọn)
+## Phần 2 — Đổi tên 5 cột board (nên làm sớm)
+
+**Code chạy được cả khi chưa đổi** — `RealJiraClient` thử tên mong muốn trước, không có thì dùng tên mặc định. Nên không có khoảng thời gian hỏng, đổi lúc nào cũng được.
+
+**Nhưng nên đổi sớm**, vì tên mặc định đã gây nhầm lẫn hai lần khi test thật:
+
+1. Bug `Idea → Remediating`: issue vừa tạo đã hiện là "Remediating"
+2. Comment Agent ghi *"chuyển sang trạng thái **To Do** để phê duyệt"* — đọc lên vô nghĩa, và người xem demo sẽ hiểu sai trạng thái
+
+Cách đổi: mở board của project → bấm vào **tên cột** → sửa. Team-managed cho đổi trực tiếp, không cần quyền admin.
+
+| Cột hiện tại | Đổi thành |
+|---|---|
+| `Idea` | **Open** |
+| `In Progress` | **Investigating** |
+| `In Review` | **Awaiting Approval** |
+| `To Do` | **Remediating** |
+| `Done` | **Resolved** |
+
+Đổi xong **không cần sửa code** — `JIRA_STATUS` trong [`jira/mapping.py`](../src/services/jira/mapping.py) đã dùng đúng bộ tên này.
+
+<details>
+<summary>Bản cũ của mục này (giữ để tham khảo)</summary>
 
 **Không bắt buộc.** Project đã có sẵn 5 status `Idea · To Do · In Progress · In Review · Done`, và [`JIRA_STATUS`](../src/services/jira/mapping.py) map thẳng vào 5 trạng thái incident nên code chạy được ngay.
 
@@ -51,6 +73,8 @@ Open  ·  Investigating  ·  Awaiting Approval  ·  Remediating  ·  Resolved
 - [ ] Sau khi đổi, sửa dict `JIRA_STATUS` trong `src/services/jira/mapping.py` cho khớp — chỉ một chỗ đó
 
 Không cần cấu hình transition. Team-managed cho chuyển tự do giữa mọi trạng thái, và điều đó **không sao** vì hàng rào phê duyệt nằm ở backend.
+
+</details>
 
 ---
 

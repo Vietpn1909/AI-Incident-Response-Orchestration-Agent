@@ -1,153 +1,169 @@
-"""Node `detect` — query PromQL, so baseline, quyết định có phải sự cố không.
+"""Node `detect` — đọc Prometheus, quyết định có phải sự cố không.
 
-CHỦ SỞ HỮU: Việt
+CHỦ SỞ HỮU: Việt. File này Đức viết hộ ngày 02/08 lúc Việt vắng, để chuỗi
+end-to-end chạy được. Việt cứ sửa thoải mái, nhất là chỗ đo `breached_for_seconds`.
 
-Node đầu tiên của graph. Nó không tự nghĩ ra gì cả: lấy số từ Prometheus
-(`services/prometheus.py`), đưa qua rule engine (`services/rules.py`), và trả
-về danh sách tín hiệu. Mọi ngưỡng nằm ở `rules.py`, không nằm ở đây.
-
-**Không hardcode danh sách service.** Prometheus trả về mỗi service một series,
-nên service nào đang có traffic thì tự xuất hiện. Service không nhận request
-nào sẽ không có trong kết quả — đúng ngữ nghĩa "rỗng = không có dữ liệu" mà
-`PrometheusClient` đã chốt. Thêm service mới chỉ cần sửa `prometheus.yml`.
+Node này chỉ **đọc và quyết định**, không chạm Jira. Việc mở war room là của
+[`open_war_room`](open_war_room.py) — tách ra để `detect` test được mà không
+cần Jira, và để chống mở trùng nằm đúng một chỗ.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
-from src.agents.state import IncidentAgentState
-from src.config import get_settings
 from src.models.incident import IncidentSignal
 from src.services import prometheus, rules
-from src.services.prometheus import PrometheusClient, PrometheusError
+from src.services.prometheus import PrometheusClient
 
 logger = logging.getLogger(__name__)
 
+#: Các cửa sổ thời gian dùng để đo "đã vượt ngưỡng liên tục bao lâu".
+#:
+#: `rules.detect()` cần `breached_for_seconds`, mà Agent thì poll theo chu kỳ.
+#: Giữ mốc bắt đầu trong bộ nhớ là cách dễ nghĩ nhất nhưng sai ở ba điểm:
+#: restart Agent là mất, chạy nhiều instance thì mỗi con một số, và test phải
+#: giả lập thời gian.
+#:
+#: Thay vào đó hỏi thẳng Prometheus: `min_over_time(p95[30s])` mà vẫn trên
+#: ngưỡng nghĩa là suốt 30 giây đó chưa lúc nào tụt xuống. Stateless, restart
+#: không ảnh hưởng, và test chỉ cần một `MockTransport`.
+#:
+#: Thử từ cửa sổ nhỏ tới lớn rồi lấy cửa sổ lớn nhất còn thoả — cho ra con số
+#: xấp xỉ nhưng có thật, đủ để ghi vào war room ("vượt liên tục 120s").
+SUSTAINED_PROBE_WINDOWS = (30, 60, 120, 300)
 
-class BreachTracker:
-    """Nhớ mỗi service đã vượt ngưỡng liên tục bao lâu.
+#: Bước lấy mẫu bên trong mỗi cửa sổ. Khớp `scrape_interval: 5s` của
+#: [demo/prometheus.yml](../../../demo/prometheus.yml) — lấy dày hơn scrape thì
+#: chỉ đọc lại cùng một điểm dữ liệu.
+_PROBE_STEP_SECONDS = 5
 
-    Vì sao cần một object có trạng thái: quy tắc "chỉ tính là incident khi vượt
-    ngưỡng liên tục ≥ 30s" bắc qua **nhiều vòng poll**, mà state của LangGraph
-    chỉ sống trong một lần chạy graph. Không có nó thì `breached_for_seconds`
-    luôn là 0 và quy tắc chống nhiễu quan trọng nhất trở thành vô hiệu — lúc
-    load test Agent sẽ mở hàng loạt incident trùng nhau.
 
-    Cách dùng: gọi `update()` mỗi vòng poll cho mọi service đang quan sát.
+def _samples_by_service(client: PrometheusClient, promql: str) -> dict[str, float]:
+    """Chạy một câu PromQL, trả `{service: giá trị}`.
+
+    Rỗng không phải lỗi — service chưa nhận request nào thì không có series.
+    `PrometheusClient.query()` đã log warning cho trường hợp đó.
     """
-
-    def __init__(self) -> None:
-        #: service -> thời điểm bắt đầu vượt ngưỡng liên tục
-        self._since: dict[str, datetime] = {}
-
-    def update(self, service: str, *, breaching: bool, now: datetime | None = None) -> float:
-        """Cập nhật và trả về số giây đã vượt ngưỡng liên tục.
-
-        Args:
-            service: Tên service.
-            breaching: Vòng poll này service có vượt ngưỡng không.
-            now: Thời điểm hiện tại, để test bơm vào được.
-
-        Returns:
-            Số giây kể từ lúc bắt đầu vượt ngưỡng. `0.0` nếu đang bình thường,
-            hoặc nếu vừa mới vượt ở vòng này.
-        """
-        moment = now or datetime.now(UTC)
-
-        if not breaching:
-            # Hồi phục thì xoá mốc: lần vượt ngưỡng sau phải đếm lại từ đầu,
-            # nếu không thì hai sự cố cách nhau một tiếng bị cộng dồn thành một.
-            self._since.pop(service, None)
-            return 0.0
-
-        started = self._since.setdefault(service, moment)
-        return (moment - started).total_seconds()
-
-    def forget(self, service: str) -> None:
-        """Quên mốc của một service — dùng sau khi incident đã được xử lý xong."""
-        self._since.pop(service, None)
-
-    def tracked_services(self) -> set[str]:
-        """Các service đang có mốc vượt ngưỡng."""
-        return set(self._since)
+    return {sample.service: sample.value for sample in client.query(promql)}
 
 
-#: Tracker dùng chung cho vòng poll của Agent. Đặt ở module vì nó phải sống lâu
-#: hơn một lần chạy graph.
-_tracker = BreachTracker()
+def _sustained(client: PrometheusClient, expr: str, threshold: float) -> dict[str, float]:
+    """Cửa sổ lớn nhất mà `expr` chưa lúc nào tụt xuống dưới `threshold`.
+
+    Service không vượt ngưỡng thì không có mặt trong kết quả.
+
+    So bằng `>` cho cả ba đường đo, kể cả đường lệch baseline mà `rules.detect()`
+    so bằng `>=`. Lệch nhau đúng tại điểm bằng nhau tuyệt đối — với số thực đọc
+    từ Prometheus thì gần như không xảy ra, và sai về phía thận trọng (chậm
+    một nhịp scrape) chứ không phải phía báo nhầm.
+    """
+    sustained: dict[str, float] = {}
+    for window in SUSTAINED_PROBE_WINDOWS:
+        promql = f"min_over_time(({expr})[{window}s:{_PROBE_STEP_SECONDS}s])"
+        for service, value in _samples_by_service(client, promql).items():
+            if value > threshold:
+                sustained[service] = float(window)
+    return sustained
 
 
-def _by_service(samples: list[prometheus.MetricSample]) -> dict[str, float]:
-    return {sample.service: sample.value for sample in samples}
+def breached_seconds_by_service(client: PrometheusClient) -> dict[str, float]:
+    """Mỗi service đã ở trạng thái bất thường liên tục bao nhiêu giây.
+
+    Phải đo **cả ba** đường mà cửa 2 của `rules.detect()` chấp nhận, rồi lấy
+    cửa sổ lớn nhất trong ba:
+
+    1. p95 vượt ngưỡng cứng P3
+    2. tỷ lệ lỗi 5xx vượt ngưỡng cứng P3
+    3. p95 lệch baseline từ `BASELINE_DEVIATION_RATIO` lần trở lên
+
+    ⚠️ Bản đầu của file này chỉ đo đường 1. Hệ quả: cửa 1 (`breached_for_seconds
+    >= SUSTAINED_SECONDS`) luôn thấy 0 với sự cố **không** làm chậm latency, nên
+    hai đường còn lại của `rules.detect()` vĩnh viễn không với tới được — đúng
+    kịch bản UC-2, container OOM rồi restart, service phun 5xx trong khi những
+    request còn sống vẫn nhanh như thường. Cửa lọc "đủ lâu" phải đo đúng cái
+    điều kiện mà nó đang lọc.
+
+    Dùng ngưỡng P3 (thấp nhất) chứ không phải P2: đây chỉ là cửa "đủ lâu",
+    còn việc phân loại nặng nhẹ là của `rules.classify_severity()`. Chặn ở P2
+    tại đây thì P3 và P4 vĩnh viễn không đạt tới được — cùng loại lỗi Việt đã
+    ghi trong docstring `rules.detect()`.
+    """
+    latency = _sustained(client, prometheus.P95_LATENCY, rules.P95_P3_SECONDS)
+    errors = _sustained(client, prometheus.ERROR_RATE, rules.ERROR_RATE_P3)
+    # Baseline 0 (chưa có lịch sử) làm phép chia trả rỗng, không phải chia cho 0
+    # — Prometheus bỏ hẳn series thay vì sinh Inf. Khớp với nhánh
+    # `p95_baseline > 0` trong `rules.detect()`.
+    deviation = _sustained(
+        client,
+        f"({prometheus.P95_LATENCY}) / ({prometheus.P95_BASELINE_30M})",
+        rules.BASELINE_DEVIATION_RATIO,
+    )
+
+    sustained: dict[str, float] = {}
+    for source in (latency, errors, deviation):
+        for service, window in source.items():
+            sustained[service] = max(sustained.get(service, 0.0), window)
+    return sustained
 
 
-def detect_node(state: IncidentAgentState) -> dict:
-    """Query Prometheus, chạy rule engine, trả về mọi tín hiệu sự cố.
+def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
+    """Quét toàn bộ service, trả tín hiệu sự cố nếu có.
+
+    Gọi 4 + 12 câu PromQL mỗi vòng (4 metric, và 4 cửa sổ × 3 đường đo thời
+    lượng), không phụ thuộc số service — Prometheus trả tất cả service trong
+    một lần.
+
+    Đo trên stack demo ngày 02/08: một vòng đầy đủ mất khoảng **2,2 giây**, gần
+    hết nằm ở 4 câu đo lệch baseline — mỗi câu bọc một `quantile_over_time` cửa
+    sổ 30 phút bên trong một subquery. Với `--interval 10` thì Agent bận khoảng
+    22% thời gian. Hạ interval xuống dưới 5s là hai vòng chồng lên nhau, cần đo
+    lại trước khi làm.
 
     Returns:
-        `{"signals": [...]}`. Danh sách rỗng nghĩa là **đã kiểm tra và mọi thứ
-        bình thường**. Nếu không query được Prometheus thì trả `{"error": ...}`
-        thay vì danh sách rỗng — hai tình huống đó phải phân biệt được, xem
-        `PrometheusError`.
-    """
-    client = _client()
+        Danh sách `IncidentSignal`, rỗng nghĩa là mọi thứ bình thường.
 
-    try:
-        p95_now = _by_service(client.query(prometheus.P95_LATENCY))
-        baseline = _by_service(client.query(prometheus.P95_BASELINE_30M))
-        error_rate = _by_service(client.query(prometheus.ERROR_RATE))
-        pool = _by_service(client.query(prometheus.POOL_SATURATION_PEAK_5M))
-    except PrometheusError as error:
-        # Không biết tình hình ra sao. Trả rỗng ở đây là nói dối rằng mọi thứ ổn.
-        logger.error("detect: không đọc được metric — %s", error)
-        return {"error": str(error), "signals": []}
+    Raises:
+        PrometheusError: không gọi được Prometheus hoặc PromQL sai cú pháp.
+            KHÔNG nuốt lỗi ở đây — Agent mù mà tưởng "bình thường" là tình
+            huống nguy hiểm nhất.
+    """
+    p95 = _samples_by_service(client, prometheus.P95_LATENCY)
+    if not p95:
+        logger.warning(
+            "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
+            "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
+        )
+        return []
+
+    baseline = _samples_by_service(client, prometheus.P95_BASELINE_30M)
+    error_rate = _samples_by_service(client, prometheus.ERROR_RATE)
+    pool = _samples_by_service(client, prometheus.POOL_SATURATION_PEAK_5M)
+    sustained = breached_seconds_by_service(client)
 
     signals: list[IncidentSignal] = []
-    for service, p95 in p95_now.items():
-        breaching = _is_breaching(p95, baseline.get(service, 0.0), error_rate.get(service, 0.0))
-        breached_for = _tracker.update(service, breaching=breaching)
-
+    for service, p95_now in p95.items():
         signal = rules.detect(
-            p95_now=p95,
+            p95_now=p95_now,
             p95_baseline=baseline.get(service, 0.0),
             error_rate=error_rate.get(service, 0.0),
+            # service-dat-hang không có metric pool — 0.0 là đúng, nó không
+            # dùng connection pool nên không thể là nguyên nhân gốc ở đó.
             pool_saturation=pool.get(service, 0.0),
             service=service,
-            breached_for_seconds=breached_for,
+            breached_for_seconds=sustained.get(service, 0.0),
         )
-        if signal is not None:
-            signals.append(signal)
-            logger.warning(
-                "detect: %s vượt ngưỡng %.0fs — p95=%.2fs, lỗi=%.1f%%, pool=%.0f%%",
-                service,
-                breached_for,
-                p95,
-                error_rate.get(service, 0.0) * 100,
-                pool.get(service, 0.0) * 100,
-            )
+        if signal is None:
+            continue
+        logger.info(
+            "Phát hiện sự cố %s trên %s: %s = %.3f (ngưỡng %.3f), vượt liên tục %.0fs",
+            signal.severity.value,
+            service,
+            signal.metric_name,
+            signal.metric_value,
+            signal.threshold,
+            signal.breached_for_seconds,
+        )
+        signals.append(signal)
 
-    # Service đã hồi phục cũng phải được cập nhật, nếu không mốc vượt ngưỡng cũ
-    # nằm lại mãi và lần sau vừa chớm vượt đã bị tính là đã kéo dài hàng giờ.
-    for service in _tracker.tracked_services() - set(p95_now):
-        _tracker.forget(service)
-
-    return {"signals": signals}
-
-
-def _is_breaching(p95: float, p95_baseline: float, error_rate: float) -> bool:
-    """Vòng poll này service có bất thường không.
-
-    Dùng đúng điều kiện của `rules.detect()`, chỉ khác là không xét thời gian —
-    vì đây chính là thứ dùng để *đo* thời gian. Hai chỗ phải khớp nhau, lệch là
-    tracker đếm một đằng còn rule engine kết luận một nẻo.
-    """
-    breached_hard = p95 > rules.P95_P3_SECONDS or error_rate > rules.ERROR_RATE_P3
-    deviated = p95_baseline > 0 and p95 / p95_baseline >= rules.BASELINE_DEVIATION_RATIO
-    return breached_hard or deviated
-
-
-def _client() -> PrometheusClient:
-    """Tạo client theo cấu hình. Tách thành hàm riêng để test thay được."""
-    return PrometheusClient(base_url=get_settings().prometheus_url)
+    return signals

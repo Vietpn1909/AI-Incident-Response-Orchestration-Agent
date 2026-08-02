@@ -36,7 +36,7 @@ from src.models.incident import (  # noqa: E402
     Severity,
 )
 from src.services.hitl import ApprovalError, assert_human_approved  # noqa: E402
-from src.services.jira import RealJiraClient, jira_status_for  # noqa: E402
+from src.services.jira import RealJiraClient, status_candidates  # noqa: E402
 from src.services.prometheus import P95_LATENCY  # noqa: E402
 
 LOCAL_URL = "http://localhost:8000"
@@ -181,14 +181,13 @@ def main() -> int:
 
         # ── 5. Người duyệt thật ───────────────────────────────────────────
         step(5, "Chờ BẠN duyệt trên Jira")
-        awaiting = jira_status_for(IncidentState.AWAITING_APPROVAL)
-        remediating = jira_status_for(IncidentState.REMEDIATING)
-        print(f"   Issue đã được đưa về '{awaiting}' (= Awaiting Approval).")
+        current = jira.get_incident(key)
+        current_name = current.state.value if current else "?"
+        want_rem, old_rem = status_candidates(IncidentState.REMEDIATING)
+        print(f"   Issue đang ở '{current_name}'.")
         print(f"   Mở {env['JIRA_BASE_URL']}/browse/{key}")
         print("   Đăng nhập bằng account CỦA BẠN (không phải account Agent),")
-        print(f"   chuyển issue sang cột  '{remediating}'  (= Remediating).")
-        if remediating != "Remediating":
-            print(f"   ⚠️  Cột tên '{remediating}' vì board chưa đổi tên — xem jira-setup.md Phần 2.")
+        print(f"   chuyển issue sang '{want_rem}'.")
         input("\n   Duyệt xong thì Enter... ")
 
         author = jira.get_transition_author(key, IncidentState.REMEDIATING)

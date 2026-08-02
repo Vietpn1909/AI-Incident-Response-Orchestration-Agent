@@ -92,6 +92,89 @@ Mức tải làm p95 > 2s trên máy demo: ~285 request/giây, 200 concurrent (L
 Đo ngày: 30/07/2026   Máy: LAPTOP-240I2QTN (Windows)
 ```
 
+## UC-2 — OOM và restart
+
+`service-thanh-toan` bị giới hạn 128 MB RAM. Mỗi lần gọi `/pay/batch`, service
+giữ thêm một batch kết quả truy vấn trong RAM; gọi lặp lại sẽ làm Docker
+OOM-kill rồi tự restart container.
+
+```powershell
+# Windows PowerShell — tiếp tục gọi kể cả lúc container đang restart
+1..30 | ForEach-Object {
+  try {
+    (Invoke-RestMethod -Method Post http://localhost:8001/pay/batch).retained_batches
+  } catch {
+    "container đang restart"
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+docker inspect --format "restart={{.RestartCount}} limit={{.HostConfig.Memory}}" `
+  p035-demo-service-thanh-toan-1
+```
+
+Đã verify ngày 31/07/2026: Docker phát sự kiện `oom`, `RestartCount` tăng từ 0
+lên 1, và `retained_batches` trở về 1 sau khi process mới khởi động.
+
+## UC-3 — Burst đăng nhập thất bại
+
+Cách ổn định nhất là chạy máy phát tải trong Docker network, tránh giới hạn NAT
+của Docker Desktop trên Windows:
+
+```bash
+docker compose -f docker-compose.demo.yml exec -T service-dat-hang \
+  python attack.py --url http://service-thanh-toan:8001/login
+```
+
+Cũng có thể chạy từ host bằng `python demo/attack.py`, nhưng tốc độ thực trên
+Windows có thể thấp hơn mục tiêu dù service vẫn xử lý nhanh.
+
+Đã verify ngày 31/07/2026: 12.000/12.000 response là `401` trong 60 giây
+(200,0 request/giây); Prometheus đo p95 `/login` khoảng 0,048 giây, pool 0%,
+không có lỗi 5xx. Như vậy đây là bất thường truy cập, không phải quá tải.
+
+## ⚠️ Đo ngày 02/08/2026 — mức tải nào làm p95 vượt 2s?
+
+**Chưa có mức nào.** `loadtest.py` in ra `p95: 0.585s` ở bậc 200 concurrent,
+nhưng đó là p95 đo **phía client**. Prometheus đọc p95 **server-side** là
+**0,048 giây** suốt cả 5 bậc, và histogram cho thấy 35.202/35.650 request xong
+dưới 50ms.
+
+Đã loại trừ từng nghi vấn:
+
+| Thử | rps đạt được | p95 server-side |
+|-----|--------------|-----------------|
+| `loadtest.py` như hiện tại (200 concurrent, từ host) | 294 | 0,048s |
+| Bỏ hàng rào `gather`+`sleep(0.05)`, nâng `max_connections` | 294 | 0,050s |
+| 150 worker liên tục, chạy **trong** mạng compose | 421 | 0,048s |
+
+Trần ~294 rps từ host là port-forward của Docker Desktop trên macOS; vào trong
+mạng compose thì lên 421 rps, trần mới là uvicorn một worker. Nhưng p95
+server-side không nhúc nhích ở cả ba lần, và `db_pool_connections_in_use` chỉ
+bằng **1** — pool 5 connection chưa bao giờ là nút thắt, vì mỗi query xong
+trong khoảng 3ms. Việc xếp hàng xảy ra ở socket backlog, **trước khi** ASGI app
+nhìn thấy request, nên histogram không đo được.
+
+Muốn UC-1 tái hiện thì phải làm **việc trong `/pay` nặng lên** (query tốn thời
+gian hơn, hoặc `pg_sleep`), chứ bắn thêm tải không giải quyết được.
+
+### OOM không sinh ra 5xx nào
+
+Gọi `/pay/batch` liên tục: `RestartCount` lên **7** — container chết và restart
+thật. Nhưng `http_requests_total{status=~"5.."}` **bằng 0 tuyệt đối**: process
+chết giữa request nên không kịp ghi metric, và counter trong process reset sạch
+sau restart.
+
+Prometheus vẫn thấy sự cố, chỉ bằng metric khác:
+
+```promql
+min_over_time(up[5m])                          # = 0
+changes(process_start_time_seconds[10m])       # = 3
+```
+
+Nên **UC-2 không phát hiện được bằng error rate**. Việc nhận hai tín hiệu trên
+cần thêm tham số vào `rules.detect()` — đang chờ Việt quyết.
+
 ## Vì sao pool = 5
 
 Khi tải cao, request phải xếp hàng chờ connection → latency tăng **thật** do nghẽn cổ chai, không phải mình gán một con số giả. Nhờ vậy Agent có nguyên nhân thật để tìm ra. **Đây là chủ đích, không phải nhầm.**

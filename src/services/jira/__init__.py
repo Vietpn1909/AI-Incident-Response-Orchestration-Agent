@@ -14,6 +14,7 @@ là quy tắc nghiệp vụ áp lên dữ liệu Jira, không phải một thao 
 
 from src.services.jira.client import FakeJiraClient, JiraClient
 from src.services.jira.mapping import (
+    FALLBACK_STATUS,
     INCIDENT_LABEL,
     JIRA_STATUS,
     jira_status_for,
@@ -24,10 +25,12 @@ from src.services.jira.mapping import (
     severity_from_labels,
     severity_label,
     state_from_jira_status,
+    status_candidates,
 )
 from src.services.jira.real import JiraApiError, RealJiraClient
 
 __all__ = [
+    "FALLBACK_STATUS",
     "INCIDENT_LABEL",
     "JIRA_STATUS",
     "FakeJiraClient",
@@ -42,4 +45,5 @@ __all__ = [
     "severity_from_labels",
     "severity_label",
     "state_from_jira_status",
+    "status_candidates",
 ]

@@ -6,6 +6,7 @@ tạo và đọc lại được, JQL tìm theo label ra đúng issue.
 
 from src.models.incident import IncidentState, Severity
 from src.services.jira import (
+    FALLBACK_STATUS,
     INCIDENT_LABEL,
     JIRA_STATUS,
     jira_status_for,
@@ -14,6 +15,7 @@ from src.services.jira import (
     service_from_labels,
     severity_from_labels,
     state_from_jira_status,
+    status_candidates,
 )
 
 
@@ -69,9 +71,90 @@ def test_jql_khong_loc_service_van_hop_le():
 
 
 def test_status_dau_tien_cua_board_phai_la_open():
-    """Jira đặt mọi issue mới ở status đầu tiên của board — hiện là `Idea`.
+    """Jira đặt mọi issue mới ở status đầu tiên của board — mặc định là `Idea`.
 
     Map `Idea` vào trạng thái khác thì incident vừa tạo đã hiện sai ngay. Bug
     này đã gặp thật ngày 2026-07-29: issue mới tạo báo là "Remediating".
     """
-    assert jira_status_for(IncidentState.OPEN) == "Idea"
+    assert FALLBACK_STATUS[IncidentState.OPEN] == "Idea"
+
+
+def test_nhan_ca_ten_moi_lan_ten_mac_dinh():
+    """Code phải chạy đúng cả trước lẫn sau khi đội đổi tên cột board.
+
+    Không có điều này thì lúc đổi tên sẽ có một khoảng thời gian hỏng: code
+    dùng tên mới nhưng board còn tên cũ, mọi transition đều fail.
+    """
+    assert state_from_jira_status("Awaiting Approval") is IncidentState.AWAITING_APPROVAL
+    assert state_from_jira_status("In Review") is IncidentState.AWAITING_APPROVAL
+    assert state_from_jira_status("Remediating") is IncidentState.REMEDIATING
+    assert state_from_jira_status("To Do") is IncidentState.REMEDIATING
+
+
+def test_status_candidates_uu_tien_ten_moi():
+    """Thử tên mong muốn trước — sau khi đổi tên board thì dùng ngay tên đó."""
+    for state in IncidentState:
+        preferred, fallback = status_candidates(state)
+        assert preferred == JIRA_STATUS[state]
+        assert fallback == FALLBACK_STATUS[state]
+
+
+def test_moi_state_deu_co_ca_hai_ten():
+    for state in IncidentState:
+        assert state in JIRA_STATUS, f"thiếu tên mong muốn cho {state}"
+        assert state in FALLBACK_STATUS, f"thiếu tên mặc định cho {state}"
+
+
+# ─────────────────── khối JSON máy đọc trong comment
+
+def test_adf_khong_payload_thi_chi_co_paragraph():
+    from src.services.jira.real import _adf
+
+    doc = _adf("dòng một\n\ndòng hai")
+
+    assert [n["type"] for n in doc["content"]] == ["paragraph", "paragraph"]
+
+
+def test_adf_co_payload_thi_them_code_block():
+    from src.services.jira.real import _adf, _extract_payloads
+
+    doc = _adf("người đọc thấy dòng này", {"p035": "proposal", "data": {"action": "rollback"}})
+
+    assert doc["content"][-1]["type"] == "codeBlock"
+    assert _extract_payloads(doc) == [{"p035": "proposal", "data": {"action": "rollback"}}]
+
+
+def test_bo_qua_code_block_khong_phai_cua_minh():
+    """Comment người gõ tay có thể chứa code block bất kỳ — không được làm vỡ."""
+    from src.services.jira.real import _extract_payloads
+
+    doc = {
+        "type": "doc",
+        "content": [
+            {"type": "codeBlock", "content": [{"text": "SELECT * FROM payments"}]},
+            {"type": "codeBlock", "content": [{"text": '{"khac": "khong-phai-cua-minh"}'}]},
+            {"type": "codeBlock", "content": [{"text": '{"p035": "proposal", "data": {}}'}]},
+        ],
+    }
+
+    assert _extract_payloads(doc) == [{"p035": "proposal", "data": {}}]
+
+
+def test_proposal_di_qua_adf_roi_ve_van_nguyen_ven():
+    """Vòng tròn ghi rồi đọc lại — đây là thứ webhook dựa vào để biết thi hành gì."""
+    from src.models.incident import RemediationProposal
+    from src.services.jira.real import _adf, _extract_payloads
+
+    goc = RemediationProposal(
+        action="rollback",
+        target="service-thanh-toan",
+        params={"to_version": "v1.4.1"},
+        runbook="1. Xác nhận artifact  2. Rollback",
+        risk="Mất tính năng mới",
+    )
+
+    doc = _adf("đề xuất", {"p035": "proposal", "data": goc.model_dump(mode="json")})
+    doc_lai = RemediationProposal.model_validate(_extract_payloads(doc)[0]["data"])
+
+    assert doc_lai == goc
+    assert doc_lai.requires_approval is True
