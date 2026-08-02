@@ -24,7 +24,18 @@ from src.services.prometheus import PrometheusClient
 
 # Giá trị mô phỏng lúc nghẽn, lấy từ số Việt đo được trong spike:
 # p95 1.95s, pool cạn 100%, lỗi 2.1%, baseline 0.18s.
-NGHEN = {"p95": 5.1, "baseline": 0.2, "error": 0.12, "pool": 1.0}
+#
+# ⚠️ Mỗi bộ số chỉ được kích hoạt ĐÚNG MỘT đường phát hiện, để khi test đỏ thì
+# biết ngay đường nào hỏng. `NGHEN` bản đầu đặt `error: 0.12`, mà 12% lỗi tự nó
+# đã vượt ngưỡng P2 — nên hạ p95 từ 5.1 xuống 0.1 test vẫn xanh: nó đang nghiệm
+# thu đường error-rate chứ không phải đường p95, dù tên test nói ngược lại.
+#
+#   NGHEN     → chỉ đường p95      (error 0, lệch baseline không đủ ngưỡng)
+#   OOM_5XX   → chỉ đường error    (p95 bình thường, sát baseline)
+#   CHAM_NHE  → chỉ đường baseline (p95 dưới ngưỡng cứng P3, error 0)
+NGHEN = {"p95": 5.1, "baseline": 0.2, "error": 0.0, "pool": 1.0}
+OOM_5XX = {"p95": 0.05, "baseline": 0.048, "error": 0.35, "pool": 0.2}
+CHAM_NHE = {"p95": 0.4, "baseline": 0.1, "error": 0.0, "pool": 0.9}
 BINH_THUONG = {"p95": 0.095, "baseline": 0.181, "error": 0.0, "pool": 0.0}
 
 
@@ -177,8 +188,7 @@ def test_5xx_tran_nhung_latency_binh_thuong_van_bao():
     Lỗi thật đã gặp: bản đầu của `breached_seconds_by_service()` chỉ đo p95, nên
     cửa "đủ lâu" luôn thấy 0 với kịch bản này và Agent im lặng suốt sự cố.
     """
-    oom = {"p95": 0.05, "baseline": 0.048, "error": 0.35, "pool": 0.2}
-    with _prometheus(oom) as client:
+    with _prometheus(OOM_5XX) as client:
         signals = detect_incidents(client)
 
     assert len(signals) == 1
@@ -192,8 +202,7 @@ def test_lech_baseline_nhung_duoi_nguong_cung_van_bao():
     Cùng loại lỗi: nếu chỉ đo thời lượng bằng ngưỡng cứng thì đường lệch
     baseline của `rules.detect()` không bao giờ với tới được.
     """
-    cham = {"p95": 0.4, "baseline": 0.1, "error": 0.0, "pool": 0.9}
-    with _prometheus(cham) as client:
+    with _prometheus(CHAM_NHE) as client:
         signals = detect_incidents(client)
 
     assert len(signals) == 1
