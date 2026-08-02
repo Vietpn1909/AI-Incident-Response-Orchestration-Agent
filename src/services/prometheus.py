@@ -10,12 +10,17 @@ chốt với Trung và **đã được Việt verify trên Prometheus thật** (
 chữ là Prometheus trả kết quả rỗng chứ không báo lỗi, và Agent im lặng không
 phát hiện gì.
 
-Việt làm: các chỗ có TODO(Việt).
+`PrometheusClient` đã cài đặt xong (2026-08-01), verify trên Prometheus thật.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+
+import httpx
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PromQL — contract ①, đã chốt. Dùng nguyên văn.
@@ -150,6 +155,20 @@ and on(service) ({_HAS_TRAFFIC})
 """
 
 
+class PrometheusError(RuntimeError):
+    """Không lấy được dữ liệu từ Prometheus.
+
+    Cố ý KHÔNG dùng cho trường hợp "query chạy được nhưng không có series nào" —
+    đó là trạng thái bình thường (service chưa có request), và `query()` trả
+    danh sách rỗng cho nó.
+
+    Ném lỗi ở đây nghĩa là *không biết* tình hình service ra sao: Prometheus
+    chết, sai địa chỉ, hoặc câu PromQL sai cú pháp. Nuốt lỗi và trả rỗng ở
+    những tình huống đó là nguy hiểm — Agent sẽ hiểu nhầm thành "mọi thứ bình
+    thường" đúng lúc nó mù hoàn toàn.
+    """
+
+
 @dataclass
 class MetricSample:
     """Một giá trị metric đọc về, cho một service."""
@@ -163,38 +182,126 @@ class PrometheusClient:
 
     Không dùng Alertmanager — logic ngưỡng nằm trong `rules.py`.
     Xem [ADR-0002](../../docs/adr/0002-khong-dung-alertmanager.md).
+
+    Đồng bộ chứ không async: mỗi vòng `detect` chỉ gọi vài query, và giữ nó
+    đồng bộ thì `rules.py` cùng test không phải kéo theo event loop.
     """
 
-    def __init__(self, base_url: str = "http://localhost:9090", timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        base_url: str = "http://localhost:9090",
+        timeout: float = 10.0,
+        *,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        """
+        Args:
+            base_url: Địa chỉ Prometheus.
+            timeout: Giây, cho mỗi request.
+            transport: Chỉ dùng trong test — truyền `httpx.MockTransport` để
+                chạy được mà không cần Prometheus thật. Bỏ trống khi chạy thật.
+        """
         self._base = base_url.rstrip("/")
-        self._timeout = timeout
+        self._client = httpx.Client(base_url=self._base, timeout=timeout, transport=transport)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> PrometheusClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     def query(self, promql: str) -> list[MetricSample]:
         """Chạy một câu PromQL tức thời, trả giá trị theo từng service.
 
-        TODO(Việt):
-          1. GET {base}/api/v1/query?query=<promql>  (dùng httpx, đã có trong deps)
-          2. Response dạng:
-                 {"status":"success","data":{"result":[
-                     {"metric":{"service":"service-thanh-toan"},"value":[ts,"5.1"]}
-                 ]}}
-          3. Trả [MetricSample(service=..., value=float(...))]
-          4. `result` rỗng KHÔNG phải lỗi — nghĩa là chưa có dữ liệu, hoặc
-             (nguy hiểm hơn) tên metric bị lệch. Log warning để dễ phát hiện,
-             đừng raise.
+        Returns:
+            Một `MetricSample` cho mỗi service có dữ liệu. **Danh sách rỗng
+            không phải lỗi** — nghĩa là chưa có dữ liệu (service không nhận
+            request nào), hoặc, nguy hiểm hơn, tên metric bị lệch so với thứ
+            Trung expose. Cả hai đều được log ở mức warning vì Prometheus không
+            phân biệt giúp mình được.
 
-        Xong là thế nào:
-            client = PrometheusClient()
-            print(client.query(P95_LATENCY))
-            # -> [MetricSample(service='service-thanh-toan', value=0.02)]
+        Raises:
+            PrometheusError: khi không gọi được Prometheus, hoặc Prometheus từ
+                chối câu query (sai cú pháp PromQL). Đây là "không biết tình
+                hình", khác hẳn "biết là không có dữ liệu".
+
+        Ví dụ:
+            >>> client = PrometheusClient()
+            >>> client.query(P95_LATENCY)
+            [MetricSample(service='service-thanh-toan', value=1.94)]
         """
-        raise NotImplementedError("TODO(Việt): xem docstring")
+        payload = self._get("/api/v1/query", {"query": promql})
+        return self._parse(payload, promql)
 
     def query_range(self, promql: str, minutes: int = 30) -> list[MetricSample]:
-        """Giá trị trung bình trong `minutes` phút qua — dùng tính baseline.
+        """Giá trị trung bình của `promql` trong `minutes` phút qua.
 
-        TODO(Việt): gọi /api/v1/query_range, hoặc đơn giản hơn là dùng
-        `avg_over_time(...)` trong chính câu query rồi gọi `query()`.
-        Cách thứ hai ít code hơn, khuyến nghị dùng.
+        Bọc câu query trong `avg_over_time(...)` rồi gọi `query()`, thay vì gọi
+        `/api/v1/query_range` — endpoint đó trả về cả chuỗi thời gian mà chỗ
+        gọi lại chỉ cần một con số, nên sẽ phải tự tính trung bình lần nữa.
+
+        ⚠️ Không dùng hàm này để tính baseline. Baseline đã có sẵn ở
+        `P95_BASELINE_30M`, và nó dùng **phân vị** chứ không phải trung bình —
+        trung bình bị chính sự cố kéo lên, xem chú thích ở hằng đó.
         """
-        raise NotImplementedError("TODO(Việt): xem docstring")
+        return self.query(f"avg_over_time(({promql})[{minutes}m:1m])")
+
+    # ---------------------------------------------------------------- helpers
+
+    def _get(self, path: str, params: dict[str, str]) -> dict:
+        try:
+            response = self._client.get(path, params=params)
+        except httpx.HTTPError as error:
+            raise PrometheusError(f"Không gọi được Prometheus tại {self._base}: {error}") from error
+
+        if response.status_code >= 400:
+            # Prometheus trả 400 kèm mô tả lỗi cú pháp trong body, giữ lại để
+            # khỏi phải mò.
+            raise PrometheusError(f"GET {path} → HTTP {response.status_code}: {response.text[:400]}")
+
+        payload = response.json()
+        if payload.get("status") != "success":
+            raise PrometheusError(f"Prometheus từ chối query: {payload.get('error', payload)}")
+        return payload
+
+    @staticmethod
+    def _parse(payload: dict, promql: str) -> list[MetricSample]:
+        result = payload["data"]["result"]
+        if not result:
+            logger.warning(
+                "PromQL không trả series nào — service chưa có request, hoặc tên metric bị lệch. Query: %s",
+                _one_line(promql),
+            )
+            return []
+
+        samples: list[MetricSample] = []
+        for series in result:
+            service = series["metric"].get("service")
+            if not service:
+                # Mọi câu trong file này đều gom `by (service)`. Thiếu label này
+                # thì không quy được về service nào, giữ lại chỉ tổ gán nhầm.
+                logger.warning("Bỏ qua series không có label `service`: %s", series["metric"])
+                continue
+
+            value = float(series["value"][1])
+            if value != value:  # NaN
+                # Các câu trong file này đã chặn NaN bằng `_HAS_TRAFFIC`. Lọt
+                # tới đây nghĩa là có câu chưa được chặn — bỏ mẫu đi, vì NaN
+                # làm mọi so sánh ngưỡng trả False mà không báo gì.
+                logger.warning(
+                    "Bỏ qua giá trị NaN của %s — query thiếu bộ lọc `_HAS_TRAFFIC`? Query: %s",
+                    service,
+                    _one_line(promql),
+                )
+                continue
+
+            samples.append(MetricSample(service=service, value=value))
+        return samples
+
+
+def _one_line(promql: str) -> str:
+    """Ép câu PromQL nhiều dòng về một dòng để log đọc được."""
+    return " ".join(promql.split())

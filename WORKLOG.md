@@ -174,10 +174,30 @@ Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có b�
 |--------|------|--------|--------|------|
 | Việt | Review và merge PR #10 (`fix/promql-baseline-nan`) vào `develop` | ✅ Done | `9bfaa80`, CI pass | - |
 | Trung | Kéo dài bậc warm-up trong `PROFILE_DEMO` | ⏳ Todo | cần cho baseline có nghĩa | - |
-| Việt | Cài `PrometheusClient.query()` — chuyển từ `PrometheusQuerier` trong spike | ⏳ Todo | - | - |
-| Việt | Cài 3 hàm trong `src/services/rules.py`, xử lý danh sách rỗng tường minh | ⏳ Todo | - | - |
+| Việt | **Cài `PrometheusClient.query()` + `query_range()`** — đường găng tuần 2 | ✅ Done | `query(P95_LATENCY)` → `[MetricSample(service='service-thanh-toan', value=1.93)]` | - |
+| Việt | Thêm `PrometheusError` — phân biệt "không có dữ liệu" với "không biết tình hình" | ✅ Done | Prometheus chết thì raise, không trả rỗng | - |
+| Việt | 9 test cho `PrometheusClient` bằng `httpx.MockTransport`, chạy được trong CI | ✅ Done | 68 test pass, ruff clean | - |
+| Việt | Fix log tiếng Việt vỡ trên console Windows — `configure_logging()` ép UTF-8 cho cả stdout lẫn stderr | ✅ Done | `src/config.py`, gọi trong `lifespan` | - |
+| Việt | **Cài 4 hàm trong `src/services/rules.py`** (`classify_severity`, `detect`, `classify_auth_burst`, `is_spreading`) | ✅ Done | 39 test, 107 test toàn repo pass | - |
+| Việt | **Phát hiện mức P3 và P4 không đạt tới được** với ngưỡng ghi trong stub | ✅ Done | sửa cửa `detect` xuống ngưỡng P3 + thêm `BASELINE_DEVIATION_RATIO` | - |
 
 **Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
+
+Xong **đường găng tuần 2**: `PrometheusClient` hết `NotImplementedError`, `rules.py` và node `detect` hết bị chặn. Phần gọi API gần như chép từ `PrometheusQuerier` đã chạy trong spike, nhưng có thêm một quyết định thiết kế đáng ghi.
+
+**Ranh giới giữa "không có dữ liệu" và "không biết tình hình".** `query()` trả **danh sách rỗng** khi Prometheus chạy tốt nhưng không có series nào — service chưa nhận request, đó là trạng thái bình thường. Còn khi Prometheus chết, sai địa chỉ, hoặc câu PromQL sai cú pháp thì **raise `PrometheusError`**. Nuốt lỗi và trả rỗng ở nhóm thứ hai là nguy hiểm nhất: Agent sẽ hiểu "mọi thứ bình thường" đúng lúc nó mù hoàn toàn. Có 3 test riêng gác ranh giới này.
+
+Client cũng **loại bỏ mẫu `NaN`** kèm warning, dù các câu trong `prometheus.py` đã chặn NaN bằng `_HAS_TRAFFIC`. Đây là lớp phòng thủ thứ hai: hôm 31/07 đã có 4 câu lọt NaN, nếu sau này ai thêm câu mới mà quên bộ lọc thì client vẫn không để NaN chạm tới rule engine.
+
+9 test dùng `httpx.MockTransport` nên **chạy được trong CI mà không cần Prometheus** — phần verify với Prometheus thật vẫn nằm ở `spike/spike_promql.py`, chạy tay khi có docker. Verify thật: cả 7 hằng đều trả đúng qua client (p95 1.93s, lỗi 2.4%, pool 1.00), riêng `AUTH_FAILURE_RATE` trả rỗng kèm warning vì service dummy không có endpoint `/login` — đúng như thiết kế.
+
+**Log tiếng Việt vỡ trên Windows.** Console Windows mặc định cp1252, mà `logging` ghi vào **stderr** chứ không phải stdout, nên cảnh báo của `prometheus.py` in ra thành `Kh�ng gọi được...`. Thêm `configure_logging()` vào `src/config.py`, ép UTF-8 cho cả hai luồng và gắn handler cho root logger — trước đó chưa ai gọi `basicConfig`, nên Python dùng handler "cứu hộ" chỉ in từ WARNING trở lên và `logger.info` biến mất không dấu vết. Nhân tiện hạ `httpx` xuống WARNING: nó log một dòng INFO mỗi request, mà Agent poll Prometheus vài giây một lần.
+
+**Cài `rules.py` — và phát hiện thêm một mức severity chết.** Stub bảo `detect()` chặn ở `P95_THRESHOLD_SECONDS = 2.0`. Nhưng 2.0 là ngưỡng của **P2**, nên mọi tín hiệu lọt qua cửa đó đều đã từ P2 trở lên, và **P3 với P4 trong bảng contract ① vĩnh viễn không đạt tới được**. Cùng loại lỗi với bucket mặc định hôm 29/07 — bảng có 4 mức, thực tế dùng được 2 — chỉ khác là lần này nằm trong Python thay vì PromQL. Sửa: cửa `detect` hạ xuống ngưỡng P3 (thấp nhất), và thêm `BASELINE_DEVIATION_RATIO = 2.0` làm đường vào cho P4 ("lệch baseline nhưng chưa vượt ngưỡng cứng") — không có nó thì P4 nằm trong bảng mà không có cách nào chạm tới. Có test `test_moi_muc_severity_deu_dat_toi_duoc` gác lại, để lần sau ai đổi ngưỡng mà làm chết một mức thì CI đỏ.
+
+Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đây là lớp thứ hai sau `PrometheusClient`: NaN không làm chương trình chết, nó làm `classify_severity` tụt xuống P4 vì `NaN > x` luôn False — một sự cố P1 bị xếp thành nhẹ nhất mà không có dấu hiệu gì.
+
+`classify_auth_burst` (UC-3) đi nhánh riêng, không dùng chung bảng với UC-1: burst credential-stuffing xảy ra khi hệ thống **hoàn toàn khoẻ**, nên severity dựa trên số tuyệt đối request/giây. Có test chứng minh cùng bộ số liệu đó `detect()` trả `None` còn `classify_auth_burst()` trả P1 — nếu hai nhánh dùng chung ngưỡng thì Agent sẽ kết luận "service quá tải" thay vì "vấn đề bảo mật", và theo use-cases.md thì đó là chẩn đoán SAI.
 
 ---
 
