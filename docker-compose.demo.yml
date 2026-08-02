@@ -32,6 +32,17 @@ services:
     build:
       context: ./demo
     command: sh -c "exec uvicorn service_thanh_toan.main:app --host 0.0.0.0 --port 8001"
+    # UC-2: giới hạn thấp có chủ đích để /pay/batch tạo OOM trong thời gian demo.
+    mem_limit: 128m
+    # Bằng mem_limit = tắt swap. Thiếu dòng này thì Docker cho container dùng
+    # thêm swap bằng đúng ngần đó, nên chạm trần RAM nó chỉ chậm đi chứ KHÔNG
+    # bị OOM-kill — đo trên macOS: RAM đứng ở 127.9MiB/128MiB qua 12 lần gọi
+    # /pay/batch mà RestartCount vẫn = 0. Có dòng này thì chết ở batch thứ 8,
+    # RestartCount 0 -> 1, đúng kịch bản UC-2 và giống nhau trên mọi máy.
+    memswap_limit: 128m
+    # Nếu thiếu restart policy, OOM chỉ để container ở Exited (137), không tạo
+    # được tín hiệu restart loop mà Agent cần quan sát.
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://demo:demo@postgres:5432/demo
       PORT: "8001"

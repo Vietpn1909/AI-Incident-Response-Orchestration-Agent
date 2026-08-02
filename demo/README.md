@@ -92,6 +92,47 @@ Mức tải làm p95 > 2s trên máy demo: ~285 request/giây, 200 concurrent (L
 Đo ngày: 30/07/2026   Máy: LAPTOP-240I2QTN (Windows)
 ```
 
+## UC-2 — OOM và restart
+
+`service-thanh-toan` bị giới hạn 128 MB RAM. Mỗi lần gọi `/pay/batch`, service
+giữ thêm một batch kết quả truy vấn trong RAM; gọi lặp lại sẽ làm Docker
+OOM-kill rồi tự restart container.
+
+```powershell
+# Windows PowerShell — tiếp tục gọi kể cả lúc container đang restart
+1..30 | ForEach-Object {
+  try {
+    (Invoke-RestMethod -Method Post http://localhost:8001/pay/batch).retained_batches
+  } catch {
+    "container đang restart"
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+docker inspect --format "restart={{.RestartCount}} limit={{.HostConfig.Memory}}" `
+  p035-demo-service-thanh-toan-1
+```
+
+Đã verify ngày 31/07/2026: Docker phát sự kiện `oom`, `RestartCount` tăng từ 0
+lên 1, và `retained_batches` trở về 1 sau khi process mới khởi động.
+
+## UC-3 — Burst đăng nhập thất bại
+
+Cách ổn định nhất là chạy máy phát tải trong Docker network, tránh giới hạn NAT
+của Docker Desktop trên Windows:
+
+```bash
+docker compose -f docker-compose.demo.yml exec -T service-dat-hang \
+  python attack.py --url http://service-thanh-toan:8001/login
+```
+
+Cũng có thể chạy từ host bằng `python demo/attack.py`, nhưng tốc độ thực trên
+Windows có thể thấp hơn mục tiêu dù service vẫn xử lý nhanh.
+
+Đã verify ngày 31/07/2026: 12.000/12.000 response là `401` trong 60 giây
+(200,0 request/giây); Prometheus đo p95 `/login` khoảng 0,048 giây, pool 0%,
+không có lỗi 5xx. Như vậy đây là bất thường truy cập, không phải quá tải.
+
 ## Vì sao pool = 5
 
 Khi tải cao, request phải xếp hàng chờ connection → latency tăng **thật** do nghẽn cổ chai, không phải mình gán một con số giả. Nhờ vậy Agent có nguyên nhân thật để tìm ra. **Đây là chủ đích, không phải nhầm.**
