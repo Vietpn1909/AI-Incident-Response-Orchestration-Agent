@@ -114,6 +114,12 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
     lượng), không phụ thuộc số service — Prometheus trả tất cả service trong
     một lần.
 
+    Đo trên stack demo ngày 02/08: một vòng đầy đủ mất khoảng **2,2 giây**, gần
+    hết nằm ở 4 câu đo lệch baseline — mỗi câu bọc một `quantile_over_time` cửa
+    sổ 30 phút bên trong một subquery. Với `--interval 10` thì Agent bận khoảng
+    22% thời gian. Hạ interval xuống dưới 5s là hai vòng chồng lên nhau, cần đo
+    lại trước khi làm.
+
     Returns:
         Danh sách `IncidentSignal`, rỗng nghĩa là mọi thứ bình thường.
 
