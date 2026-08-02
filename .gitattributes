@@ -1,0 +1,42 @@
+# Chuẩn hoá line ending — 3/4 thành viên dùng Windows.
+#
+# Vì sao cần file này: Git trên Windows mặc định checkout thành CRLF. Shell
+# script và Dockerfile bị CRLF sẽ vỡ với thông báo lỗi rất khó hiểu —
+# `bash: \r: command not found`, hoặc Docker build fail ở dòng đầu. Đội đã
+# gặp một lần hôm 26/07 (Việt phải fix pre-push hook vì đúng lý do này).
+#
+# Không có file này thì mỗi lần ai đó trên Windows sửa một file .sh là lỗi
+# lặp lại. Có rồi thì Git tự chuẩn hoá, không ai phải nhớ.
+
+# Mặc định: chuẩn hoá text, checkout bằng LF trên mọi máy.
+* text=auto eol=lf
+
+# Bắt buộc LF — chạy trong Linux container hoặc bash, CRLF là vỡ.
+*.sh          text eol=lf
+*.bash        text eol=lf
+Dockerfile    text eol=lf
+*.Dockerfile  text eol=lf
+*.py          text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.toml        text eol=lf
+*.json        text eol=lf
+*.md          text eol=lf
+*.env.example text eol=lf
+
+# Ngược lại — script Windows cần CRLF.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Nhị phân — Git không được sửa gì.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.xlsx  binary
+*.docx  binary
+*.ttf   binary
+*.ico   binary
+*.mp4   binary

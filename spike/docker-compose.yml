@@ -1,0 +1,31 @@
+# Spike: Prometheus + 1 service dummy có instrumentator.
+#
+#   cd spike && docker compose up -d --build
+#   http://localhost:9090/targets  -> target phải UP
+#
+# Tên service ở đây (`service-thanh-toan`) chính là hostname Prometheus dùng
+# để scrape, nên nó phải khớp `targets:` trong prometheus.yml và tên trong
+# contract ①.
+
+services:
+  service-thanh-toan:
+    build: ./dummy_service
+    container_name: spike-service-thanh-toan
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: spike-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # Giữ 6h dữ liệu là đủ cho spike, không cần volume vĩnh viễn.
+      - --storage.tsdb.retention.time=6h
+    depends_on:
+      - service-thanh-toan
+    restart: unless-stopped

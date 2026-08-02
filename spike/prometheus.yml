@@ -1,0 +1,25 @@
+# Cấu hình scrape — chép đúng từ contract ① (docs/contracts/01-metrics.md).
+#
+# Label `service` KHÔNG do app tự gắn mà do file này gắn lúc scrape. Đây là lý
+# do Việt query được `by (service)` mà Trung không phải sửa code service.
+#
+# scrape_interval 5s (mặc định Prometheus là 15s): quy tắc "vượt ngưỡng liên
+# tục >= 30s" cần vài điểm dữ liệu trong 30 giây đó mới xác nhận được.
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: service-thanh-toan
+    static_configs:
+      - targets: ["service-thanh-toan:8001"]
+        labels:
+          service: service-thanh-toan
+
+  # Service của Trung, bật khi có:
+  # - job_name: service-dat-hang
+  #   static_configs:
+  #     - targets: ["service-dat-hang:8002"]
+  #       labels:
+  #         service: service-dat-hang

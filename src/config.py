@@ -1,3 +1,6 @@
+import logging
+import os
+import sys
 from functools import lru_cache
 from typing import Literal
 
@@ -21,9 +24,26 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # LLM
+    #
+    # Dùng thư viện `langchain-openai` cho mọi provider có endpoint tương thích
+    # OpenAI — không phải nhất thiết là OpenAI. Đội đang dùng Alibaba Cloud
+    # Model Studio (DashScope) vì có quota miễn phí.
+    #
+    # Đổi provider = đổi 3 biến trong .env, KHÔNG sửa code:
+    #   Alibaba (quốc tế): LLM_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    #                      MODEL_NAME=qwen-plus
+    #   Alibaba (TQ):      LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+    #   OpenAI:            để LLM_BASE_URL trống, MODEL_NAME=gpt-4o-mini
     openai_api_key: str = ""
-    model_name: str = "gpt-4o-mini"
-    llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+
+    #: Trống = dùng endpoint mặc định của OpenAI.
+    llm_base_url: str = ""
+
+    model_name: str = "qwen-plus"
+
+    #: Chẩn đoán cần ổn định để đo được độ chính xác trong `eval/`. Nhiệt độ cao
+    #: làm cùng một bằng chứng ra kết luận khác nhau mỗi lần chạy, không đo được.
+    llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
     # Database
     database_url: str = "sqlite:///./data/app.db"
@@ -31,7 +51,86 @@ class Settings(BaseSettings):
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
 
+    # LangSmith (AI Logs — Deliverable #4)
+    langchain_api_key: str = ""
+    langchain_project: str = "P-035"
+    langchain_tracing_v2: bool = False
+
+    # Jira — lớp quản lý vòng đời incident (ADR-0001)
+    jira_base_url: str = ""
+    jira_email: str = ""
+    jira_api_token: str = ""
+    jira_project_key: str = "KAN"
+    jira_webhook_secret: str = ""
+
+    # accountId của account Agent. Cổng phê duyệt HITL so accountId này với
+    # người đã chuyển issue sang Remediating — trùng nhau nghĩa là Agent đang
+    # cố tự duyệt, và hành động bị từ chối. Xem src/services/hitl.py.
+    jira_agent_account_id: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def configure_tracing() -> bool:
+    """Bật LangSmith tracing bằng cách export config sang os.environ.
+
+    pydantic-settings chỉ nạp .env vào object Settings — nó không set biến
+    môi trường. LangChain/LangGraph lại đọc thẳng từ os.environ, nên nếu
+    không gọi hàm này thì trace sẽ không bao giờ được gửi lên LangSmith.
+
+    Returns:
+        True nếu tracing được bật, False nếu thiếu key hoặc bị tắt.
+    """
+    settings = get_settings()
+    if not (settings.langchain_tracing_v2 and settings.langchain_api_key):
+        return False
+
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
+    os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project
+    return True
+
+
+def configure_logging() -> None:
+    """Dựng logging cho toàn app, và ép console về UTF-8.
+
+    Hai việc, cùng một lý do là log phải đọc được:
+
+    1. **Ép UTF-8 cho stdout/stderr.** Console Windows mặc định dùng cp1252,
+       không có ký tự tiếng Việt. Log của đội viết bằng tiếng Việt nên nó ra
+       thành `Kh�ng g\\u1ecdi \\u0111\\u01b0\\u1ee3c...` — đọc không nổi, mà 2
+       trong 4 thành viên đang làm trên Windows. `logging` ghi vào **stderr**,
+       nên chỉ chỉnh stdout là không đủ.
+
+    2. **Gắn handler cho root logger.** Chưa gọi `basicConfig` thì Python dùng
+       handler "cứu hộ" chỉ in từ mức WARNING trở lên và không có timestamp,
+       nên `logger.info` của `webhooks.py` hay `prometheus.py` biến mất không
+       dấu vết.
+
+    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự gọi
+    `sys.stdout.reconfigure` của riêng nó vì không đi qua `main.py`.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
+        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+    settings = get_settings()
+    logging.basicConfig(
+        level=settings.log_level,
+        format="%(asctime)s %(levelname)-8s %(name)s | %(message)s",
+        datefmt="%H:%M:%S",
+        # uvicorn đã gắn handler trước khi lifespan chạy; không có force thì
+        # basicConfig lặng lẽ không làm gì và mọi cấu hình trên bị bỏ qua.
+        force=True,
+    )
+
+    # `httpx` log một dòng INFO cho MỖI request. Agent poll Prometheus vài giây
+    # một lần, nên để nguyên thì log của đội bị chôn dưới hàng nghìn dòng
+    # "HTTP Request: GET ... 200 OK". Lỗi thật vẫn hiện vì WARNING trở lên
+    # không bị chặn.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

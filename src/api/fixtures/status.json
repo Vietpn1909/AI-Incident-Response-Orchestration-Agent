@@ -1,0 +1,34 @@
+{
+  "updated_at": "2026-07-28T14:35:12Z",
+  "services": [
+    {
+      "name": "service-thanh-toan",
+      "health": "down",
+      "message": "Đang gặp sự cố — độ trễ tăng cao, một số giao dịch thất bại",
+      "active_incident": "INC-12"
+    },
+    {
+      "name": "service-dat-hang",
+      "health": "degraded",
+      "message": "Suy giảm hiệu năng do phụ thuộc dịch vụ thanh toán",
+      "active_incident": "INC-13"
+    }
+  ],
+  "active_incidents": [
+    {
+      "jira_key": "INC-12",
+      "title": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
+      "severity": "P2",
+      "state": "Awaiting Approval",
+      "affected_services": ["service-thanh-toan"],
+      "detected_at": "2026-07-28T14:32:04Z",
+      "resolved_at": null,
+      "signal": null,
+      "hypotheses": [],
+      "proposal": null,
+      "timeline": [],
+      "postmortem": null,
+      "related_incidents": ["INC-13"]
+    }
+  ]
+}
