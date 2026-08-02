@@ -88,18 +88,32 @@ Còn tồn sang tuần 2: `main` thiếu 28 commit so với `develop` (chưa m�
 ## Week 2: 2026-08-02 - 2026-08-08
 
 ### Mục tiêu tuần này
-- [ ] [Mục tiêu 1]
+
+**Đường găng: Agent.** Ba khối kia đã có, cái nối chúng lại vẫn trống.
+
+- [x] **Đức — bổ sung tài liệu Gate 1**: Brief, PRD, UI Flow + bảng link ở đầu README
+- [ ] **Việt — `src/services/prometheus.py`**: chuyển `PrometheusQuerier` từ `spike/spike_promql.py` sang
+- [ ] **Việt — `src/services/rules.py`**: `detect()`, `classify_severity()`, `is_spreading()` — rule thuần, không LLM
+- [ ] **Việt — 3 node đầu**: `detect` → `classify_severity` → `open_war_room`, chạy với `FakeJiraClient`
+- [ ] **Trung — sửa 3 điểm PR #4** rồi merge, chạy `loadtest.py` và ghi lại mức tải làm p95 vượt 2s vào `demo/README.md`
+- [ ] **Long — video demo + pitch deck** (deliverable #6, #7), dùng sơ đồ sequence làm storyboard
+- [ ] **Đức — nối end-to-end**: cấu hình Jira Automation rule gọi webhook, chạy thử trọn luồng duyệt → thi hành
+- [ ] Hỏi mentor: `MIE`/`MIP` là viết tắt gì, và tấn công dạng metric-visible có được chấp nhận
+- [ ] Mốc kiểm tra giữa tuần: **Agent mở được Jira issue thật từ tín hiệu Prometheus thật**
 
 ### Đã hoàn thành
--
+- **02/08 — Ba tài liệu Gate 1** ([`docs/brief.md`](docs/brief.md), [`docs/prd.md`](docs/prd.md), [`docs/ui-flow.md`](docs/ui-flow.md)) và bảng "Tài liệu nộp" ở đầu README. Kiến trúc, README, AI log hook đã có sẵn từ tuần 1 nên chỉ thiếu đúng 3 thứ này.
 
 ### Khó khăn & Giải pháp
 | Khó khăn | Giải pháp | Kết quả |
 |----------|-----------|---------|
-| | | |
+| Tài liệu nằm rải khắp repo (ADR, contracts, use-cases, architecture) nhưng mentor mở repo ra không có đường vào — README chỉ dẫn link lẻ trong từng đoạn văn | Thêm bảng "Tài liệu nộp" ngay đầu README, mỗi dòng một tài liệu kèm mô tả một câu | Mở repo là thấy toàn bộ deliverable, không phải đọc hết README để nhặt link |
+| Quyết định "war room không có nút duyệt" nằm trong code từ tuần 1 nhưng **không ở đâu ghi lý do** | Viết thành mục riêng trong `ui-flow.md` kèm sequence diagram | Người review đọc được là quyết định có chủ đích, không phải quên làm |
 
 ### Bài học
--
+- **Viết PRD sau khi đã code một phần thì phát hiện được thứ mà lúc thiết kế không thấy.** Đi ngược từ code lên tiêu chí nghiệm thu làm lộ ra những quyết định đã cài trong code nhưng chưa được viết ra ở đâu — như chuyện UI cố ý không có nút duyệt. Thứ không được viết ra thì người review đọc thành thiếu sót, và người mới vào sẽ "sửa" nó.
+- **Chốt ground truth trước là điều kiện để phép đo có nghĩa.** `use-cases.md` viết ngày 30/07, trước `rules.py`. Nếu chạy Agent xong mới ghi "nguyên nhân gốc là gì" thì độ chính xác luôn 3/3 và không đo gì cả. Thứ tự chính là toàn bộ giá trị.
+- **Rủi ro nguy hiểm nhất của dự án này đều thuộc họ "fail âm thầm".** Metric lệch tên → Prometheus trả rỗng chứ không lỗi. Rollback chỉ ghi log → `verify` không hồi phục → lặp vô hạn giữa buổi demo. Không cái nào ném exception, nên không cái nào chặn được bằng cách "nhớ kiểm tra lúc test" — phải viết thành tiêu chí nghiệm thu trước.
 
 ### Kế hoạch tuần sau
 -

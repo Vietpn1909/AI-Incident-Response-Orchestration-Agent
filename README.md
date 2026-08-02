@@ -8,6 +8,23 @@
 
 > 👋 **Thành viên đội: mở [docs/START-HERE.md](docs/START-HERE.md) trước khi code** — việc của từng người, lệnh cụ thể, và tiêu chí "xong là thế nào".
 
+## 📂 Tài liệu nộp
+
+| Tài liệu | Nội dung | Link |
+|---|---|---|
+| **Brief** | Vấn đề, người dùng, phạm vi, chỉ số thành công, rủi ro | [docs/brief.md](docs/brief.md) |
+| **PRD** | 16 yêu cầu chức năng + tiêu chí nghiệm thu, NFR, kế hoạch phát hành | [docs/prd.md](docs/prd.md) |
+| **UI Flow / Wireframe** | Bản đồ màn hình, wireframe 2 trang, quy tắc hiển thị | [docs/ui-flow.md](docs/ui-flow.md) |
+| **Architecture Diagram** | 4 sơ đồ Mermaid: container · agent flow · sequence · escalation | [docs/architecture_diagram.md](docs/architecture_diagram.md) |
+| **Architecture (chi tiết)** | Thành phần, data flow, deployment, security | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| **ADR** | 3 quyết định kiến trúc kèm lý do và đánh đổi | [docs/adr/](docs/adr/) |
+| **Contracts** | 4 interface giữa 4 thành viên — thứ mở khoá làm song song | [docs/contracts/](docs/contracts/) |
+| **Use cases** | 3 kịch bản sự cố + ground truth để đo độ chính xác chẩn đoán | [docs/use-cases.md](docs/use-cases.md) |
+| **Live URL** | Backend đang chạy | [p-035-incident-agent.onrender.com](https://p-035-incident-agent.onrender.com) |
+| **AI Logs** | Hook ghi + submit AI usage log | [.github/hooks/hooks.json](.github/hooks/hooks.json) · LangSmith |
+| **Weekly Journal** | Mục tiêu, khó khăn, bài học từng tuần | [JOURNAL.md](JOURNAL.md) |
+| **Worklog** | Ai làm gì theo ngày | [WORKLOG.md](WORKLOG.md) |
+
 ---
 
 ## Vấn đề (Problem)

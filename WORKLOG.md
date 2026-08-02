@@ -201,13 +201,23 @@ Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đâ
 
 ---
 
-## [YYYY-MM-DD]
+## 2026-08-02
 
 | Member | Task | Status | Output | Time |
 |--------|------|--------|--------|------|
-| | | | | |
+| Trương Công Thái Đức | Rà yêu cầu nộp Gate 1 của BTC, đối chiếu với repo → thiếu 3 tài liệu | ✅ Done | Brief, PRD, UI Flow chưa có; kiến trúc/README/AI log hook đã đủ | - |
+| Trương Công Thái Đức | Viết Project Brief — vấn đề, người dùng, phạm vi, 6 chỉ số thành công, ràng buộc, rủi ro | ✅ Done | `docs/brief.md` | - |
+| Trương Công Thái Đức | Viết PRD — 8 user story, 16 yêu cầu chức năng kèm tiêu chí nghiệm thu, 12 NFR, kế hoạch phát hành R0–R5 | ✅ Done | `docs/prd.md` | - |
+| Trương Công Thái Đức | Viết UI Flow + wireframe 2 trang Streamlit, ghi rõ lý do war room không có nút duyệt | ✅ Done | `docs/ui-flow.md` | - |
+| Trương Công Thái Đức | Thêm bảng "Tài liệu nộp" đầu README — mentor mở repo là thấy link, không phải đi tìm | ✅ Done | `README.md` | - |
 
-**Tổng kết ngày:**
+**Tổng kết ngày:** Bổ sung 3 tài liệu Gate 1 còn thiếu. Ba chỗ đáng ghi lại vì chúng lộ ra khi viết chứ không phải khi code:
+
+**Chỉ số M3 (độ chính xác chẩn đoán) chỉ đo được nhờ ground truth đã chốt trước.** `use-cases.md` viết xong ngày 30/07, trước khi Việt viết `rules.py`. Nếu làm ngược lại — chạy Agent rồi mới ghi "nguyên nhân gốc là gì" — thì con số sẽ tự khớp 3/3 và không đo gì cả. Thứ tự ở đây là toàn bộ giá trị của phép đo.
+
+**Ba rủi ro trong brief đều là rủi ro "fail âm thầm".** Metric lệch tên → Prometheus trả rỗng chứ không lỗi. Rollback chỉ ghi log → `verify` không hồi phục → vòng lặp vô hạn giữa buổi demo. Agent mở incident trùng khi load test → war room thành rác. Cùng một họ với `setup_hooks.sh` tuần trước: không có exception nào để lần theo, nên phải chặn bằng tiêu chí nghiệm thu viết sẵn chứ không bằng việc nhớ ra lúc test.
+
+**Viết UI flow mới thấy phải nói rõ vì sao war room không có nút duyệt.** Người đọc mặc định coi đó là thiếu sót. Thật ra một nút duyệt trong Streamlit sẽ tạo đường thứ hai tới `execute_remediation` — mà FR-08 đòi mọi đường phải qua `assert_human_approved()`, và cổng đó xác minh danh tính bằng changelog Jira, cần một transition có tác giả thật. Streamlit không có đăng nhập nên nút đó là đường vòng qua cổng. Quyết định này đã nằm trong code từ đầu, nhưng chưa ở đâu ghi lý do — người review sẽ đọc là quên làm.
 
 ---
 
