@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
+from src.models.incident import IncidentSignal
 
 
 class AgentState(TypedDict, total=False):
@@ -20,41 +20,32 @@ class AgentState(TypedDict, total=False):
 
 
 class IncidentAgentState(TypedDict, total=False):
-    """State của Agent ứng phó sự cố — xem sơ đồ ở docs/architecture_diagram.md mục 2.
-
-    ⚠️ **Chưa có chỗ nào dùng.** Vòng quét hiện tại là `detection_loop.run_cycle()`
-    — một vòng lặp tuần tự truyền tham số trực tiếp, không đi qua state dict.
-    Schema này là chỗ dựa cho bước dựng LangGraph state machine, chưa tới.
-    Nếu tới cuối tuần 2 vẫn chưa dùng thì nên xoá thay vì để làm nhiễu.
+    """State của Agent ứng phó sự cố — sơ đồ ở docs/architecture_diagram.md mục 2.
 
     `total=False` nên mọi field đều tuỳ chọn: graph chạy được với vài node đầu,
     không cần có đủ node mới khởi động.
 
-    Lưu ý về `signals` và `signal`: `detect` có thể phát hiện nhiều service cùng
-    lúc hỏng, nên nó ghi vào **`signals`**. `classify_severity` mới chọn ra
-    **`signal`** chính để mở war room, sau khi đã cân nhắc chuyện lan truyền —
-    một service hỏng là P2, hai service hỏng cùng lúc là P1, mà chỉ nhìn từng
-    tín hiệu riêng lẻ thì không thấy điều đó.
+    Chỉ khai những field các node **hiện có** thực sự đọc/ghi. Thêm field cho
+    node chưa viết (`hypotheses`, `proposal`…) nghe như chuẩn bị trước, nhưng
+    thực tế là mô tả một thứ chưa tồn tại — người đọc sẽ tưởng graph đã làm được
+    những bước đó. Viết node nào thì thêm field ấy.
     """
 
-    #: Mọi service đang vượt ngưỡng ở vòng poll này. Output của `detect`.
+    #: Mọi service đang có sự cố ở vòng quét này. Output của `detect`.
+    #:
+    #: Rỗng nghĩa là **đã kiểm tra và mọi thứ bình thường** — khác hẳn với
+    #: `error` có giá trị, nghĩa là không biết tình hình ra sao.
     signals: list[IncidentSignal]
 
-    #: Tín hiệu được chọn để mở war room. Output của `classify_severity`.
-    signal: IncidentSignal | None
-
-    #: Có dấu hiệu sự cố lan sang service khác không.
+    #: Sự cố có lan sang service khác không. Output của `classify_severity`.
     spreading: bool
 
-    #: Key Jira của war room. Output của `open_war_room`.
-    jira_key: str
+    #: Jira key của các war room vừa **mở mới** ở vòng này.
+    opened: list[str]
 
-    #: Giả thuyết nguyên nhân kèm bằng chứng. Output của `hypothesize`.
-    hypotheses: list[Hypothesis]
+    #: Jira key của các war room **đã có sẵn**, chỉ được cập nhật thêm bối cảnh.
+    #: Đây là đường đi bình thường khi Agent poll liên tục lúc sự cố còn kéo dài.
+    updated: list[str]
 
-    #: Đề xuất khắc phục. Sau node này Agent DỪNG, chờ người duyệt.
-    proposal: RemediationProposal | None
-
-    #: Lỗi khiến vòng chạy này dừng sớm. Có giá trị nghĩa là chưa kết luận được
-    #: gì — KHÁC với "đã kiểm tra và mọi thứ bình thường".
+    #: Lỗi khiến vòng quét dừng sớm. Có giá trị nghĩa là Agent **đang mù**.
     error: str
