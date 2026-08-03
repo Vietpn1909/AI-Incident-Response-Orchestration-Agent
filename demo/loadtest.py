@@ -3,8 +3,8 @@
 CHỦ SỞ HỮU: Trung
 
 Chạy:
-    python demo/loadtest.py              # profile demo, ~3 phút
-    python demo/loadtest.py --full       # profile đầy đủ, tới 100k request
+    python demo/loadtest.py              # profile demo an toàn, ~1,5 phút
+    python demo/loadtest.py --full       # profile nặng, chỉ dùng trên máy đủ mạnh
 
 Có thể thay bằng k6 hoặc Locust nếu muốn — miễn là tải TĂNG DẦN. Tải phẳng
 không cho thấy latency tăng theo tải, mà biểu đồ tăng dần mới là thứ thuyết
@@ -24,8 +24,12 @@ PAYMENT_URL = "http://localhost:8001/pay"
 ORDER_URL = "http://localhost:8002/orders"
 
 # (số request đồng thời, số giây giữ mức đó)
-# Tăng dần từng bậc để thấy p95 leo theo tải.
-PROFILE_DEMO = [(5, 20), (20, 20), (50, 30), (100, 40), (200, 40)]
+# Tăng dần từng bậc để thấy p95 leo theo tải. Sau khi /pay giữ connection 0.2s,
+# 75 concurrent đã đủ làm pool 5 chỗ cạn và p95 server-side vượt 2s. Không cần
+# đẩy mặc định lên 200 vì Docker Desktop + load client có thể làm máy demo đơ.
+PROFILE_DEMO = [(5, 10), (15, 15), (30, 20), (50, 20), (75, 25)]
+
+# Profile nặng là opt-in để đo giới hạn, không dùng trong buổi demo thông thường.
 PROFILE_FULL = [(5, 30), (20, 30), (50, 60), (100, 60), (200, 90), (400, 120)]
 
 
@@ -78,31 +82,41 @@ async def run_stage(concurrency: int, seconds: int) -> None:
 
     print(
         f"📊 [KẾT QUẢ] Concurrency: {concurrency:3d} | Tổng req: {len(times):5d} | "
-        f"p95: {p95:.3f}s | Lỗi: {err_rate:.1f}%"
+        f"p95 client: {p95:.3f}s | Lỗi: {err_rate:.1f}%"
     )
 
     if p95 > 2.0:
-        print(f"⚠️  [CẢNH BÁO] p95 ({p95:.3f}s) đã VƯỢT NGƯỠNG 2.0s! Agent của Việt sẽ kích hoạt mở Incident!\n")
+        print(
+            f"⚠️  p95 client ({p95:.3f}s) đã vượt 2s; "
+            "hãy xác nhận p95 server-side trên Prometheus.\n"
+        )
     else:
         print()
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--full", action="store_true", help="profile đầy đủ, lâu hơn")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="profile nặng tới 400 concurrent; không dùng trên máy demo yếu",
+    )
     args = parser.parse_args()
 
     profile = PROFILE_FULL if args.full else PROFILE_DEMO
     total_seconds = sum(seconds for _, seconds in profile)
     print(f"Bắt đầu bắn tải — {len(profile)} bậc, khoảng {total_seconds}s")
     print("Mở http://localhost:9090 và theo dõi:")
-    print("  histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le, service))\n")
+    print(
+        '  histogram_quantile(0.95, sum by (service, le) '
+        '(rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])))\n'
+    )
 
     started = time.perf_counter()
     for concurrency, seconds in profile:
         await run_stage(concurrency, seconds)
     print(f"\nXong sau {time.perf_counter() - started:.0f}s")
-    print("⚠️  Ghi lại mức tải làm p95 vượt 2s vào demo/README.md")
+    print("⚠️  Ghi mức tải làm p95 server-side vượt 2s vào demo/README.md")
 
 
 if __name__ == "__main__":

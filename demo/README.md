@@ -109,12 +109,9 @@ curl -X POST localhost:8002/orders -H "Content-Type: application/json" \
 python demo/loadtest.py
 ```
 
-**Ghi lại mức tải làm p95 vượt 2s trên máy sẽ dùng demo** và điền vào cuối file này. Không có số đó thì hôm Demo Day phải mò.
-
-```
-Mức tải làm p95 > 2s trên máy demo: ~285 request/giây, 200 concurrent (Lỗi 51%)
-Đo ngày: 30/07/2026   Máy: LAPTOP-240I2QTN (Windows)
-```
+**Ghi lại mức tải làm p95 server-side vượt 2s trên máy sẽ dùng demo** và điền
+vào cuối file này. Không dùng p95 mà `loadtest.py` in ra để nghiệm thu vì đó
+là thời gian nhìn từ client.
 
 ## UC-2 — OOM và restart
 
@@ -181,6 +178,25 @@ nhìn thấy request, nên histogram không đo được.
 
 Muốn UC-1 tái hiện thì phải làm **việc trong `/pay` nặng lên** (query tốn thời
 gian hơn, hoặc `pg_sleep`), chứ bắn thêm tải không giải quyết được.
+
+### ✅ Đo lại ngày 03/08/2026 — UC-1 đã tái hiện được
+
+`/pay` hiện chạy `pg_sleep(0.2)` **bên trong** `pool.acquire()`, vì vậy mỗi
+request giữ một connection PostgreSQL thật trong ít nhất 0,2 giây. Trong lần
+chạy profile tăng dần trên máy `LAPTOP-240I2QTN`, Prometheus ghi nhận:
+
+| Metric server-side | Trước sửa | Sau sửa |
+|---|---:|---:|
+| p95 `service-thanh-toan` | 0,048 giây | **4,062 giây** |
+| `db_pool_connections_in_use` hiện tại | 1 | **5** |
+| Đỉnh pool 5 phút | 1 | **5** |
+| `db_pool_size` | 5 | **5** |
+
+Như vậy p95 đã vượt ngưỡng 2 giây và pool đạt 100% — đủ cả triệu chứng lẫn bằng
+chứng nguyên nhân gốc. Profile cũ lên tới 200 concurrent làm máy Windows demo
+không ổn định trước khi script in báo cáo cuối. Vì 75 concurrent đã đủ làm pool
+5 chỗ cạn, profile mặc định đã hạ trần xuống 75; tải tới 400 chỉ còn ở tùy chọn
+`--full` dành cho máy đủ mạnh.
 
 ### OOM không sinh ra 5xx nào
 
