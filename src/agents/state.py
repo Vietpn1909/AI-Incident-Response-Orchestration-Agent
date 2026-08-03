@@ -43,6 +43,13 @@ class IncidentAgentState(TypedDict, total=False):
     #: Jira key của các war room vừa **mở mới** ở vòng này.
     opened: list[str]
 
+    #: `{tên service: jira key}` của các war room **vừa mở mới**.
+    #:
+    #: Chỉ chứa issue mới, không chứa issue đang cập nhật — `hypothesize` dùng
+    #: nó để biết cần chẩn đoán cho ai. Sự cố kéo dài thì Agent poll liên tục,
+    #: chẩn đoán lại mỗi vòng sẽ vừa spam war room vừa đốt quota LLM.
+    war_rooms: dict[str, str]
+
     #: Jira key của các war room **đã có sẵn**, chỉ được cập nhật thêm bối cảnh.
     #: Đây là đường đi bình thường khi Agent poll liên tục lúc sự cố còn kéo dài.
     updated: list[str]

@@ -7,8 +7,8 @@ nguyên chữ ký** — chúng vẫn là hàm thuần nhận dependency tường
 là lớp nối. Nhờ vậy chúng test được riêng mà không cần dựng graph, và toàn bộ
 test của Đức chạy y nguyên qua đường mới.
 
-    detect → classify_severity → (có tín hiệu?) → open_war_room → END
-                                       └── không ──────────────→ END
+    detect → classify_severity → (có tín hiệu?) → open_war_room → hypothesize → END
+                                       └── không ──────────────────────────────→ END
 
 **Vì sao đổi sang LangGraph khi vòng lặp cũ đã chạy được:**
 
@@ -36,6 +36,7 @@ from langgraph.graph import END, StateGraph
 
 from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
+from src.agents.nodes.hypothesize import hypothesize
 from src.agents.nodes.open_war_room import open_war_room
 from src.agents.state import IncidentAgentState
 from src.services import rules
@@ -97,15 +98,46 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         """
         opened: list[str] = []
         updated: list[str] = []
+        war_rooms: dict[str, str] = {}
         for signal in state.get("signals") or []:
             outcome = open_war_room(jira, signal)
-            (opened if outcome.created else updated).append(outcome.jira_key)
-        return {"opened": opened, "updated": updated}
+            if outcome.created:
+                opened.append(outcome.jira_key)
+                war_rooms[signal.affected_service] = outcome.jira_key
+            else:
+                updated.append(outcome.jira_key)
+        return {"opened": opened, "updated": updated, "war_rooms": war_rooms}
+
+    def hypothesize_node(state: IncidentAgentState) -> dict:
+        """Chẩn đoán nguyên nhân và post lên war room.
+
+        Chỉ chạy cho war room **vừa mở mới**. Sự cố kéo dài thì Agent poll liên
+        tục; chẩn đoán lại mỗi vòng sẽ vừa làm war room đầy comment trùng lặp
+        vừa đốt quota LLM mà không thêm thông tin gì.
+        """
+        war_rooms = state.get("war_rooms") or {}
+        if not war_rooms:
+            return {}
+
+        for signal in state.get("signals") or []:
+            jira_key = war_rooms.get(signal.affected_service)
+            if not jira_key:
+                continue
+            hypothesis = hypothesize(signal)
+            jira.post_hypothesis(jira_key, hypothesis)
+            logger.info(
+                "%s: giả thuyết (tin cậy %.0f%%) — %s",
+                jira_key,
+                hypothesis.confidence * 100,
+                hypothesis.statement,
+            )
+        return {}
 
     graph = StateGraph(IncidentAgentState)
     graph.add_node("detect", detect)
     graph.add_node("classify_severity", classify_severity)
     graph.add_node("open_war_room", open_war_rooms)
+    graph.add_node("hypothesize", hypothesize_node)
 
     graph.set_entry_point("detect")
     graph.add_edge("detect", "classify_severity")
@@ -114,7 +146,8 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         _co_dang_mo_war_room,
         {"open_war_room": "open_war_room", END: END},
     )
-    graph.add_edge("open_war_room", END)
+    graph.add_edge("open_war_room", "hypothesize")
+    graph.add_edge("hypothesize", END)
 
     return graph.compile()
 
