@@ -5,6 +5,7 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 python-dotenv>=1.0.0
 httpx>=0.28.0          # gọi Jira REST API và Prometheus HTTP API
+asyncpg>=0.30.0        # đọc bảng deploy_history cho correlate_deploy
 
 # AI / LangChain
 langchain>=0.3.0
