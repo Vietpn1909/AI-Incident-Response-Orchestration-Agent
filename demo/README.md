@@ -18,7 +18,31 @@ Vì vậy thư mục này có `requirements.txt` và `Dockerfile` riêng.
 
 ## Chạy
 
-> **Windows:** cần **Docker Desktop đang chạy** trước khi gõ `docker compose`. Các lệnh `python ...` bên dưới giả định đã activate venv (`.venv\Scripts\activate`) và đã `pip install -r demo/requirements.txt`.
+> **Windows:** cần **Docker Desktop đang chạy** trước khi gõ `docker compose`. Các lệnh `python ...` bên dưới giả định đã activate venv (`.venv\Scripts\activate`).
+
+### Windows — hai bước bắt buộc, bỏ qua là gặp lỗi khó đoán
+
+**1. Cài dependency phải có `PYTHONUTF8=1`:**
+
+```bash
+PYTHONUTF8=1 pip install -r demo/requirements.txt
+```
+
+Thiếu biến đó thì pip **fail** với `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8d` — nó đọc file bằng CP1252 mà file này có comment tiếng Việt. Trên macOS và CI (Linux) mặc định đã là UTF-8 nên không thấy lỗi.
+
+**2. Nếu máy đã có Postgres chiếm cổng 5432, phải đổi cổng:**
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+```
+
+```bash
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
+
+Triệu chứng khi không đổi: `seed.py` fail với `asyncpg.exceptions.InvalidPasswordError: password authentication failed for user "demo"` — dễ tưởng sai mật khẩu, nhưng thật ra là đang nối vào Postgres cài sẵn trên máy chứ không phải container. Kiểm tra bằng `netstat -ano | findstr :5432`, thấy **hai** tiến trình cùng nghe là dính. Service trong compose không bị ảnh hưởng vì chúng nối qua mạng nội bộ (`postgres:5432`).
+
+Đã gặp trên cả macOS (máy Đức) lẫn Windows (máy Việt).
 
 ```bash
 docker compose -f ../docker-compose.demo.yml up --build     # từ trong demo/

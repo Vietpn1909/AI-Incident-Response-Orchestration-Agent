@@ -1,0 +1,140 @@
+"""Test UC-2 — service chết vì OOM rồi restart liên tục.
+
+Điều đáng test nhất ở đây không phải bảng ngưỡng, mà là **UC-2 không dùng chung
+đường với UC-1**. Đức đo ngày 02/08: ép OOM làm `RestartCount` lên 7, container
+chết và sống lại thật, nhưng `http_requests_total{status=~"5.."}` **bằng 0 tuyệt
+đối** — process chết giữa request nên không kịp ghi metric, counter reset sau
+mỗi lần restart.
+
+Nghĩa là sự cố nặng nhất lại là sự cố để lại ít dấu vết nhất trong metric của
+chính service. Nếu hai UC dùng chung `rules.detect()` thì UC-2 vĩnh viễn không
+phát hiện được.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from src.models.incident import Severity
+from src.services.rules import (
+    CRASHLOOP_RESTARTS,
+    SUSTAINED_SECONDS,
+    classify_crashloop,
+    detect,
+    detect_crashloop,
+)
+
+
+def _khoe_manh() -> dict:
+    """Bộ số của một service hoàn toàn bình thường."""
+    return {"service_up": 1.0, "restarts": 0.0, "down_for_seconds": 0.0}
+
+
+# ------------------------------------------------------------ classify_crashloop
+
+
+def test_binh_thuong_thi_khong_bao_gi():
+    assert classify_crashloop(**_khoe_manh()) is None
+
+
+def test_chet_du_lau_thi_p1():
+    """Service không phục vụ được, không phải chỉ chậm — use-cases.md UC-2."""
+    assert classify_crashloop(service_up=0.0, restarts=0.0, down_for_seconds=SUSTAINED_SECONDS) == Severity.P1
+
+
+def test_mot_lan_scrape_hut_khong_phai_su_co():
+    """`up` = 0 một nhịp là chuyện thường, chưa đủ lâu thì chưa tính."""
+    assert classify_crashloop(service_up=0.0, restarts=0.0, down_for_seconds=5.0) is None
+
+
+def test_restart_loop_bao_ke_ca_khi_service_dang_song():
+    """Crash loop theo định nghĩa là chết-sống xen kẽ.
+
+    Đòi "chết liên tục 30s" sẽ bỏ lọt, vì đúng lúc Agent quét thì service có thể
+    vừa sống lại.
+    """
+    assert classify_crashloop(service_up=1.0, restarts=3.0, down_for_seconds=0.0) == Severity.P1
+
+
+def test_mot_lan_restart_la_deploy_khong_phai_su_co():
+    """Báo động ở mức này thì mỗi lần đội deploy Agent lại mở một incident."""
+    assert classify_crashloop(service_up=1.0, restarts=1.0, down_for_seconds=0.0) is None
+
+
+def test_dung_nguong_restart_thi_bao():
+    assert classify_crashloop(service_up=1.0, restarts=CRASHLOOP_RESTARTS, down_for_seconds=0.0) == Severity.P1
+
+
+def test_tu_choi_nan():
+    with pytest.raises(ValueError, match="NaN"):
+        classify_crashloop(service_up=float("nan"), restarts=0.0, down_for_seconds=0.0)
+
+
+# -------------------------------------------------------------- detect_crashloop
+
+
+def test_service_khoe_thi_khong_sinh_tin_hieu():
+    assert detect_crashloop(**_khoe_manh(), service="service-thanh-toan") is None
+
+
+def test_tin_hieu_kem_ca_hai_bang_chung():
+    """`up` trả lời "bây giờ có phục vụ được không", số restart trả lời "chết
+    hẳn hay đang chết đi sống lại" — người trực cần cả hai."""
+    signal = detect_crashloop(service_up=0.0, restarts=7.0, down_for_seconds=45.0, service="service-thanh-toan")
+
+    ten = [evidence.name for evidence in signal.evidence]
+    assert "up (service còn sống không)" in ten
+    assert "số lần restart trong 10 phút" in ten
+    assert all(evidence.promql for evidence in signal.evidence)
+
+
+def test_dang_chet_thi_metric_chinh_la_up():
+    signal = detect_crashloop(service_up=0.0, restarts=7.0, down_for_seconds=45.0, service="service-thanh-toan")
+
+    assert signal.severity == Severity.P1
+    assert signal.metric_value == 0.0
+    assert "up" in signal.metric_name
+
+
+def test_dang_song_nhung_loop_thi_metric_chinh_la_so_lan_restart():
+    signal = detect_crashloop(service_up=1.0, restarts=4.0, down_for_seconds=0.0, service="service-thanh-toan")
+
+    assert signal.metric_name == "số lần restart trong 10 phút"
+    assert signal.metric_value == 4.0
+    assert signal.threshold == CRASHLOOP_RESTARTS
+
+
+# ------------------------------------------------------- UC-2 khác đường UC-1
+
+
+def test_uc2_khong_bat_duoc_bang_duong_cua_uc1():
+    """Bộ số Đức đo thật khi ép OOM: 7 lần restart, KHÔNG có lỗi 5xx nào.
+
+    `rules.detect()` nhìn vào bộ số này thấy một service hoàn toàn khoẻ. Đó
+    chính là lý do UC-2 phải có nhánh riêng — không phải để cho gọn code.
+    """
+    uc1 = detect(
+        p95_now=0.048,  # server-side vẫn nhanh
+        p95_baseline=0.048,
+        error_rate=0.0,  # process chết giữa request, không kịp ghi metric
+        pool_saturation=0.2,
+        service="service-thanh-toan",
+        breached_for_seconds=600.0,
+    )
+    uc2 = classify_crashloop(service_up=0.0, restarts=7.0, down_for_seconds=45.0)
+
+    assert uc1 is None, "UC-1 không thể thấy gì — đúng như đo được"
+    assert uc2 == Severity.P1
+
+
+def test_ba_uc_ba_hinh_thai_khac_nhau():
+    """Ba nhánh phải phân biệt được nhau, không phải ba biến thể của một rule."""
+    from src.services.rules import classify_auth_burst
+
+    # UC-2: chết, nhưng không chậm và không lỗi 5xx
+    assert classify_crashloop(service_up=0.0, restarts=7.0, down_for_seconds=45.0) == Severity.P1
+    assert classify_auth_burst(0.0, breached_for_seconds=600.0) is None
+
+    # UC-3: hệ thống hoàn toàn khoẻ, chỉ hình thái truy cập bất thường
+    assert classify_auth_burst(200.0, breached_for_seconds=60.0) == Severity.P1
+    assert classify_crashloop(**_khoe_manh()) is None

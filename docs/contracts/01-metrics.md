@@ -174,6 +174,16 @@ Ngưỡng là code Python trong `detect` / `classify_severity`, không phải c�
 | P3 | p95 > 1s hoặc tỷ lệ lỗi > 1% |
 | P4 | Lệch baseline nhưng chưa vượt ngưỡng cứng |
 
+### "≥ 2 service bị ảnh hưởng" nghĩa là gì — chốt 2026-08-03
+
+Đếm **số service cùng hỏng trong một vòng quét**, không phải số phần tử trong `affected_services` của một incident.
+
+Ghi lại vì chỗ này đã gây tranh cãi một lần. `fixtures/incidents.json` bản đầu có INC-12 (P2) và INC-13 (P3) nối với nhau — hai service cùng hỏng mà không cái nào P1, tức hiểu theo nghĩa thứ hai. Nhưng hiểu như vậy thì vế "≥ 2 service" **không bao giờ đúng**: mỗi incident luôn chỉ có một service, vì `open_war_room` mở một issue cho mỗi service rồi `link_incidents` nối chúng lại. Cả một mức severity trở thành code chết — đúng loại lỗi mà bucket mặc định và ngưỡng P2 đã gây ra hai lần trước đó.
+
+Fixture viết trước khi có luật lan truyền nên đã sửa fixture cho khớp luật, không sửa luật cho khớp fixture. INC-12 và INC-13 giờ đều là P1.
+
+Thực thi ở [`escalate_spreading()`](../../src/agents/nodes/classify_severity.py), gọi trong `run_cycle()` **trước** `open_war_room` — severity đi vào tiêu đề issue lúc tạo, nâng sau khi tạo thì tiêu đề mang mức sai.
+
 Hai quy tắc bắt buộc kèm theo, nếu thiếu thì lúc load test Agent sẽ mở hàng loạt incident trùng:
 
 - **Xác nhận kéo dài** — chỉ tính là incident khi vượt ngưỡng **liên tục ≥ 30s**, không phản ứng với một điểm dữ liệu đơn lẻ

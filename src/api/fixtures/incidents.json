@@ -1,15 +1,15 @@
 [
   {
     "jira_key": "INC-12",
-    "title": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
-    "severity": "P2",
+    "title": "[P1] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
+    "severity": "P1",
     "state": "Awaiting Approval",
     "affected_services": ["service-thanh-toan"],
     "detected_at": "2026-07-28T14:32:04Z",
     "resolved_at": null,
     "signal": {
       "affected_service": "service-thanh-toan",
-      "severity": "P2",
+      "severity": "P1",
       "detected_at": "2026-07-28T14:32:04Z",
       "metric_name": "http_request_duration_seconds p95",
       "metric_value": 5.1,
@@ -100,8 +100,8 @@
   },
   {
     "jira_key": "INC-13",
-    "title": "[P3] service-dat-hang: http_request_duration_seconds p95 = 2.40 (ngưỡng 2.00)",
-    "severity": "P3",
+    "title": "[P1] service-dat-hang: http_request_duration_seconds p95 = 2.40 (ngưỡng 2.00)",
+    "severity": "P1",
     "state": "Investigating",
     "affected_services": ["service-dat-hang"],
     "detected_at": "2026-07-28T14:32:38Z",

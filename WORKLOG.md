@@ -180,6 +180,11 @@ Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có b�
 | Việt | Fix log tiếng Việt vỡ trên console Windows — `configure_logging()` ép UTF-8 cho cả stdout lẫn stderr | ✅ Done | `src/config.py`, gọi trong `lifespan` | - |
 | Việt | **Cài 4 hàm trong `src/services/rules.py`** (`classify_severity`, `detect`, `classify_auth_burst`, `is_spreading`) | ✅ Done | 39 test, 107 test toàn repo pass | - |
 | Việt | **Phát hiện mức P3 và P4 không đạt tới được** với ngưỡng ghi trong stub | ✅ Done | sửa cửa `detect` xuống ngưỡng P3 + thêm `BASELINE_DEVIATION_RATIO` | - |
+| Việt | Node `detect` + `BreachTracker` — quy tắc "liên tục ≥ 30s" bắc qua nhiều vòng poll | ✅ Done | `src/agents/nodes/detect.py` | - |
+| Việt | Node `classify_severity` — nâng P1 khi sự cố lan sang ≥ 2 service | ✅ Done | `src/agents/nodes/classify_severity.py` | - |
+| Việt | Node `open_war_room` — `find_open_incident()` TRƯỚC `create_incident()` | ✅ Done | `src/agents/nodes/open_war_room.py` | - |
+| Việt | Nối 3 node thành `incident_graph.py`, chạy thật trên Prometheus + load test | ✅ Done | 3 vòng đầu không mở incident, vòng 4 mở `INC-1`, vòng 5–7 dùng lại | - |
+| Việt | 28 test cho node và graph, dùng client giả nên chạy được trong CI | ✅ Done | 135 test toàn repo pass, ruff clean | - |
 
 **Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
 
@@ -198,6 +203,16 @@ Client cũng **loại bỏ mẫu `NaN`** kèm warning, dù các câu trong `prom
 Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đây là lớp thứ hai sau `PrometheusClient`: NaN không làm chương trình chết, nó làm `classify_severity` tụt xuống P4 vì `NaN > x` luôn False — một sự cố P1 bị xếp thành nhẹ nhất mà không có dấu hiệu gì.
 
 `classify_auth_burst` (UC-3) đi nhánh riêng, không dùng chung bảng với UC-1: burst credential-stuffing xảy ra khi hệ thống **hoàn toàn khoẻ**, nên severity dựa trên số tuyệt đối request/giây. Có test chứng minh cùng bộ số liệu đó `detect()` trả `None` còn `classify_auth_burst()` trả P1 — nếu hai nhánh dùng chung ngưỡng thì Agent sẽ kết luận "service quá tải" thay vì "vấn đề bảo mật", và theo use-cases.md thì đó là chẩn đoán SAI.
+
+**Ba node đầu của graph, và Agent đã chạy thật.** `detect` → `classify_severity` → `open_war_room`, nối trong `src/agents/incident_graph.py` (tách khỏi `graph.py` của template).
+
+Mảnh thiết kế phải giải trước khi viết `detect`: quy tắc "vượt ngưỡng liên tục ≥ 30s" bắc qua **nhiều vòng poll**, mà state của LangGraph chỉ sống trong một lần chạy graph. Nếu không có chỗ nhớ riêng thì `breached_for_seconds` luôn bằng 0 và quy tắc chống nhiễu quan trọng nhất trở thành vô hiệu. Giải bằng `BreachTracker` — một object sống ở module, nhớ mốc bắt đầu vượt ngưỡng của từng service, và **xoá mốc khi service hồi phục** để hai sự cố cách nhau một tiếng không bị cộng dồn thành một.
+
+`detect` **không hardcode danh sách service**: Prometheus trả mỗi service một series nên service nào có traffic thì tự xuất hiện. Thêm service mới chỉ cần sửa `prometheus.yml`, không đụng code Agent.
+
+`classify_severity` thoạt nhìn thừa vì `rules.detect()` đã gán severity rồi. Nhưng nó gán dựa trên **một** service, mà contract ① có vế "≥ 2 service bị ảnh hưởng → P1" — vế đó chỉ nhìn thấy khi đã có đủ tín hiệu cả vòng poll. Hai service mỗi cái p95 = 3s, xét riêng đều là P2; xét cùng nhau là P1.
+
+Chạy thật trên Prometheus + `loadgen` xác nhận **cả hai quy tắc chống nhiễu**: ba vòng poll đầu đã thấy vượt ngưỡng nhưng chưa đủ 30s nên không mở incident; vòng thứ tư (32s liên tục) mở `INC-1`; ba vòng sau dùng lại `INC-1` thay vì tạo trùng. Severity P3 đúng theo số đo, vì p95 = 1.90s còn dưới ngưỡng P2.
 
 ---
 
@@ -252,6 +267,45 @@ Trần ~294 rps từ host là port-forward của Docker Desktop trên macOS; và
 Prometheus vẫn thấy sự cố, chỉ là bằng metric khác: `min_over_time(up[5m])` = **0**, và `changes(process_start_time_seconds[10m])` = **3**. Hai tín hiệu này có sẵn miễn phí, không cần service làm gì thêm. Nhưng nhận chúng thì phải thêm tham số vào `rules.detect()` — đó là chữ ký hàm của Việt, nên để Việt quyết chứ tôi không tự đổi. Đây là việc đầu tiên Việt cần xem khi về.
 
 **Chuyện nhỏ dọc đường:** máy tôi có Postgres native chiếm sẵn cổng 5432 nên compose không lên được. Đổi thành `${DEMO_POSTGRES_PORT:-5432}` — mặc định giữ nguyên nên cả nhóm không bị ảnh hưởng, ai trùng cổng thì set biến môi trường.
+
+---
+
+**Việt (tối 02/08) — gỡ conflict và nối lại phần lan truyền.**
+
+Sáng 02/08 tôi cũng viết `detect` + `open_war_room` + graph LangGraph (`e4488ee`) nhưng **không push**, nên Đức không thấy và viết bản của mình lúc tối. Lỗi ở tôi: hôm 01/08 đã tự xếp "3 commit chưa push" là mục số 1 trong danh sách rà lỗi rồi vẫn để đó. Hai bản viết song song, và lúc merge `develop` vào `viet` thì branch vỡ — `detect.py` thành bản Đức trong khi `incident_graph.py` và 2 file test của tôi vẫn gọi `BreachTracker`, `detect_node`.
+
+Giữ bản Đức, bỏ bản mình. Cách đo `breached_for_seconds` bằng `min_over_time` **đúng hơn** `BreachTracker` của tôi ở cả ba điểm Đức nêu: restart mất state, nhiều instance mỗi con một số, test phải giả lập thời gian. Xoá `incident_graph.py`, `test_detect.py`, `test_incident_graph.py` — khôi phục được từ `e4488ee` khi dựng state machine.
+
+Port sang phần bản Đức chưa có: **`escalate_spreading()`**. `rules.detect()` gán severity dựa trên *một* service, còn vế "≥ 2 service bị ảnh hưởng → P1" của contract ① chỉ thấy được khi nhìn cả vòng quét — hai service mỗi cái p95 = 3s, xét riêng đều P2, xét cùng nhau là P1. Trước đó `is_spreading()` viết xong từ 01/08 nhưng **chưa chỗ nào gọi**, tức luật lan truyền đang là code chết.
+
+Gọi trong `run_cycle()` **trước** `open_war_room` — severity đi vào tiêu đề issue lúc tạo, nâng sau khi tạo thì tiêu đề mang mức sai. Vẫn mở **một war room cho mỗi service** như thiết kế của Đức, không gộp: đúng mẫu INC-12/INC-13 trong fixture, việc nối là của `link_incidents`.
+
+⚠️ **Mâu thuẫn contract cần Đức chốt:** contract ① ghi "≥ 2 service bị ảnh hưởng → P1", nhưng `fixtures/incidents.json` lại có INC-12 (P2) và INC-13 (P3) nối với nhau — hai service dính mà không cái nào P1. Tôi làm theo chữ trong contract ①. Nếu Đức muốn theo fixture (hiểu "≥ 2 service" là `affected_services` của **một** incident có 2 phần tử) thì sửa một dòng.
+
+**Bug mới, ảnh hưởng cả Trung:** `pip install -r demo/requirements.txt` **fail trên Windows** — pip đọc file bằng cp1252 mà file có comment tiếng Việt, `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8d`. CI chạy Linux nên xanh. Vá tạm bằng `PYTHONUTF8=1 pip install -r demo/requirements.txt`; nên bỏ dấu khỏi file hoặc ghi cách này vào README.
+
+142 test pass, ruff sạch.
+
+**Rà toàn bộ bẫy Windows — 3/4 thành viên dùng Windows, chỉ Đức dùng macOS.**
+
+Kiểm tra: không còn conflict marker, working tree sạch, 142 test pass, `.gitattributes` khớp với line ending thực tế trên đĩa (`git add --renormalize` không sinh thay đổi nào), `.sh` là LF, `.cmd`/`.ps1` là CRLF, mọi `open()` đều có `encoding=` hoặc dùng chế độ nhị phân.
+
+Nhưng tìm ra **ba lỗi chỉ xảy ra trên Windows**, CI chạy Linux nên xanh hết:
+
+1. **`scripts/run_agent.py` — điểm khởi chạy Agent — chết ngay `--help`.** `configure_logging()` được gọi *sau* `parse_args()`, mà argparse in help và thông báo lỗi tham số thẳng ra stdout ngay trong `parse_args()`. Console Windows là CP1252 nên `UnicodeEncodeError: can't encode character 'ệ'` — chết hẳn, không phải in ra chữ xấu. Tách `force_utf8_console()` khỏi `configure_logging()` và gọi trước `parse_args()`.
+2. **`demo/loadtest.py` chết ngay dòng output đầu tiên** trên Windows — cùng nguyên nhân. Đây là script của Trung mà Trung cũng dùng Windows. `demo/attack.py` đã có cách vá đúng từ trước, chỉ `loadtest.py` và `seed.py` thiếu; áp cùng cách để `demo/` vẫn độc lập, không import `src`.
+3. **`scripts/verify_e2e.py`** cùng lỗi, đã vá.
+
+Cộng thêm lỗi `pip install -r demo/requirements.txt` fail trên Windows (ghi ở trên) — bốn lỗi cùng một họ: **file và luồng ra mặc định CP1252 gặp nội dung tiếng Việt**. Đội viết tài liệu và log bằng tiếng Việt nên bẫy này sẽ còn lặp lại; quy ước nên là mọi script có `print`/`argparse` tiếng Việt đều ép UTF-8 ở dòng đầu của `main()`.
+
+**Chạy trọn chuỗi trên Windows để xác nhận:** `docker compose -f docker-compose.demo.yml up` → 2 target Prometheus UP → `seed.py` 3000 orders + 5000 payments → `loadtest.py` in tiếng Việt bình thường → `run_agent.py --fake --once` chạy sạch, báo "Vòng 1: bình thường" (đúng, vì UC-1 chưa tái hiện được như Đức đã ghi).
+
+**Một khác biệt máy nữa:** Windows của tôi có Postgres native chiếm sẵn 5432 giống hệt máy Đức, nên `seed.py` nối nhầm vào đó và fail `InvalidPasswordError`. Đường vá `DEMO_POSTGRES_PORT` Đức thêm hôm nay **chạy đúng**, đã verify:
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
 
 ---
 

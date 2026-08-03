@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     langchain_project: str = "P-035"
     langchain_tracing_v2: bool = False
 
+    # Prometheus — nguồn tín hiệu phát hiện sự cố (ADR-0002, không dùng Alertmanager)
+    prometheus_url: str = "http://localhost:9090"
+
     # Jira — lớp quản lý vòng đời incident (ADR-0001)
     jira_base_url: str = ""
     jira_email: str = ""
@@ -94,6 +97,25 @@ def configure_tracing() -> bool:
     return True
 
 
+def force_utf8_console() -> None:
+    """Ép stdout/stderr về UTF-8.
+
+    Console Windows mặc định dùng cp1252, không có ký tự tiếng Việt. Mọi thứ
+    đội in ra đều là tiếng Việt, nên chưa ép thì chương trình **chết giữa
+    chừng** với `UnicodeEncodeError` — không phải in ra chữ xấu, mà là dừng hẳn.
+    3/4 thành viên dùng Windows.
+
+    Tách riêng khỏi `configure_logging()` vì có chỗ cần ép UTF-8 **trước** khi
+    dựng logging: `argparse` in `--help` và thông báo lỗi tham số thẳng ra
+    stdout ngay trong `parse_args()`, tức trước cả dòng log đầu tiên.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
+        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def configure_logging() -> None:
     """Dựng logging cho toàn app, và ép console về UTF-8.
 
@@ -110,14 +132,10 @@ def configure_logging() -> None:
        nên `logger.info` của `webhooks.py` hay `prometheus.py` biến mất không
        dấu vết.
 
-    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự gọi
-    `sys.stdout.reconfigure` của riêng nó vì không đi qua `main.py`.
+    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự ép
+    UTF-8 của riêng nó vì không đi qua `main.py`.
     """
-    for stream in (sys.stdout, sys.stderr):
-        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
-        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8")
+    force_utf8_console()
 
     settings = get_settings()
     logging.basicConfig(

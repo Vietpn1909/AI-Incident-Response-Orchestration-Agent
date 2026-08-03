@@ -107,6 +107,109 @@ def breached_seconds_by_service(client: PrometheusClient) -> dict[str, float]:
     return sustained
 
 
+def _one_per_service(*sources: dict[str, IncidentSignal]) -> list[IncidentSignal]:
+    """Gộp các nhánh phát hiện, mỗi service lấy đúng MỘT tín hiệu.
+
+    Thứ tự tham số là thứ tự ưu tiên — nguồn đứng trước thắng.
+
+    Vì sao mỗi service chỉ một: `open_war_room` chống mở trùng theo service, nên
+    tín hiệu thứ hai của cùng service không tạo issue mới mà chỉ comment vào
+    issue đã có. Tiêu đề và severity của issue lấy từ tín hiệu **đến trước** —
+    tức là ngẫu nhiên. Người trực đọc war room sẽ thấy một nhan đề không khớp
+    với nội dung bên trong.
+
+    Ưu tiên hiện tại: **UC-2 (chết) → UC-3 (bảo mật) → UC-1 (chậm)**.
+
+    UC-3 phải đứng trước UC-1, không phải vì nó nặng hơn mà vì `use-cases.md`
+    ghi rõ: kết luận "service quá tải" cho một vụ credential-stuffing là chẩn
+    đoán **SAI**. Một cuộc tấn công cũng làm latency tăng, nên nếu để UC-1
+    thắng thì Agent sẽ chẩn đoán đúng triệu chứng mà sai nguyên nhân — đúng cái
+    mà phép đo trong `eval/` dùng để chấm.
+    """
+    signals: list[IncidentSignal] = []
+    da_co: set[str] = set()
+    for source in sources:
+        for service, signal in source.items():
+            if service in da_co:
+                continue
+            da_co.add(service)
+            signals.append(signal)
+    return signals
+
+
+def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
+    """Quét UC-2 — service chết vì OOM rồi restart. Trả `{service: tín hiệu}`.
+
+    Ba câu hỏi Prometheus, không phụ thuộc service có nhận request hay không:
+    service còn sống không, đã chết liên tục bao lâu, và khởi động lại mấy lần
+    trong 10 phút.
+
+    Phần "chết liên tục bao lâu" dùng lại `_sustained()` với biểu thức đảo
+    `1 - up`: `min_over_time` của nó còn trên 0.5 nghĩa là suốt cửa sổ đó chưa
+    lúc nào service sống lại.
+    """
+    up = _samples_by_service(client, prometheus.SERVICE_UP)
+    restarts = _samples_by_service(client, prometheus.RESTART_COUNT_10M)
+    down_for = _sustained(client, prometheus.SERVICE_DOWN, 0.5)
+
+    found: dict[str, IncidentSignal] = {}
+    for service in set(up) | set(restarts):
+        signal = rules.detect_crashloop(
+            service_up=up.get(service, 0.0),
+            restarts=restarts.get(service, 0.0),
+            down_for_seconds=down_for.get(service, 0.0),
+            service=service,
+        )
+        if signal is None:
+            continue
+        found[service] = signal
+        logger.warning(
+            "UC-2 trên %s: up=%.0f, %.0f lần restart trong 10 phút, chết liên tục %.0fs",
+            service,
+            up.get(service, 0.0),
+            restarts.get(service, 0.0),
+            down_for.get(service, 0.0),
+        )
+    return found
+
+
+def _detect_auth_bursts(client: PrometheusClient) -> dict[str, IncidentSignal]:
+    """Quét UC-3 — burst đăng nhập thất bại. Trả `{service: tín hiệu}`.
+
+    `ERROR_RATE` **không** bắt được UC này: nó chỉ khớp `status=~"5.."`, còn 401
+    là 4xx. Đây là tín hiệu riêng, và ngưỡng của nó là **số tuyệt đối mỗi giây**
+    chứ không phải tỷ lệ — nếu kẻ tấn công là nguồn traffic duy nhất thì tỷ lệ
+    lỗi là 100% ngay từ request đầu, chưa nói được gì về mức nghiêm trọng.
+
+    Đo "đã bất thường liên tục bao lâu" bằng `_sustained()` với sàn P3, giống
+    cách UC-1 làm — một người gõ nhầm mật khẩu vài lần không được mở incident.
+    """
+    rate = _samples_by_service(client, prometheus.AUTH_FAILURE_RATE)
+    if not rate:
+        # Chưa ai gọi `/login` lần nào. Bình thường, không phải lỗi.
+        return {}
+
+    sustained = _sustained(client, prometheus.AUTH_FAILURE_RATE, rules.AUTH_FAILURE_P3)
+
+    found: dict[str, IncidentSignal] = {}
+    for service, failures in rate.items():
+        signal = rules.detect_auth_burst(
+            failures_per_second=failures,
+            breached_for_seconds=sustained.get(service, 0.0),
+            service=service,
+        )
+        if signal is None:
+            continue
+        found[service] = signal
+        logger.warning(
+            "UC-3 trên %s: %.1f request /login thất bại mỗi giây, liên tục %.0fs",
+            service,
+            failures,
+            sustained.get(service, 0.0),
+        )
+    return found
+
+
 def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
     """Quét toàn bộ service, trả tín hiệu sự cố nếu có.
 
@@ -128,21 +231,41 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
             KHÔNG nuốt lỗi ở đây — Agent mù mà tưởng "bình thường" là tình
             huống nguy hiểm nhất.
     """
+    # ⚠️ UC-2 và UC-3 phải quét TRƯỚC chỗ return sớm bên dưới.
+    #
+    # UC-2: service chết thì không nhận request nào, nên không có series p95 —
+    # đúng điều kiện làm hàm này thoát sớm. Đặt sau thì sự cố nặng nhất lại là
+    # sự cố duy nhất không phát hiện được (đã xác nhận khi chạy OOM thật).
+    #
+    # UC-3: burst đăng nhập thất bại có thể là traffic DUY NHẤT đến service, mà
+    # `/login` trả 401 nên không sinh series p95 nào (bộ lọc `_HAS_TRAFFIC` chỉ
+    # đếm request, nhưng nếu attack là toàn bộ traffic thì handler khác im lìm).
+    crashloop = _detect_crashloops(client)
+    auth_burst = _detect_auth_bursts(client)
+
     p95 = _samples_by_service(client, prometheus.P95_LATENCY)
     if not p95:
-        logger.warning(
-            "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
-            "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
-        )
-        return []
+        if not (crashloop or auth_burst):
+            logger.warning(
+                "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
+                "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
+            )
+        return _one_per_service(crashloop, auth_burst)
 
     baseline = _samples_by_service(client, prometheus.P95_BASELINE_30M)
     error_rate = _samples_by_service(client, prometheus.ERROR_RATE)
     pool = _samples_by_service(client, prometheus.POOL_SATURATION_PEAK_5M)
     sustained = breached_seconds_by_service(client)
 
-    signals: list[IncidentSignal] = []
+    signals: list[IncidentSignal] = _one_per_service(crashloop, auth_burst)
+    da_co = {signal.affected_service for signal in signals}
+
     for service, p95_now in p95.items():
+        # Service đã có tín hiệu UC-2 hoặc UC-3 thì bỏ qua đường UC-1 cho chính
+        # nó. Xem `_one_per_service()` để biết vì sao.
+        if service in da_co:
+            continue
+
         signal = rules.detect(
             p95_now=p95_now,
             p95_baseline=baseline.get(service, 0.0),

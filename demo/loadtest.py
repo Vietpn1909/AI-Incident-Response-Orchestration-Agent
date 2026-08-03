@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 import time
 
 import httpx
@@ -105,4 +106,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # Console Windows mặc định CP1252 nên `--help` và mọi dòng print tiếng Việt
+    # đều chết bằng UnicodeEncodeError. Ép UTF-8 trước khi chạy — cùng cách
+    # attack.py đang làm. 3/4 thành viên dùng Windows.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     asyncio.run(main())

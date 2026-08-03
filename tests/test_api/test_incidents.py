@@ -44,7 +44,10 @@ def test_only_open_loc_bo_incident_da_resolved():
 def test_get_incident_tra_ve_bang_chung_va_giai_thuyet():
     incident = client.get("/api/incidents/INC-12").json()
 
-    assert incident["severity"] == "P2"
+    # P1 chứ không phải P2: INC-12 và INC-13 là hai service cùng hỏng, mà
+    # contract ① xếp "≥ 2 service bị ảnh hưởng" vào P1 — xem
+    # `escalate_spreading()`.
+    assert incident["severity"] == "P1"
     assert incident["state"] == "Awaiting Approval"
 
     # Ràng buộc đề bài: chẩn đoán phải có bằng chứng, không chỉ câu chữ từ LLM.
