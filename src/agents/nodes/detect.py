@@ -107,6 +107,42 @@ def breached_seconds_by_service(client: PrometheusClient) -> dict[str, float]:
     return sustained
 
 
+def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
+    """Quét UC-2 — service chết vì OOM rồi restart. Trả `{service: tín hiệu}`.
+
+    Ba câu hỏi Prometheus, không phụ thuộc service có nhận request hay không:
+    service còn sống không, đã chết liên tục bao lâu, và khởi động lại mấy lần
+    trong 10 phút.
+
+    Phần "chết liên tục bao lâu" dùng lại `_sustained()` với biểu thức đảo
+    `1 - up`: `min_over_time` của nó còn trên 0.5 nghĩa là suốt cửa sổ đó chưa
+    lúc nào service sống lại.
+    """
+    up = _samples_by_service(client, prometheus.SERVICE_UP)
+    restarts = _samples_by_service(client, prometheus.RESTART_COUNT_10M)
+    down_for = _sustained(client, prometheus.SERVICE_DOWN, 0.5)
+
+    found: dict[str, IncidentSignal] = {}
+    for service in set(up) | set(restarts):
+        signal = rules.detect_crashloop(
+            service_up=up.get(service, 0.0),
+            restarts=restarts.get(service, 0.0),
+            down_for_seconds=down_for.get(service, 0.0),
+            service=service,
+        )
+        if signal is None:
+            continue
+        found[service] = signal
+        logger.warning(
+            "UC-2 trên %s: up=%.0f, %.0f lần restart trong 10 phút, chết liên tục %.0fs",
+            service,
+            up.get(service, 0.0),
+            restarts.get(service, 0.0),
+            down_for.get(service, 0.0),
+        )
+    return found
+
+
 def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
     """Quét toàn bộ service, trả tín hiệu sự cố nếu có.
 
@@ -128,21 +164,36 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
             KHÔNG nuốt lỗi ở đây — Agent mù mà tưởng "bình thường" là tình
             huống nguy hiểm nhất.
     """
+    # ⚠️ UC-2 phải quét TRƯỚC chỗ return sớm bên dưới. Service chết thì không
+    # nhận request nào, nên không có series p95 — đúng điều kiện làm hàm này
+    # thoát sớm. Đặt sau thì sự cố nặng nhất lại là sự cố duy nhất không phát
+    # hiện được.
+    crashloop = _detect_crashloops(client)
+
     p95 = _samples_by_service(client, prometheus.P95_LATENCY)
     if not p95:
-        logger.warning(
-            "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
-            "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
-        )
-        return []
+        if not crashloop:
+            logger.warning(
+                "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
+                "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
+            )
+        return list(crashloop.values())
 
     baseline = _samples_by_service(client, prometheus.P95_BASELINE_30M)
     error_rate = _samples_by_service(client, prometheus.ERROR_RATE)
     pool = _samples_by_service(client, prometheus.POOL_SATURATION_PEAK_5M)
     sustained = breached_seconds_by_service(client)
 
-    signals: list[IncidentSignal] = []
+    signals: list[IncidentSignal] = list(crashloop.values())
     for service, p95_now in p95.items():
+        # Service đang chết đi sống lại thì latency và tỷ lệ lỗi của nó vô
+        # nghĩa — counter reset sau mỗi lần restart, và những request kịp trả
+        # lời vẫn nhanh như thường. Báo thêm một sự cố UC-1 cho cùng service chỉ
+        # làm loãng war room và dẫn người trực đi sai hướng ("quá tải" thay vì
+        # "hết bộ nhớ").
+        if service in crashloop:
+            continue
+
         signal = rules.detect(
             p95_now=p95_now,
             p95_baseline=baseline.get(service, 0.0),

@@ -60,6 +60,15 @@ AUTH_FAILURE_P2 = 10.0
 #: người dùng gõ nhầm mật khẩu không tạo ra hình thái đó.
 AUTH_FAILURE_P3 = 1.0
 
+# Ngưỡng cho UC-2 (service chết vì OOM rồi restart liên tục).
+
+#: Số lần restart trong 10 phút để tính là crash loop.
+#:
+#: Một lần trong 10 phút nhiều khả năng là **deploy bình thường**, không phải sự
+#: cố — báo động ở mức đó thì mỗi lần đội deploy Agent lại mở một incident. Hai
+#: lần trở lên mới là hình thái "chết rồi sống lại rồi chết tiếp".
+CRASHLOOP_RESTARTS = 2.0
+
 
 def classify_severity(
     p95: float,
@@ -224,6 +233,94 @@ def classify_auth_burst(failures_per_second: float, breached_for_seconds: float)
     return None
 
 
+def classify_crashloop(service_up: float, restarts: float, down_for_seconds: float) -> Severity | None:
+    """Phân loại UC-2 — service chết vì OOM rồi restart. `None` nếu bình thường.
+
+    Nhánh RIÊNG, không dùng `classify_severity()`, cùng lý do với
+    `classify_auth_burst()`: hình thái khác hẳn. UC-1 là service **còn sống
+    nhưng chậm**; UC-2 là service **chết rồi sống lại**. Latency và tỷ lệ lỗi
+    của một process đang chết đi sống lại không nói lên điều gì — counter reset
+    sau mỗi lần restart.
+
+    Luôn trả **P1**: service không phục vụ được, không phải chỉ chậm. Đây là mức
+    `docs/use-cases.md` UC-2 quy định.
+
+    Hai đường vào, đủ một là P1:
+
+    1. **Chết liên tục** ≥ `SUSTAINED_SECONDS` — `up` = 0 suốt khoảng đó. Cần
+       ngưỡng thời gian vì một lần scrape hụt cũng làm `up` = 0 một nhịp.
+    2. **Restart loop** — ≥ `CRASHLOOP_RESTARTS` lần trong 10 phút. Đường này
+       bắt được cả khi service đang **sống** ở đúng lúc quét: crash loop theo
+       định nghĩa là chết-sống xen kẽ, nên đòi "chết liên tục 30s" sẽ bỏ lọt.
+
+    Args:
+        service_up: 1 nếu Prometheus scrape được, 0 nếu không.
+        restarts: Số lần process khởi động lại trong 10 phút.
+        down_for_seconds: Đã chết liên tục bao lâu. 0 nếu đang sống.
+
+    Raises:
+        ValueError: khi có đầu vào là NaN — xem `classify_severity`.
+    """
+    _reject_nan(service_up=service_up, restarts=restarts, down_for_seconds=down_for_seconds)
+
+    if service_up < 1 and down_for_seconds >= SUSTAINED_SECONDS:
+        return Severity.P1
+    if restarts >= CRASHLOOP_RESTARTS:
+        return Severity.P1
+    return None
+
+
+def detect_crashloop(
+    service_up: float,
+    restarts: float,
+    down_for_seconds: float,
+    service: str,
+) -> IncidentSignal | None:
+    """Dựng tín hiệu UC-2 kèm bằng chứng. `None` nếu service bình thường.
+
+    Đối xứng với `detect()` của UC-1: `classify_crashloop()` quyết định mức,
+    hàm này gói lại thành `IncidentSignal` có bằng chứng số.
+
+    Bằng chứng luôn gồm **cả hai** tín hiệu, kể cả cái không kích hoạt. Chúng trả
+    lời hai câu khác nhau mà người trực cần cả hai: `up` nói *bây giờ có phục vụ
+    được không*, số lần restart nói *đây là chết hẳn hay đang chết đi sống lại*.
+    """
+    severity = classify_crashloop(service_up, restarts, down_for_seconds)
+    if severity is None:
+        return None
+
+    if service_up < 1:
+        metric_name, metric_value, threshold = "up (service còn sống không)", service_up, 1.0
+    else:
+        metric_name, metric_value, threshold = (
+            "số lần restart trong 10 phút",
+            restarts,
+            CRASHLOOP_RESTARTS,
+        )
+
+    return IncidentSignal(
+        affected_service=service,
+        severity=severity,
+        detected_at=datetime.now(UTC),
+        metric_name=metric_name,
+        metric_value=metric_value,
+        threshold=threshold,
+        breached_for_seconds=down_for_seconds,
+        evidence=[
+            MetricEvidence(
+                name="up (service còn sống không)",
+                value=service_up,
+                promql=prometheus.SERVICE_UP,
+            ),
+            MetricEvidence(
+                name="số lần restart trong 10 phút",
+                value=restarts,
+                promql=prometheus.RESTART_COUNT_10M,
+            ),
+        ],
+    )
+
+
 def is_spreading(signals: list[IncidentSignal], within_seconds: float = 60.0) -> bool:
     """Có dấu hiệu sự cố lan sang service khác không?
 
@@ -311,6 +408,7 @@ __all__ = [
     "AUTH_FAILURE_P2",
     "AUTH_FAILURE_P3",
     "BASELINE_DEVIATION_RATIO",
+    "CRASHLOOP_RESTARTS",
     "ERROR_RATE_P1",
     "ERROR_RATE_P2",
     "ERROR_RATE_P3",
@@ -322,7 +420,9 @@ __all__ = [
     "SUSTAINED_SECONDS",
     "MetricEvidence",
     "classify_auth_burst",
+    "classify_crashloop",
     "classify_severity",
     "detect",
+    "detect_crashloop",
     "is_spreading",
 ]
