@@ -233,6 +233,49 @@ def classify_auth_burst(failures_per_second: float, breached_for_seconds: float)
     return None
 
 
+def detect_auth_burst(
+    failures_per_second: float,
+    breached_for_seconds: float,
+    service: str,
+) -> IncidentSignal | None:
+    """Dựng tín hiệu UC-3 kèm bằng chứng. `None` nếu bình thường.
+
+    Đối xứng với `detect()` và `detect_crashloop()`: `classify_auth_burst()`
+    quyết định mức, hàm này gói lại thành `IncidentSignal`.
+
+    Tên metric ghi rõ **"mỗi giây"** chứ không phải tỷ lệ phần trăm. Đây không
+    phải chuyện chữ nghĩa: nếu kẻ tấn công là nguồn traffic duy nhất thì tỷ lệ
+    lỗi là 100% ngay từ request đầu, chưa nói được gì về mức nghiêm trọng — nên
+    UC-3 đo số tuyệt đối. Người trực đọc war room phải thấy ngay điều đó.
+    """
+    severity = classify_auth_burst(failures_per_second, breached_for_seconds)
+    if severity is None:
+        return None
+
+    threshold = {
+        Severity.P1: AUTH_FAILURE_P1,
+        Severity.P2: AUTH_FAILURE_P2,
+        Severity.P3: AUTH_FAILURE_P3,
+    }[severity]
+
+    return IncidentSignal(
+        affected_service=service,
+        severity=severity,
+        detected_at=datetime.now(UTC),
+        metric_name="số request /login thất bại mỗi giây",
+        metric_value=failures_per_second,
+        threshold=threshold,
+        breached_for_seconds=breached_for_seconds,
+        evidence=[
+            MetricEvidence(
+                name="số request /login thất bại mỗi giây",
+                value=failures_per_second,
+                promql=prometheus.AUTH_FAILURE_RATE,
+            ),
+        ],
+    )
+
+
 def classify_crashloop(service_up: float, restarts: float, down_for_seconds: float) -> Severity | None:
     """Phân loại UC-2 — service chết vì OOM rồi restart. `None` nếu bình thường.
 
@@ -423,6 +466,7 @@ __all__ = [
     "classify_crashloop",
     "classify_severity",
     "detect",
+    "detect_auth_burst",
     "detect_crashloop",
     "is_spreading",
 ]
