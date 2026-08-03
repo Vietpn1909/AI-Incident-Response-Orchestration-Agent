@@ -14,6 +14,19 @@ from demo.service_thanh_toan import main as payment_service
 class _FakeConnection:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
+        self.calls: list[tuple[str, str, tuple[object, ...]]] = []
+
+    async def execute(self, query: str, *args: object) -> str:
+        self.calls.append(("execute", query, args))
+        return "SELECT 1"
+
+    async def fetchrow(self, query: str, *args: object) -> dict[str, object]:
+        self.calls.append(("fetchrow", query, args))
+        return {"id": "payment-1"}
+
+    async def fetchval(self, query: str, *args: object) -> int:
+        self.calls.append(("fetchval", query, args))
+        return 1
 
     async def fetch(self, query: str, padding_bytes: int, limit: int) -> list[dict[str, object]]:
         assert "repeat('x', $1)" in query
@@ -37,8 +50,18 @@ class _FakePool:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._connection = _FakeConnection(rows)
 
+    @property
+    def connection(self) -> _FakeConnection:
+        return self._connection
+
     def acquire(self) -> _AcquireContext:
         return _AcquireContext(self._connection)
+
+    def get_size(self) -> int:
+        return 1
+
+    def get_idle_size(self) -> int:
+        return 1
 
 
 @pytest_asyncio.fixture
@@ -76,6 +99,30 @@ async def test_login_dung_tra_token_gia(payment_client: AsyncClient):
 
     assert response.status_code == 200
     assert response.json() == {"ok": True, "token": "fake-token"}
+
+
+@pytest.mark.asyncio
+async def test_pay_giu_connection_bang_truy_van_cham_truoc_khi_insert(
+    payment_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_pool = _FakePool([])
+    monkeypatch.setattr(payment_service, "pool", fake_pool)
+
+    response = await payment_client.post(
+        "/pay",
+        json={"order_id": "order-1", "amount": 100},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "payment_id": "payment-1"}
+
+    calls = fake_pool.connection.calls
+    assert [method for method, _, _ in calls] == ["execute", "fetchrow", "fetchval"]
+    assert "pg_sleep" in calls[0][1]
+    assert calls[0][2] == (payment_service.PAYMENT_QUERY_DELAY_SECONDS,)
+    assert "INSERT INTO payments" in calls[1][1]
+    assert "count(*)" in calls[2][1]
 
 
 @pytest.mark.asyncio

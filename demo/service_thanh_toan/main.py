@@ -39,6 +39,14 @@ POOL_SIZE = 5
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://demo:demo@localhost:5432/demo")
 
+# ⚠️ ĐỘ TRỄ POSTGRES CÓ CHỦ ĐÍCH CHO UC-1 — KHÔNG DÙNG TRONG PRODUCTION.
+#
+# Phải chờ bên trong `pool.acquire()` để request giữ một connection thật.
+# Dùng asyncio.sleep ở ngoài pool sẽ chỉ làm handler chậm, không tạo được bằng
+# chứng pool cạn. Có thể chỉnh trên từng máy demo nhưng mặc định 0.2s bảo đảm
+# pool 5 connection trở thành nút thắt trước uvicorn.
+PAYMENT_QUERY_DELAY_SECONDS = float(os.getenv("PAYMENT_QUERY_DELAY_SECONDS", "0.2"))
+
 # ⚠️ Contract ①: 2 metric này instrumentator KHÔNG tự tạo, nhưng Agent cần
 # chúng để chứng minh nguyên nhân gốc là "pool cạn" chứ không chỉ nói "chậm".
 #
@@ -120,6 +128,13 @@ async def pay(request: PayRequest) -> dict:
         async with pool.acquire() as conn:
             # get_size() = số connection ĐÃ TẠO, không phải trần POOL_SIZE
             db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
+
+            # Truy vấn chậm có chủ đích: giữ connection trong Postgres để tải
+            # đồng thời làm pool cạn và request xếp hàng ngay bên trong /pay.
+            await conn.execute(
+                "SELECT pg_sleep($1::double precision)",
+                PAYMENT_QUERY_DELAY_SECONDS,
+            )
 
             row = await conn.fetchrow(
                 "INSERT INTO payments (order_id, amount) VALUES ($1, $2) RETURNING id",
