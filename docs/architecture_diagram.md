@@ -126,13 +126,17 @@ graph TB
 | `correlate_deploy` | So thời điểm incident với `deploy_history` | Việt |
 | `hypothesize` | **Rule engine tìm bằng chứng trước**, LLM chỉ diễn giải thành câu | Việt |
 | `link_incidents` | `JiraClient.link_issues()` khi phát hiện lan truyền | Việt |
-| `propose_remediation` | Chọn runbook, post comment đề xuất | Việt |
+| `propose_remediation` | Chọn runbook, post đề xuất, chuyển sang `Awaiting Approval` | **Đức** (đổi chủ 04/08) |
 | `await_approval` | Không làm gì — chờ webhook | Đức (webhook + transition) |
-| `escalate` | Tăng severity khi treo quá ngưỡng | Việt |
+| `escalate` | Tăng severity khi treo quá ngưỡng | **Đức** (đổi chủ 04/08) |
 | `execute_remediation` | Thực thi hành động đã duyệt (rollback giả lập) | Đức |
 | `generate_postmortem` | Sinh báo cáo, tạo sub-task action item | Việt |
 
-> **Vì sao `hypothesize` chạy rule trước rồi mới tới LLM:** ràng buộc đề bài yêu cầu *chẩn đoán có bằng chứng*. Rule engine tạo ra bằng chứng số (p95 tăng 25×, pool cạn lúc 14:32, deploy v1.4.2 lúc 14:28); LLM chỉ chuyển bằng chứng đó thành lời giải thích và chọn runbook. Nếu để LLM tự suy luận từ dữ liệu thô, kết quả không truy vết được về số liệu nào.
+> **Vì sao `hypothesize` chạy rule trước rồi mới tới LLM:** ràng buộc đề bài yêu cầu *chẩn đoán có bằng chứng*. Rule engine tạo ra bằng chứng số (p95 tăng 25×, pool cạn lúc 14:32, deploy v1.4.2 lúc 14:28); LLM chỉ chuyển bằng chứng đó thành lời giải thích. Nếu để LLM tự suy luận từ dữ liệu thô, kết quả không truy vết được về số liệu nào.
+
+> **Cập nhật 04/08 — LLM KHÔNG chọn runbook.** Bản đầu của đoạn trên viết "LLM chỉ chuyển bằng chứng đó thành lời giải thích **và chọn runbook**". Phần chọn runbook đã bỏ khỏi vai của LLM: `action` không phải câu văn mà là thứ **được thi hành lên production**, và chênh giữa `rollback` với `block_ip` là chênh giữa hạ một phiên bản và chặn truy cập của người dùng thật. Docstring của `remediation.SUPPORTED_ACTIONS` vốn đã ghi lý do có danh sách trắng là *"tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù"* — nhưng để LLM chọn **trong** danh sách trắng thì vẫn là LLM quyết định làm gì lên production, chỉ khác là bị giới hạn phạm vi.
+>
+> Nay [`services/runbooks.py`](../src/services/runbooks.py) chọn `action`, `params`, `runbook`, `risk` bằng luật tất định. Ranh giới là: **LLM diễn giải, luật đề xuất, người duyệt.**
 
 ---
 

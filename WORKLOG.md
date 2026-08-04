@@ -318,6 +318,7 @@ DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
 | Trương Công Thái Đức | Tìm ra `DATABASE_URL` vẫn là placeholder của template → `correlate_deploy` chết âm thầm | ✅ Done | `src/config.py`, `.env.example`, `demo/README.md` | - |
 | Trương Công Thái Đức | Test gác `DATABASE_URL`, đã mutation-test | ✅ Done | `tests/test_services/test_deploys_config.py` — 205 test pass | - |
 | Trương Công Thái Đức | CI bị chặn vì org hết hạn mức Actions → chuyển sang self-hosted runner của BTC | ✅ Done | `.github/workflows/ci.yml`, run `30920675914` xanh | - |
+| Trương Công Thái Đức | Node `propose_remediation` + `services/runbooks.py` — nối cổng HITL vào luồng Agent | ✅ Done | 21 test mới, 226 test pass; verify trên Jira thật (KAN-6) | - |
 
 **Tổng kết ngày:** Hai PR của Việt và Trung đưa dự án qua mốc lớn nhất từ đầu: **cả 3 use case đều phát hiện được, và Agent đã có LLM trong luồng chạy**. Đo lại độc lập từng cái thay vì tin số người khai.
 
@@ -365,6 +366,34 @@ Tổng phút bị tính khoảng **100 / 2.000**, tức 5%. Cohort 3 có 35+ đ�
 Kiểm chứng chạy thật chứ không tin dấu ✅: đếm được **205 dòng `PASSED`** trong log, đúng bằng số test local. Một CI "xanh" mà bỏ qua test thì tệ hơn CI đỏ.
 
 Giá phải trả: **2m49s** thay vì 31s. Runner không có sẵn tool cache nên `setup-python` phải tải Python 3.11.15 về mỗi lần, cộng thời gian xếp hàng FIFO với các team khác. Chấp nhận được — chậm hơn 5 lần nhưng vẫn còn cổng gác.
+
+### Tối: `propose_remediation` — cổng HITL cuối cùng nằm trong luồng Agent
+
+Trước hôm nay Agent chẩn đoán được nguyên nhân rồi **dừng**. Cổng HITL đã verify chạy thật trên Jira từ 01/08 (KAN-11), nhưng việc chuyển issue sang `Awaiting Approval` do [`scripts/verify_e2e.py`](scripts/verify_e2e.py) làm **bằng tay** — nên cổng tồn tại mà chưa bao giờ nằm trên đường đi của Agent. Node này đóng chỗ hở đó.
+
+**Quyết định đi chệch tài liệu, đã ghi lý do vào `docs/architecture_diagram.md`: LLM không chọn runbook.** Sơ đồ kiến trúc viết từ 28/07 rằng *"LLM chỉ chuyển bằng chứng thành lời giải thích và chọn runbook"*. Tôi bỏ phần chọn runbook khỏi vai của LLM, vì `action` không phải câu văn — nó là thứ **được thi hành lên production**, và chênh giữa `rollback` với `block_ip` là chênh giữa hạ một phiên bản và chặn truy cập của người dùng thật. Docstring `remediation.SUPPORTED_ACTIONS` vốn đã ghi lý do có danh sách trắng là *"tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù"* — nhưng cho LLM chọn **trong** danh sách trắng thì vẫn là LLM quyết định làm gì lên production, chỉ khác là bị giới hạn phạm vi. Ranh giới bây giờ: **LLM diễn giải, luật đề xuất, người duyệt.**
+
+Bảng chọn hành động ở `services/runbooks.py`, thứ tự xét là **UC-3 → UC-2 → UC-1**, khớp `detect.py::_one_per_service` nhưng vì lý do khác: một vụ credential-stuffing xảy ra đúng lúc vừa deploy thì rollback không chặn được cuộc tấn công, chỉ mất thời gian và thêm một lần đổi phiên bản vô ích giữa lúc đang có sự cố.
+
+Ba chỗ chọn cách "nói thật thay vì im lặng":
+
+- **UC-2 không có deploy → `scale_up`, và `risk` ghi rõ đây là GIẢM NHẸ.** Service chết vì hết RAM thì cách đúng là tăng `mem_limit` hoặc sửa rò rỉ — cả hai **không** nằm trong `SUPPORTED_ACTIONS`. Đề xuất một phương án không sửa gốc mà không nói ra là để người duyệt tưởng đã xử lý xong.
+- **UC-3 không chọn `block_ip` dù nó nằm trong danh sách trắng**, vì Agent chưa thu thập IP nguồn — chọn nó lúc này là chặn mù.
+- **Không biết rollback về đâu thì không đề xuất rollback.** `_phien_ban_truoc()` trả `None` thì rơi sang `increase_pool`. Để `remediation._describe()` điền "phiên bản trước" là đẩy việc đoán xuống lúc thi hành.
+
+**Test canh chuỗi tên bằng chứng, đúng bài học sáng nay.** `runbooks.py` phân nhánh theo tên `MetricEvidence`, mà tên đó là chuỗi literal trong `rules.py` của Việt. Việt sửa một chữ là chỗ này lặng lẽ không nhận ra use case nữa rồi **mọi** sự cố rơi vào nhánh mặc định `scale_up` — sai hành động lên production mà không có gì đỏ lên. Nên `test_ten_bang_chung_con_khop_voi_rules` gọi thẳng `rules.detect*()` rồi đối chiếu, không hardcode kỳ vọng ở hai nơi.
+
+**Verify trên Jira thật, không chỉ FakeJira.** Lần chạy đầu với `RealJiraClient` đi vào nhánh "cập nhật KAN-6 đã mở" nên `propose_remediation` **không chạy** — đúng thiết kế, nhưng nghĩa là chưa kiểm được thứ đáng lo nhất: tên transition `Awaiting Approval` có tồn tại trên board thật không. Gọi thẳng vào KAN-6 thì cả ba chỗ đều đúng:
+
+```
+lịch sử deploy đọc được : ['v1.4.2', 'v1.4.1']            ← Postgres thật
+đề xuất                 : rollback → to_version=v1.4.1     ← đúng bản NGAY TRƯỚC
+trạng thái KAN-6        : Remediating → Awaiting Approval  ← transition có trên board
+```
+
+Chuỗi đầy đủ chạy một lần không script tay: `detect` (p95 3,481s, vượt liên tục 60s) → `open_war_room` → `hypothesize` (90%, "pool cạn kiệt") → `runbooks` (rollback v1.4.2 → v1.4.1) → `propose_remediation` → **dừng, chờ người**.
+
+Graph kết thúc ở đây là **cố ý**, không phải chuỗi làm dở: bước tiếp theo do người khởi động, và Agent tự chuyển sang `Remediating` thì `assert_human_approved()` so `accountId` thấy trùng account Agent rồi tự khoá chính nó khỏi bước thi hành. Cổng không dựa vào việc Agent ngoan.
 
 ---
 

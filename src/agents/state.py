@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from src.models.incident import IncidentSignal
+from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
 
 
 class AgentState(TypedDict, total=False):
@@ -53,6 +53,21 @@ class IncidentAgentState(TypedDict, total=False):
     #: Jira key của các war room **đã có sẵn**, chỉ được cập nhật thêm bối cảnh.
     #: Đây là đường đi bình thường khi Agent poll liên tục lúc sự cố còn kéo dài.
     updated: list[str]
+
+    #: `{jira key: giả thuyết}` của các war room vừa chẩn đoán. Output của
+    #: `hypothesize`, input của `propose_remediation` — đề xuất hành động cần
+    #: `related_deploy` để biết rollback về đâu.
+    hypotheses: dict[str, Hypothesis]
+
+    #: `{jira key: đề xuất}` đã post lên war room. Output của `propose_remediation`.
+    proposals: dict[str, RemediationProposal]
+
+    #: War room đã chuyển sang `Awaiting Approval` thành công, tức người trực có
+    #: transition để bấm và cổng HITL sẽ có changelog mà xác minh.
+    #:
+    #: Key nào có trong `proposals` mà KHÔNG có ở đây là hỏng nghiêm trọng: đề
+    #: xuất hiện trên war room nhưng không ai duyệt được.
+    awaiting_approval: list[str]
 
     #: Lỗi khiến vòng quét dừng sớm. Có giá trị nghĩa là Agent **đang mù**.
     error: str

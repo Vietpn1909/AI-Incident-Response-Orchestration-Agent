@@ -38,7 +38,9 @@ from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
 from src.agents.nodes.hypothesize import hypothesize
 from src.agents.nodes.open_war_room import open_war_room
+from src.agents.nodes.propose_remediation import propose_remediation
 from src.agents.state import IncidentAgentState
+from src.models.incident import Hypothesis, RemediationProposal
 from src.services import rules
 from src.services.jira import JiraClient
 from src.services.prometheus import PrometheusClient, PrometheusError
@@ -119,25 +121,62 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         if not war_rooms:
             return {}
 
+        hypotheses: dict[str, Hypothesis] = {}
         for signal in state.get("signals") or []:
             jira_key = war_rooms.get(signal.affected_service)
             if not jira_key:
                 continue
             hypothesis = hypothesize(signal)
             jira.post_hypothesis(jira_key, hypothesis)
+            hypotheses[jira_key] = hypothesis
             logger.info(
                 "%s: giả thuyết (tin cậy %.0f%%) — %s",
                 jira_key,
                 hypothesis.confidence * 100,
                 hypothesis.statement,
             )
-        return {}
+        return {"hypotheses": hypotheses}
+
+    def propose_remediation_node(state: IncidentAgentState) -> dict:
+        """Đề xuất hành động rồi chuyển war room sang chờ người duyệt.
+
+        Chỉ chạy cho war room **đã có giả thuyết** trong vòng này. Không có giả
+        thuyết thì không có `related_deploy`, mà thiếu nó thì mọi sự cố đều rơi
+        vào nhánh mặc định `scale_up` — đề xuất sai còn tệ hơn không đề xuất.
+
+        Đây là node cuối của chuỗi tự động. Sau nó graph **kết thúc** và quyền
+        quyết định thuộc về người trực: họ chuyển issue sang `Remediating`, Jira
+        gọi webhook, `hitl.assert_human_approved()` xác minh bằng changelog rồi
+        mới tới `remediation.execute()`.
+        """
+        hypotheses = state.get("hypotheses") or {}
+        if not hypotheses:
+            return {}
+
+        signal_theo_key = {
+            war_room: signal
+            for signal in state.get("signals") or []
+            if (war_room := (state.get("war_rooms") or {}).get(signal.affected_service))
+        }
+
+        proposals: dict[str, RemediationProposal] = {}
+        awaiting: list[str] = []
+        for jira_key, hypothesis in hypotheses.items():
+            signal = signal_theo_key.get(jira_key)
+            if signal is None:
+                continue
+            outcome = propose_remediation(jira, jira_key, signal, hypothesis)
+            proposals[jira_key] = outcome.proposal
+            if outcome.awaiting_approval:
+                awaiting.append(jira_key)
+        return {"proposals": proposals, "awaiting_approval": awaiting}
 
     graph = StateGraph(IncidentAgentState)
     graph.add_node("detect", detect)
     graph.add_node("classify_severity", classify_severity)
     graph.add_node("open_war_room", open_war_rooms)
     graph.add_node("hypothesize", hypothesize_node)
+    graph.add_node("propose_remediation", propose_remediation_node)
 
     graph.set_entry_point("detect")
     graph.add_edge("detect", "classify_severity")
@@ -147,7 +186,11 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         {"open_war_room": "open_war_room", END: END},
     )
     graph.add_edge("open_war_room", "hypothesize")
-    graph.add_edge("hypothesize", END)
+    graph.add_edge("hypothesize", "propose_remediation")
+    # Kết thúc ở đây là CỐ Ý, không phải chuỗi làm dở. Bước tiếp theo do **người**
+    # khởi động: họ chuyển issue sang `Remediating`, Jira gọi webhook, rồi
+    # `hitl.assert_human_approved()` mới cho `remediation.execute()` chạy.
+    graph.add_edge("propose_remediation", END)
 
     return graph.compile()
 
