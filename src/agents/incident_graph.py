@@ -36,6 +36,7 @@ from langgraph.graph import END, StateGraph
 
 from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
+from src.agents.nodes.escalate import escalate
 from src.agents.nodes.hypothesize import hypothesize
 from src.agents.nodes.open_war_room import open_war_room
 from src.agents.nodes.propose_remediation import propose_remediation
@@ -171,12 +172,33 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
                 awaiting.append(jira_key)
         return {"proposals": proposals, "awaiting_approval": awaiting}
 
+    def escalate_node(state: IncidentAgentState) -> dict:
+        """Nâng mức những war room treo chờ duyệt quá lâu.
+
+        Xét `updated` — các war room **đã có từ trước** — chứ không xét cái vừa
+        mở trong vòng này. Cái vừa mở thì đề xuất mới post xong vài giây, không
+        thể treo quá ngưỡng; đưa nó vào chỉ tốn thêm lời gọi Jira mỗi vòng.
+
+        Đây là node cuối. Nó **không phá cổng HITL**: không duyệt thay người,
+        không hạ ràng buộc. Chỉ làm to tiếng hơn để lần sau ai mở board là thấy.
+        """
+        dang_theo_doi = state.get("updated") or []
+        if not dang_theo_doi:
+            return {}
+
+        escalated: list[str] = []
+        for jira_key in dang_theo_doi:
+            if escalate(jira, jira_key).escalated:
+                escalated.append(jira_key)
+        return {"escalated": escalated}
+
     graph = StateGraph(IncidentAgentState)
     graph.add_node("detect", detect)
     graph.add_node("classify_severity", classify_severity)
     graph.add_node("open_war_room", open_war_rooms)
     graph.add_node("hypothesize", hypothesize_node)
     graph.add_node("propose_remediation", propose_remediation_node)
+    graph.add_node("escalate", escalate_node)
 
     graph.set_entry_point("detect")
     graph.add_edge("detect", "classify_severity")
@@ -187,10 +209,11 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     )
     graph.add_edge("open_war_room", "hypothesize")
     graph.add_edge("hypothesize", "propose_remediation")
+    graph.add_edge("propose_remediation", "escalate")
     # Kết thúc ở đây là CỐ Ý, không phải chuỗi làm dở. Bước tiếp theo do **người**
     # khởi động: họ chuyển issue sang `Remediating`, Jira gọi webhook, rồi
     # `hitl.assert_human_approved()` mới cho `remediation.execute()` chạy.
-    graph.add_edge("propose_remediation", END)
+    graph.add_edge("escalate", END)
 
     return graph.compile()
 

@@ -319,6 +319,7 @@ DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
 | Trương Công Thái Đức | Test gác `DATABASE_URL`, đã mutation-test | ✅ Done | `tests/test_services/test_deploys_config.py` — 205 test pass | - |
 | Trương Công Thái Đức | CI bị chặn vì org hết hạn mức Actions → chuyển sang self-hosted runner của BTC | ✅ Done | `.github/workflows/ci.yml`, run `30920675914` xanh | - |
 | Trương Công Thái Đức | Node `propose_remediation` + `services/runbooks.py` — nối cổng HITL vào luồng Agent | ✅ Done | 21 test mới, 226 test pass; verify trên Jira thật (KAN-6) | - |
+| Trương Công Thái Đức | Node `escalate` + nới contract ③ (`get_transition_time`, `set_severity`) | ✅ Done | 8 test mới, 234 test pass | - |
 
 **Tổng kết ngày:** Hai PR của Việt và Trung đưa dự án qua mốc lớn nhất từ đầu: **cả 3 use case đều phát hiện được, và Agent đã có LLM trong luồng chạy**. Đo lại độc lập từng cái thay vì tin số người khai.
 
@@ -394,6 +395,21 @@ trạng thái KAN-6        : Remediating → Awaiting Approval  ← transition c
 Chuỗi đầy đủ chạy một lần không script tay: `detect` (p95 3,481s, vượt liên tục 60s) → `open_war_room` → `hypothesize` (90%, "pool cạn kiệt") → `runbooks` (rollback v1.4.2 → v1.4.1) → `propose_remediation` → **dừng, chờ người**.
 
 Graph kết thúc ở đây là **cố ý**, không phải chuỗi làm dở: bước tiếp theo do người khởi động, và Agent tự chuyển sang `Remediating` thì `assert_human_approved()` so `accountId` thấy trùng account Agent rồi tự khoá chính nó khỏi bước thi hành. Cổng không dựa vào việc Agent ngoan.
+
+### `escalate` — cổng HITL là điểm chết đơn lẻ
+
+Cổng phê duyệt là điểm mạnh của thiết kế, nhưng nó cũng có mặt kia: người trực đi ngủ, không thấy thông báo, hoặc đang xử lý việc khác thì đề xuất nằm im trong `Awaiting Approval` trong khi sự cố vẫn diễn ra. `escalate` nâng mức từng bậc (P4→P3→P2→P1, không nhảy thẳng — nhảy thẳng thì mọi thứ treo đều thành P1 và mức độ mất ý nghĩa phân loại) và ghi rõ đã treo bao lâu.
+
+**Giới hạn phải nói ra, đã ghi trong docstring:** sơ đồ kiến trúc viết *"tăng severity, thông báo"*, nhưng phần **thông báo** hiện chưa làm được — đội không có PagerDuty, Slack webhook hay bất cứ kênh gọi người nào. Nâng mức trên Jira chỉ có tác dụng nếu có người đang xem board. Không giả vờ node này gọi được người dậy.
+
+Phải nới contract ③ hai hàm, và cả hai đều có bẫy:
+
+- **`get_transition_time()`** — cần biết đã treo bao lâu. Đọc từ changelog thay vì Agent tự ghi nhớ, vì **người trực có thể tự chuyển trạng thái trên UI** mà Agent không hề biết. Gộp chung một lượt đi changelog với `get_transition_author()`: tách hai hàm mỗi hàm tự phân trang là gọi Jira API gấp đôi cho cùng dữ liệu, mà quan trọng hơn là tác giả và thời điểm **phải lấy từ cùng một entry** — không thì khi có nhiều lần chuyển sang cùng trạng thái, cổng HITL sẽ nói "người X duyệt" kèm mốc của một lần chuyển khác.
+- **`set_severity()`** — mức độ nằm ở **hai chỗ**: label `severity-P2` và tiền tố `[P2]` trong tiêu đề. Sửa một chỗ thì `severity_from_labels()` và mắt người đọc board nói hai điều khác nhau. Hai helper `replace_severity_label()` / `retitle_severity()` đặt trong `mapping.py` để hiểu biết về định dạng label nằm đúng một chỗ.
+
+**Lỗi tìm được nhờ test, và nó là lỗi chỉ xuất hiện trên một trong hai bản cài đặt.** Bản đầu đọc `incident.severity` **sau** khi gọi `set_severity()`. `FakeJiraClient` sửa thẳng vào object nó đang giữ, còn `RealJiraClient` thì `get_incident()` trả object mới đọc từ API — nên cùng một dòng code cho ra mức MỚI trên bản giả và mức CŨ trên bản thật. Hệ quả thấy được: comment post lên war room ghi **"Nâng mức P2 → P2"**. Sửa bằng cách chốt `muc_cu` vào biến trước khi gọi. Đây là loại lỗi mà chỉ đọc code khó thấy, vì nó phụ thuộc vào việc bản cài đặt nào trả object dùng chung.
+
+**Test quan trọng nhất là `test_khong_bao_gio_tu_duyet_thay_nguoi`.** `escalate` sinh ra vì cổng HITL là điểm chết đơn lẻ, nên nó chính là chỗ dễ bị "cải tiến" thành *tự duyệt sau X phút* nhất. Test đó nâng mức 5 lần liên tiếp với mốc thời gian gấp 100 lần ngưỡng, rồi chốt lại: issue vẫn ở `Awaiting Approval`, `assert_human_approved()` vẫn ném `ApprovalError`, và Agent không hề tự chuyển sang `Remediating`. Nâng mức KHÔNG kèm quyền thi hành.
 
 ---
 

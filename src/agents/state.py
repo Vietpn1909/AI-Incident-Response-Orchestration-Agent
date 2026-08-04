@@ -69,5 +69,11 @@ class IncidentAgentState(TypedDict, total=False):
     #: xuất hiện trên war room nhưng không ai duyệt được.
     awaiting_approval: list[str]
 
+    #: War room vừa được nâng mức vì treo chờ duyệt quá lâu. Output của `escalate`.
+    #:
+    #: Có phần tử ở đây nghĩa là **cổng HITL đang bị nghẽn ở phía người**: Agent
+    #: đã đề xuất, sự cố vẫn diễn ra, mà chưa ai bấm duyệt.
+    escalated: list[str]
+
     #: Lỗi khiến vòng quét dừng sớm. Có giá trị nghĩa là Agent **đang mù**.
     error: str

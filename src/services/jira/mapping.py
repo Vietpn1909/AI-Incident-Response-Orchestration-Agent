@@ -56,6 +56,38 @@ def severity_from_labels(labels: list[str]) -> Severity | None:
     return None
 
 
+def replace_severity_label(labels: list[str], severity: Severity) -> list[str]:
+    """Thay label mức độ trong danh sách, giữ nguyên mọi label khác.
+
+    Jira API ghi `labels` là **ghi đè toàn bộ** danh sách, không phải thêm vào —
+    nên `set_severity()` phải dựng lại cả danh sách. Hàm này giữ hiểu biết về
+    tiền tố `severity-` nằm đúng một chỗ là file này.
+    """
+    giu_lai = [label for label in labels if not label.startswith(_SEVERITY_PREFIX)]
+    return [*giu_lai, severity_label(severity)]
+
+
+def retitle_severity(summary: str, severity: Severity) -> str:
+    """Đổi tiền tố `[P2]` đầu tiêu đề sang mức mới.
+
+    Tiêu đề do `IncidentSignal.title` sinh, dạng `"[P2] service: metric = ..."`.
+    Mức độ vì vậy nằm ở **hai chỗ** — label và tiêu đề — và `set_severity()`
+    phải sửa cả hai, không thì `severity_from_labels()` với mắt người đọc board
+    nói hai điều khác nhau.
+
+    Không khớp mẫu nào thì thêm tiền tố vào đầu, chứ không bỏ qua im lặng: một
+    incident đã nâng mức mà tiêu đề không nói gì là thứ dễ bị bỏ sót nhất trên
+    board.
+    """
+    con_lai = summary
+    for muc in Severity:
+        tien_to = f"[{muc.value}]"
+        if summary.startswith(tien_to):
+            con_lai = summary[len(tien_to) :].lstrip()
+            break
+    return f"[{severity.value}] {con_lai}".rstrip()
+
+
 def service_from_labels(labels: list[str]) -> str | None:
     """Đọc tên service ngược ra từ label."""
     for label in labels:
