@@ -317,6 +317,7 @@ DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
 | Trương Công Thái Đức | Review PR #15 (`hypothesize`) — chạy thật với LLM thật trên stack demo | ✅ Done | Xác nhận LLM tuân ràng buộc prompt | - |
 | Trương Công Thái Đức | Tìm ra `DATABASE_URL` vẫn là placeholder của template → `correlate_deploy` chết âm thầm | ✅ Done | `src/config.py`, `.env.example`, `demo/README.md` | - |
 | Trương Công Thái Đức | Test gác `DATABASE_URL`, đã mutation-test | ✅ Done | `tests/test_services/test_deploys_config.py` — 205 test pass | - |
+| Trương Công Thái Đức | CI bị chặn vì org hết hạn mức Actions → chuyển sang self-hosted runner của BTC | ✅ Done | `.github/workflows/ci.yml`, run `30920675914` xanh | - |
 
 **Tổng kết ngày:** Hai PR của Việt và Trung đưa dự án qua mốc lớn nhất từ đầu: **cả 3 use case đều phát hiện được, và Agent đã có LLM trong luồng chạy**. Đo lại độc lập từng cái thay vì tin số người khai.
 
@@ -339,6 +340,31 @@ Hệ quả đo được trên cùng một sự cố:
 Mất hơn nửa độ tin cậy và mất hẳn nghi phạm `v1.4.2` — thứ mà `demo/seed.py` cắm sẵn làm linh hồn của UC-1. Không có exception nào để lần theo. Đã sửa mặc định trong `config.py`, sửa `.env.example`, ghi cảnh báo vào `demo/README.md`, và thêm test gác.
 
 **Test gác của tôi ban đầu cũng sai, theo đúng cách tôi vừa cảnh báo Việt.** Bản đầu assert trên `Settings().database_url` — mà `pydantic-settings` đọc `.env`, nên nó đỏ trên máy có `.env` và xanh trên CI (không có `.env`). Xanh đỏ theo máy chứ không theo code, vô dụng làm cổng gác. Sửa thành đọc `Settings.model_fields[...].default`, rồi mutation-test: đặt lại placeholder → 2 test đỏ, khôi phục → xanh.
+
+### Chiều: CI bị chặn ở tầng thanh toán, rồi chuyển sang runner của BTC
+
+Org hết hạn mức 2.000 phút/tháng của GitHub Actions. Job bị chặn **trước khi khởi động** — không phải lỗi code. Ba dấu hiệu phân biệt, đáng ghi lại vì lần sau gặp sẽ nhận ra ngay:
+
+1. Lần chạy đỏ chỉ **10 giây**, trong khi bình thường 31–49 giây — chưa kịp cài dependency
+2. `gh run view --log-failed` trả `log not found` — không có gì được chạy để ghi log
+3. Dòng ANNOTATIONS ghi thẳng `"The job was not started because recent account payments have failed or your spending limit needs to be increased"`
+
+Mức dùng của nhóm, tách theo workflow:
+
+| Workflow | Số lần | Tổng thời gian | Trung bình |
+|---|---:|---:|---:|
+| CI (lint + test) | 72 | 2.241s | 31s |
+| Running Copilot Code Review | 7 | 1.349s | **192s** |
+
+Tổng phút bị tính khoảng **100 / 2.000**, tức 5%. Cohort 3 có 35+ đề dùng chung quota nên đây là tổng của tất cả các nhóm, không phải một nhóm lạm dụng. Đáng chú ý: Copilot Code Review chỉ chạy 7 lần mà đốt gần nửa số giây của 72 lần CI — mỗi lượt tốn **6 lần** một lượt CI. Nếu phải tiết giảm thì tắt cái đó trước, không phải tắt CI.
+
+**Cách BTC đưa ra: đổi `runs-on: ubuntu-latest` thành `runs-on: self-hosted`.** Chỉ đổi đúng một dòng, cố ý không tinh chỉnh gì thêm — lo ngại ban đầu của tôi là runner dùng chung giữa các team thì `pip install` đi vào Python hệ thống là rủi ro hai chiều, nhưng thay vì đoán trước rồi thêm venv, cứ chạy một lần rồi đọc log.
+
+Đọc log thấy lo ngại đó không có cơ sở: runner tên `eph-vmrunner-8dbd4adc`, đường dẫn `/home/gh-runner/eph/8dbd4adc/` — **`eph` là ephemeral**, mỗi job một VM mới. Không cần venv. Đây là lần thứ hai trong ngày việc đo trước khi sửa tiết kiệm được một thay đổi vô ích.
+
+Kiểm chứng chạy thật chứ không tin dấu ✅: đếm được **205 dòng `PASSED`** trong log, đúng bằng số test local. Một CI "xanh" mà bỏ qua test thì tệ hơn CI đỏ.
+
+Giá phải trả: **2m49s** thay vì 31s. Runner không có sẵn tool cache nên `setup-python` phải tải Python 3.11.15 về mỗi lần, cộng thời gian xếp hàng FIFO với các team khác. Chấp nhận được — chậm hơn 5 lần nhưng vẫn còn cổng gác.
 
 ---
 
