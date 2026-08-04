@@ -40,6 +40,11 @@ DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
 DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
 ```
 
+⚠️ Đổi cổng thì phải sửa `DATABASE_URL` trong `.env` **luôn**, không chỉ lúc chạy
+`seed.py`. Agent đọc bảng `deploy_history` qua biến đó để đối chiếu deploy; trỏ
+sai thì `correlate_deploy` im lặng không tìm được gì và giả thuyết tụt từ 90%
+xuống 40% độ tin cậy — chỉ có một dòng warning, không có exception nào.
+
 Triệu chứng khi không đổi: `seed.py` fail với `asyncpg.exceptions.InvalidPasswordError: password authentication failed for user "demo"` — dễ tưởng sai mật khẩu, nhưng thật ra là đang nối vào Postgres cài sẵn trên máy chứ không phải container. Kiểm tra bằng `netstat -ano | findstr :5432`, thấy **hai** tiến trình cùng nghe là dính. Service trong compose không bị ảnh hưởng vì chúng nối qua mạng nội bộ (`postgres:5432`).
 
 Đã gặp trên cả macOS (máy Đức) lẫn Windows (máy Việt).

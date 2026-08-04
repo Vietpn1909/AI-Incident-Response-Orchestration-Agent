@@ -309,4 +309,37 @@ DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
 
 ---
 
+## 2026-08-04
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Review + đo độc lập PR #13 (Việt) và PR #14 (Trung), merge cả hai | ✅ Done | `develop` = `95eb539`, CI xanh | - |
+| Trương Công Thái Đức | Review PR #15 (`hypothesize`) — chạy thật với LLM thật trên stack demo | ✅ Done | Xác nhận LLM tuân ràng buộc prompt | - |
+| Trương Công Thái Đức | Tìm ra `DATABASE_URL` vẫn là placeholder của template → `correlate_deploy` chết âm thầm | ✅ Done | `src/config.py`, `.env.example`, `demo/README.md` | - |
+| Trương Công Thái Đức | Test gác `DATABASE_URL`, đã mutation-test | ✅ Done | `tests/test_services/test_deploys_config.py` — 205 test pass | - |
+
+**Tổng kết ngày:** Hai PR của Việt và Trung đưa dự án qua mốc lớn nhất từ đầu: **cả 3 use case đều phát hiện được, và Agent đã có LLM trong luồng chạy**. Đo lại độc lập từng cái thay vì tin số người khai.
+
+**PR #14 (Trung) — UC-1 cuối cùng tái hiện được.** Cách sửa đúng nguyên tắc: `pg_sleep(0.2)` đặt **bên trong** `pool.acquire()` nên request giữ connection Postgres thật; đặt ngoài pool thì chỉ làm handler chậm chứ không tạo được bằng chứng pool cạn. Dựng lại stack đo trên macOS: p95 server-side **3,93s** (trước 0,048s), đỉnh pool **5/5**, một request đơn lẻ 0,225s. Trung đo trên Windows ra 4,06s — lệch do khác máy, cùng độ lớn.
+
+**PR #15 (Việt) — `hypothesize`, và `llm.py` lần đầu được gọi sau 8 ngày nằm không.** Thiết kế hai pha: `rules.build_hypothesis()` dựng `evidence` + `confidence` + một `statement` dự phòng (tất định, không mạng), rồi LLM viết lại `statement` và thêm `reasoning`. Pha 2 hỏng thì giả thuyết vẫn giữ nguyên giá trị chấm điểm — DashScope hết quota giữa buổi demo là chuyện có thật.
+
+Chạy thật với `qwen-plus`, LLM tuân đúng cả ba ràng buộc khó nhất trong prompt: chỉ dùng số có trong phần bằng chứng, không tự nhận độ tin cậy, và **viết "trùng thời gian với deploy v1.4.2" chứ không viết "do deploy gây ra"** — đúng luật số 4. Đây là chỗ dễ mất điểm nhất nếu buông: một Agent in ra đoạn văn nghe hay mà không truy ngược được về số liệu nào thì là chatbot, không phải công cụ vận hành.
+
+**Lỗi tìm được, thuộc đúng họ "fail âm thầm" mà JOURNAL đã ghi ba lần: `DATABASE_URL` chưa ai sửa khỏi placeholder của template.** Biến này chỉ có `services/deploys.py` đọc, tức nó **là** DB lịch sử deploy chứ không phải database của app. Mặc định template là `sqlite:///./data/app.db` mà `asyncpg` không parse nổi, còn `.env.example` là `postgresql://user:password@localhost:5432/dbname`. Nên trên **mọi máy mới clone**, `correlate_deploy` không bao giờ chạy — `deploys.py` bắt lỗi và chỉ log một dòng warning.
+
+Hệ quả đo được trên cùng một sự cố:
+
+| | `DATABASE_URL` sai | `DATABASE_URL` đúng |
+|---|---|---|
+| Độ tin cậy | **40%** | **90%** |
+| `related_deploy` | *(không có)* | **v1.4.2** |
+| LLM nhắc tới deploy | không | "trùng thời gian với deploy v1.4.2" |
+
+Mất hơn nửa độ tin cậy và mất hẳn nghi phạm `v1.4.2` — thứ mà `demo/seed.py` cắm sẵn làm linh hồn của UC-1. Không có exception nào để lần theo. Đã sửa mặc định trong `config.py`, sửa `.env.example`, ghi cảnh báo vào `demo/README.md`, và thêm test gác.
+
+**Test gác của tôi ban đầu cũng sai, theo đúng cách tôi vừa cảnh báo Việt.** Bản đầu assert trên `Settings().database_url` — mà `pydantic-settings` đọc `.env`, nên nó đỏ trên máy có `.env` và xanh trên CI (không có `.env`). Xanh đỏ theo máy chứ không theo code, vô dụng làm cổng gác. Sửa thành đọc `Settings.model_fields[...].default`, rồi mutation-test: đặt lại placeholder → 2 test đỏ, khôi phục → xanh.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

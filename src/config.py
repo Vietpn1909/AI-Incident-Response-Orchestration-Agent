@@ -45,8 +45,20 @@ class Settings(BaseSettings):
     #: làm cùng một bằng chứng ra kết luận khác nhau mỗi lần chạy, không đo được.
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
-    # Database
-    database_url: str = "sqlite:///./data/app.db"
+    # Database — lịch sử deploy, nguồn bằng chứng cho `correlate_deploy`
+    #
+    # Chỗ duy nhất đọc biến này là `services/deploys.py`, để lấy bảng
+    # `deploy_history` mà `demo/seed.py` sinh ra. Nó KHÔNG phải database của app.
+    #
+    # ⚠️ Mặc định của template là `sqlite:///./data/app.db`, mà `asyncpg` không
+    # parse được URL sqlite — nên trên máy mới clone, đối chiếu deploy **không
+    # bao giờ chạy** và chỉ để lại một dòng warning. Hệ quả đo được ngày 04/08:
+    # giả thuyết mất bằng chứng deploy, độ tin cậy tụt từ 90% xuống 40%. Đây là
+    # đúng loại "fail âm thầm" mà JOURNAL đã ghi ba lần.
+    #
+    # Máy nào đã có Postgres chiếm 5432 thì đổi cả `DEMO_POSTGRES_PORT` lẫn
+    # cổng trong biến này — xem demo/README.md.
+    database_url: str = "postgresql://demo:demo@localhost:5432/demo"
 
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
