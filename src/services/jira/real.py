@@ -491,8 +491,10 @@ class RealJiraClient:
                 f"/rest/api/3/issue/{jira_key}"
                 "?fields=summary,labels,status,created,resolutiondate,issuelinks",
             )
-        except JiraApiError:
-            return None
+        except JiraApiError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
         incident = self._to_incident(issue)
         incident.timeline = self._timeline_from_changelog(jira_key)
 
