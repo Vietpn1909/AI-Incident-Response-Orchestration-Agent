@@ -154,3 +154,76 @@ def test_giu_lai_ban_ghi_deploy_de_de_xuat_rollback_biet_ve_dau():
     hypothesis = build_hypothesis(_signal(), _deploy("v1.4.2", 4))
 
     assert hypothesis.related_deploy.version == "v1.4.2"
+
+
+# ──────────────── ba use case, ba hình dạng bằng chứng — hồi quy eval M3 = 38%
+#
+# Bản đầu của `_diem_tin_cay()` và `_cau_giai_thuyet()` chỉ biết tên bằng chứng
+# của UC-1, nên mọi giả thuyết UC-2 và UC-3 ra `confidence = 0.0` kèm một câu
+# chỉ nhắc lại triệu chứng. `use-cases.md` chấm "nêu chung chung" là KHÔNG đạt.
+
+
+def _uc2_signal(*, peak_mb: float = 127.0, ratio: float = 0.99) -> IncidentSignal:
+    from src.services.rules import detect_crashloop
+
+    return detect_crashloop(
+        service_up=0.0,
+        restarts=7.0,
+        down_for_seconds=45.0,
+        service="service-thanh-toan",
+        memory_ratio=ratio,
+        memory_peak_mb=peak_mb,
+    )
+
+
+def _uc3_signal(*, moi_giay: float = 200.0) -> IncidentSignal:
+    from src.services.rules import detect_auth_burst
+
+    return detect_auth_burst(failures_per_second=moi_giay, breached_for_seconds=60.0, service="service-thanh-toan")
+
+
+def test_moi_use_case_deu_co_confidence_khac_khong():
+    """Không UC nào được ra 0 — con số đó vô nghĩa y như một hằng số cắm cứng."""
+    uc1 = build_hypothesis(_signal(), None)
+    uc2 = build_hypothesis(_uc2_signal(), None)
+    uc3 = build_hypothesis(_uc3_signal(), None)
+
+    assert uc1.confidence > 0
+    assert uc2.confidence > 0
+    assert uc3.confidence > 0
+
+
+def test_uc2_neu_duoc_oom_chu_khong_chi_noi_service_chet():
+    """Ground truth UC-2: container bị OOM-kill vì rò rỉ bộ nhớ."""
+    hypothesis = build_hypothesis(_uc2_signal(), None)
+
+    cau = hypothesis.statement.lower()
+    assert "oom" in cau
+    assert "bộ nhớ" in cau
+    assert "127" in cau and "128" in cau, "phải dẫn số thật, không nói chung chung"
+
+
+def test_uc3_neu_duoc_van_de_bao_mat_chu_khong_phai_qua_tai():
+    """`use-cases.md` UC-3: kết luận "service quá tải" là chẩn đoán SAI."""
+    hypothesis = build_hypothesis(_uc3_signal(), None)
+
+    cau = hypothesis.statement.lower()
+    assert "credential-stuffing" in cau or "đăng nhập thất bại" in cau
+    assert "quá tải" not in cau.replace("không phải quá tải", "")
+
+
+def test_bo_nho_chua_cham_tran_thi_khong_ket_luan_oom():
+    """Bộ nhớ 40% trần mà kết luận OOM là bịa — phải rơi về câu thận trọng."""
+    hypothesis = build_hypothesis(_uc2_signal(peak_mb=51.0, ratio=0.40), None)
+
+    assert "oom" not in hypothesis.statement.lower()
+    assert "chưa đủ bằng chứng" in hypothesis.statement.lower()
+
+
+def test_khong_du_bang_chung_thi_noi_thang_la_chua_biet():
+    """Thà nói "chưa đủ bằng chứng" còn hơn đoán bừa — đó cũng là cách Qwen
+    đang hành xử, và nó đúng."""
+    tron = _signal(pool=0.1, p95=1.2, baseline=1.19)
+    tron.evidence = [tron.evidence[0]]
+
+    assert "chưa đủ bằng chứng" in build_hypothesis(tron, None).statement.lower()

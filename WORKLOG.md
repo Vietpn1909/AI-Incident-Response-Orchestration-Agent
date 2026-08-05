@@ -442,6 +442,41 @@ Compose tự build một lần rồi service thứ hai dùng lại, không cần
 
 **Bài học lặp lại lần thứ năm trong tuần:** phản ánh của người dùng đúng về triệu chứng nhưng lệch về nguyên nhân, và nếu tin nguyên nhân họ nêu thì sẽ đi sửa cấu hình project name — thứ vốn đã đúng từ đầu. Phải đo mới ra chỗ thật.
 
+### Việt (chiều 05/08) — sửa UC-2 sau eval M3
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | **Phát hiện UC-2 không được PHÁT HIỆN, không chỉ chẩn đoán kém** | ✅ Done | Docker OOM-kill 5 lần, Agent báo "bình thường" |
+| Việt | Thêm bằng chứng bộ nhớ vào `detect_crashloop` (Đức chỉ ra) | ✅ Done | `MEMORY_USAGE_RATIO`, `MEMORY_PEAK_10M_MB` |
+| Việt | Sửa `_diem_tin_cay()` và `_cau_giai_thuyet()` phủ cả ba UC | ✅ Done | UC-2/UC-3 từ `confidence = 0.0` lên 0.60/0.40 |
+| Việt | Đường phát hiện thứ ba: restart ≥ 1 kèm bộ nhớ chạm trần | ✅ Done | cứu được lúc Prometheus đếm thiếu restart |
+| Việt | Bọc lỗi Jira trong node `hypothesize` theo mẫu `_xet_nang_muc` | ✅ Done | `_chan_doan_mot_issue()` |
+| Việt | 11 test hồi quy | ✅ Done | 246 test pass, ruff sạch |
+
+Đức chỉ đúng chỗ thiếu bằng chứng bộ nhớ. Nhưng khi sửa xong và chạy thử trên OOM thật thì lộ ra **hai lỗi nặng hơn con số M3**.
+
+**Lỗi 1 — `confidence` của UC-2 và UC-3 đang bằng 0.** `_diem_tin_cay()` tôi viết hôm 04/08 chỉ biết tên bằng chứng của UC-1 (`db_pool`, `p95`, `lỗi 5xx`), nên mọi giả thuyết UC-2/UC-3 rơi hết ra ngoài bảng điểm. `_cau_giai_thuyet()` cũng chỉ có nhánh pool, hai UC kia rơi xuống nhánh mặc định và chỉ nhắc lại con số đã có trong tiêu đề — mà `use-cases.md` chấm "nêu chung chung" là KHÔNG đạt. Tức M3 = 0 cho UC-2/UC-3 có **hai** nguyên nhân, thiếu metric chỉ là một nửa. Lỗi của tôi, và nó im lặng: 235 test vẫn xanh vì không test nào hỏi "UC-2 có confidence khác 0 không".
+
+**Lỗi 2 — UC-2 không được phát hiện.** Nghiêm trọng hơn hẳn. Ép OOM thật: Docker báo `RestartCount = 5`, nhưng `changes(process_start_time_seconds[10m])` chỉ thấy **1** — process chết rồi sống lại nhanh hơn nhịp scrape 5s nên phần lớn mốc khởi động không ai ghi lại. Ngưỡng `CRASHLOOP_RESTARTS = 2` trượt, và **Agent báo "Vòng 1: bình thường" trong khi container vừa bị giết 5 lần**. Con số M3 = 0/8 có thể một phần đến từ đây chứ không chỉ từ chất lượng chẩn đoán.
+
+Không hạ ngưỡng restart xuống 1 cho xong — một lần restart đơn thuần là **deploy bình thường**, hạ xuống thì mỗi lần đội deploy Agent lại mở incident. Thay bằng đường phát hiện thứ ba: **restart ≥ 1 kèm đỉnh bộ nhớ chạm trần**. Deploy không đẩy bộ nhớ tới sát giới hạn container, OOM-kill thì có.
+
+**Ba chỗ tự bắt được khi hiệu chỉnh bằng số thật:**
+
+- Truyền **giá trị tức thời** vào chỗ đáng lẽ là **đỉnh** — đúng cái lỗi docstring của chính tôi cảnh báo. Đo thật: tức thời 0.80 (dưới ngưỡng), đỉnh 0.89 (trên). Truyền nhầm là bỏ lọt sự cố.
+- `MEMORY_NEAR_LIMIT_RATIO` đặt 0.90 theo số của Đức (127/128 = 0.99) thì máy tôi trượt (114/128 = 0.89). Cùng container, cùng cách ép — chênh do bắt trúng hay trượt nhịp scrape. Hạ xuống 0.85.
+- Mượn `baseline` làm "giới hạn container" khiến war room in ra *"114 MB — lệch 0.9× baseline"*, đọc thành *thấp hơn bình thường* trong khi thật ra là **89% của trần**. Số đúng, câu sai. Ghi trần thẳng vào tên bằng chứng.
+
+**Kết quả chạy thật**, cùng cụm OOM đã làm Agent im lặng lúc đầu:
+
+> `service-thanh-toan` bị OOM-kill: bộ nhớ leo tới **114 MB**, chạm giới hạn **128 MB** của container, nên Docker giết process rồi khởi động lại. Bộ nhớ leo dần chứ không nhảy vọt — hình thái của rò rỉ, không phải của một request nặng bất thường.
+
+`confidence = 60%` = đỉnh bộ nhớ chạm trần 0.40 + deploy trùng thời gian 0.20. Đã qua tiếp `propose_remediation` → `rollback` → `Awaiting Approval`.
+
+Bọc lỗi Jira trong `hypothesize` theo mẫu `_xet_nang_muc()` — nhưng bọc **riêng phần post lên Jira**, không bọc phần chẩn đoán: giả thuyết vẫn có giá trị cho `propose_remediation` kể cả khi không post lên được.
+
+UC-3 vẫn cần Trung bổ sung IP nguồn và số tài khoản bị thử.
+
 **Tối: gỡ hai endpoint template khỏi URL công khai.** Gọi thử Live URL — thứ nhóm nộp làm deliverable:
 
 ```
