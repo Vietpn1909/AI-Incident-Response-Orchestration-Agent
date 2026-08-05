@@ -23,12 +23,20 @@ import httpx
 DEFAULT_URL = "http://localhost:8001/login"
 DEFAULT_RATE = 200.0
 DEFAULT_DURATION = 60.0
+DEFAULT_ACCOUNTS = 100
+
+
+def _account_for_request(request_number: int, account_count: int) -> str:
+    if account_count <= 0:
+        raise ValueError('accounts phải lớn hơn 0')
+    return f'demo-account-{request_number % account_count:04d}'
 
 
 async def _send_failed_login(
     client: httpx.AsyncClient,
     url: str,
     request_number: int,
+    account_count: int,
     statuses: Counter[int],
 ) -> None:
     """Gửi một lần đăng nhập sai và ghi nhận status; không làm vỡ cả đợt bắn."""
@@ -36,7 +44,7 @@ async def _send_failed_login(
         response = await client.post(
             url,
             json={
-                "username": "demo",
+                "username": _account_for_request(request_number, account_count),
                 "password": f"sai-{request_number}-{secrets.token_hex(4)}",
             },
         )
@@ -50,12 +58,15 @@ async def run_attack(
     url: str = DEFAULT_URL,
     rate: float = DEFAULT_RATE,
     duration: float = DEFAULT_DURATION,
+    accounts: int = DEFAULT_ACCOUNTS,
 ) -> tuple[Counter[int], float]:
     """Bắn request theo nhịp cố định và trả (thống kê status, thời gian thực)."""
     if rate <= 0:
         raise ValueError("rate phải lớn hơn 0")
     if duration <= 0:
         raise ValueError("duration phải lớn hơn 0")
+    if accounts <= 0:
+        raise ValueError("accounts phải lớn hơn 0")
 
     total_requests = max(1, round(rate * duration))
     max_connections = max(20, min(100, round(rate / 2)))
@@ -81,7 +92,7 @@ async def run_attack(
                 await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
 
             task = asyncio.create_task(
-                _send_failed_login(client, url, request_number, statuses)
+                _send_failed_login(client, url, request_number, accounts, statuses)
             )
             pending.add(task)
             task.add_done_callback(pending.discard)
@@ -97,6 +108,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default=DEFAULT_URL, help="URL endpoint /login")
     parser.add_argument("--rate", type=float, default=DEFAULT_RATE, help="request/giây")
     parser.add_argument("--duration", type=float, default=DEFAULT_DURATION, help="số giây chạy")
+    parser.add_argument("--accounts", type=int, default=DEFAULT_ACCOUNTS, help="số tài khoản khác nhau bị thử")
     return parser.parse_args()
 
 
@@ -105,10 +117,10 @@ async def _main() -> None:
     expected = max(1, round(args.rate * args.duration))
     print(
         f"Bắt đầu UC-3: {args.rate:g} request/giây × {args.duration:g}s "
-        f"= khoảng {expected} request tới {args.url}"
+        f"= khoảng {expected} request tới {args.url}, thử {args.accounts} tài khoản"
     )
 
-    statuses, elapsed = await run_attack(args.url, args.rate, args.duration)
+    statuses, elapsed = await run_attack(args.url, args.rate, args.duration, args.accounts)
     completed = sum(statuses.values())
     actual_rate = completed / elapsed if elapsed else 0.0
 

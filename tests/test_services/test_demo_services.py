@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from demo import attack
 from demo.service_thanh_toan import main as payment_service
 
 
@@ -74,9 +75,11 @@ async def payment_client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture(autouse=True)
 def reset_demo_state(monkeypatch: pytest.MonkeyPatch):
     payment_service.memory_leak_store.clear()
+    payment_service.auth_failure_events.clear()
     monkeypatch.setattr(payment_service, "pool", None)
     yield
     payment_service.memory_leak_store.clear()
+    payment_service.auth_failure_events.clear()
 
 
 @pytest.mark.asyncio
@@ -91,6 +94,53 @@ async def test_login_sai_mat_khau_tra_401(payment_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_login_thong_ke_mot_ip_thu_nhieu_tai_khoan(payment_client: AsyncClient):
+    for username in ("account-a", "account-b", "account-a"):
+        response = await payment_client.post(
+            "/login",
+            json={"username": username, "password": "sai"},
+        )
+        assert response.status_code == 401
+
+    unique_sources, unique_accounts, top_source_ratio = payment_service._auth_failure_snapshot()
+    assert unique_sources == 1
+    assert unique_accounts == 2
+    assert top_source_ratio == 1.0
+
+
+@pytest.mark.asyncio
+async def test_metrics_cong_bo_ba_so_lieu_uc3(payment_client: AsyncClient):
+    await payment_client.post(
+        "/login",
+        json={"username": "account-a", "password": "sai"},
+    )
+
+    response = await payment_client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "auth_failure_unique_source_ips_1m 1.0" in response.text
+    assert "auth_failure_unique_accounts_1m 1.0" in response.text
+    assert "auth_failure_top_source_ratio_1m 1.0" in response.text
+
+
+def test_attack_rai_request_len_dung_so_account():
+    accounts = {attack._account_for_request(index, 100) for index in range(12_000)}
+    assert len(accounts) == 100
+
+
+def test_thong_ke_dang_nhap_chi_giu_cua_so_mot_phut():
+    payment_service.auth_failure_events.extend(
+        [
+            (10.0, "10.0.0.1", "account-a"),
+            (20.0, "10.0.0.1", "account-b"),
+        ]
+    )
+
+    assert payment_service._auth_failure_snapshot(now=70.0) == (1, 2, 1.0)
+    assert payment_service._auth_failure_snapshot(now=81.0) == (0, 0, 0.0)
+
+
+@pytest.mark.asyncio
 async def test_login_dung_tra_token_gia(payment_client: AsyncClient):
     response = await payment_client.post(
         "/login",
@@ -99,6 +149,7 @@ async def test_login_dung_tra_token_gia(payment_client: AsyncClient):
 
     assert response.status_code == 200
     assert response.json() == {"ok": True, "token": "fake-token"}
+    assert payment_service._auth_failure_snapshot() == (0, 0, 0.0)
 
 
 @pytest.mark.asyncio
