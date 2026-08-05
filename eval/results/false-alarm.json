@@ -1,0 +1,1081 @@
+{
+  "started_at": "2026-08-05T07:56:17.740923+00:00",
+  "ended_at": "2026-08-05T08:06:17.750904+00:00",
+  "duration_seconds": 600.009981,
+  "poll_interval_seconds": 8.0,
+  "cycle_count": 74,
+  "issue_count": 1,
+  "cycles": [
+    {
+      "number": 1,
+      "started_at": "2026-08-05T07:56:17.740923+00:00",
+      "ended_at": "2026-08-05T07:56:17.796056+00:00",
+      "duration_seconds": 0.055133,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 2,
+      "started_at": "2026-08-05T07:56:25.796330+00:00",
+      "ended_at": "2026-08-05T07:56:35.872290+00:00",
+      "duration_seconds": 10.07596,
+      "detected": 1,
+      "opened": [
+        "INC-1"
+      ],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 3,
+      "started_at": "2026-08-05T07:56:43.873142+00:00",
+      "ended_at": "2026-08-05T07:56:43.937766+00:00",
+      "duration_seconds": 0.064624,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 4,
+      "started_at": "2026-08-05T07:56:51.938418+00:00",
+      "ended_at": "2026-08-05T07:56:51.990838+00:00",
+      "duration_seconds": 0.05242,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 5,
+      "started_at": "2026-08-05T07:56:59.991676+00:00",
+      "ended_at": "2026-08-05T07:57:00.068953+00:00",
+      "duration_seconds": 0.077277,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 6,
+      "started_at": "2026-08-05T07:57:08.069816+00:00",
+      "ended_at": "2026-08-05T07:57:08.122154+00:00",
+      "duration_seconds": 0.052338,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 7,
+      "started_at": "2026-08-05T07:57:16.122814+00:00",
+      "ended_at": "2026-08-05T07:57:16.195569+00:00",
+      "duration_seconds": 0.072755,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 8,
+      "started_at": "2026-08-05T07:57:24.197033+00:00",
+      "ended_at": "2026-08-05T07:57:24.271028+00:00",
+      "duration_seconds": 0.073995,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 9,
+      "started_at": "2026-08-05T07:57:32.271379+00:00",
+      "ended_at": "2026-08-05T07:57:32.330819+00:00",
+      "duration_seconds": 0.05944,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 10,
+      "started_at": "2026-08-05T07:57:40.331311+00:00",
+      "ended_at": "2026-08-05T07:57:40.402966+00:00",
+      "duration_seconds": 0.071655,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 11,
+      "started_at": "2026-08-05T07:57:48.403489+00:00",
+      "ended_at": "2026-08-05T07:57:48.453368+00:00",
+      "duration_seconds": 0.049879,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 12,
+      "started_at": "2026-08-05T07:57:56.454484+00:00",
+      "ended_at": "2026-08-05T07:57:56.516652+00:00",
+      "duration_seconds": 0.062168,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 13,
+      "started_at": "2026-08-05T07:58:04.517578+00:00",
+      "ended_at": "2026-08-05T07:58:04.571899+00:00",
+      "duration_seconds": 0.054321,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 14,
+      "started_at": "2026-08-05T07:58:12.572342+00:00",
+      "ended_at": "2026-08-05T07:58:12.648151+00:00",
+      "duration_seconds": 0.075809,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 15,
+      "started_at": "2026-08-05T07:58:20.648889+00:00",
+      "ended_at": "2026-08-05T07:58:20.701617+00:00",
+      "duration_seconds": 0.052728,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 16,
+      "started_at": "2026-08-05T07:58:28.701750+00:00",
+      "ended_at": "2026-08-05T07:58:28.777664+00:00",
+      "duration_seconds": 0.075914,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 17,
+      "started_at": "2026-08-05T07:58:36.778173+00:00",
+      "ended_at": "2026-08-05T07:58:36.851432+00:00",
+      "duration_seconds": 0.073259,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 18,
+      "started_at": "2026-08-05T07:58:44.852604+00:00",
+      "ended_at": "2026-08-05T07:58:44.935188+00:00",
+      "duration_seconds": 0.082584,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 19,
+      "started_at": "2026-08-05T07:58:52.935910+00:00",
+      "ended_at": "2026-08-05T07:58:52.986520+00:00",
+      "duration_seconds": 0.05061,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 20,
+      "started_at": "2026-08-05T07:59:00.987872+00:00",
+      "ended_at": "2026-08-05T07:59:01.054459+00:00",
+      "duration_seconds": 0.066587,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 21,
+      "started_at": "2026-08-05T07:59:09.055082+00:00",
+      "ended_at": "2026-08-05T07:59:09.123514+00:00",
+      "duration_seconds": 0.068432,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 22,
+      "started_at": "2026-08-05T07:59:17.124571+00:00",
+      "ended_at": "2026-08-05T07:59:17.212589+00:00",
+      "duration_seconds": 0.088018,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 23,
+      "started_at": "2026-08-05T07:59:25.213464+00:00",
+      "ended_at": "2026-08-05T07:59:25.281076+00:00",
+      "duration_seconds": 0.067612,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 24,
+      "started_at": "2026-08-05T07:59:33.281559+00:00",
+      "ended_at": "2026-08-05T07:59:33.358509+00:00",
+      "duration_seconds": 0.07695,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 25,
+      "started_at": "2026-08-05T07:59:41.359517+00:00",
+      "ended_at": "2026-08-05T07:59:41.435369+00:00",
+      "duration_seconds": 0.075852,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 26,
+      "started_at": "2026-08-05T07:59:49.436593+00:00",
+      "ended_at": "2026-08-05T07:59:49.508806+00:00",
+      "duration_seconds": 0.072213,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 27,
+      "started_at": "2026-08-05T07:59:57.510182+00:00",
+      "ended_at": "2026-08-05T07:59:57.560936+00:00",
+      "duration_seconds": 0.050754,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 28,
+      "started_at": "2026-08-05T08:00:05.561929+00:00",
+      "ended_at": "2026-08-05T08:00:05.610869+00:00",
+      "duration_seconds": 0.04894,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 29,
+      "started_at": "2026-08-05T08:00:13.611391+00:00",
+      "ended_at": "2026-08-05T08:00:13.675238+00:00",
+      "duration_seconds": 0.063847,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 30,
+      "started_at": "2026-08-05T08:00:21.675875+00:00",
+      "ended_at": "2026-08-05T08:00:21.744095+00:00",
+      "duration_seconds": 0.06822,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 31,
+      "started_at": "2026-08-05T08:00:29.745656+00:00",
+      "ended_at": "2026-08-05T08:00:29.816793+00:00",
+      "duration_seconds": 0.071137,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 32,
+      "started_at": "2026-08-05T08:00:37.817526+00:00",
+      "ended_at": "2026-08-05T08:00:37.868729+00:00",
+      "duration_seconds": 0.051203,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 33,
+      "started_at": "2026-08-05T08:00:45.869113+00:00",
+      "ended_at": "2026-08-05T08:00:45.929757+00:00",
+      "duration_seconds": 0.060644,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 34,
+      "started_at": "2026-08-05T08:00:53.930356+00:00",
+      "ended_at": "2026-08-05T08:00:53.991898+00:00",
+      "duration_seconds": 0.061542,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 35,
+      "started_at": "2026-08-05T08:01:01.993262+00:00",
+      "ended_at": "2026-08-05T08:01:02.053290+00:00",
+      "duration_seconds": 0.060028,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 36,
+      "started_at": "2026-08-05T08:01:10.054519+00:00",
+      "ended_at": "2026-08-05T08:01:10.170117+00:00",
+      "duration_seconds": 0.115598,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 37,
+      "started_at": "2026-08-05T08:01:18.170794+00:00",
+      "ended_at": "2026-08-05T08:01:18.231414+00:00",
+      "duration_seconds": 0.06062,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 38,
+      "started_at": "2026-08-05T08:01:26.231945+00:00",
+      "ended_at": "2026-08-05T08:01:26.296462+00:00",
+      "duration_seconds": 0.064517,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 39,
+      "started_at": "2026-08-05T08:01:34.297398+00:00",
+      "ended_at": "2026-08-05T08:01:34.371605+00:00",
+      "duration_seconds": 0.074207,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 40,
+      "started_at": "2026-08-05T08:01:42.372746+00:00",
+      "ended_at": "2026-08-05T08:01:42.443944+00:00",
+      "duration_seconds": 0.071198,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 41,
+      "started_at": "2026-08-05T08:01:50.444741+00:00",
+      "ended_at": "2026-08-05T08:01:50.496632+00:00",
+      "duration_seconds": 0.051891,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 42,
+      "started_at": "2026-08-05T08:01:58.497804+00:00",
+      "ended_at": "2026-08-05T08:01:58.559522+00:00",
+      "duration_seconds": 0.061718,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 43,
+      "started_at": "2026-08-05T08:02:06.560173+00:00",
+      "ended_at": "2026-08-05T08:02:06.609214+00:00",
+      "duration_seconds": 0.049041,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 44,
+      "started_at": "2026-08-05T08:02:14.609647+00:00",
+      "ended_at": "2026-08-05T08:02:14.669659+00:00",
+      "duration_seconds": 0.060012,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 45,
+      "started_at": "2026-08-05T08:02:22.670730+00:00",
+      "ended_at": "2026-08-05T08:02:22.737402+00:00",
+      "duration_seconds": 0.066672,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 46,
+      "started_at": "2026-08-05T08:02:30.738490+00:00",
+      "ended_at": "2026-08-05T08:02:30.785973+00:00",
+      "duration_seconds": 0.047483,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 47,
+      "started_at": "2026-08-05T08:02:38.787224+00:00",
+      "ended_at": "2026-08-05T08:02:38.853847+00:00",
+      "duration_seconds": 0.066623,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 48,
+      "started_at": "2026-08-05T08:02:46.854550+00:00",
+      "ended_at": "2026-08-05T08:02:46.921362+00:00",
+      "duration_seconds": 0.066812,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 49,
+      "started_at": "2026-08-05T08:02:54.921772+00:00",
+      "ended_at": "2026-08-05T08:02:54.992508+00:00",
+      "duration_seconds": 0.070736,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 50,
+      "started_at": "2026-08-05T08:03:02.993834+00:00",
+      "ended_at": "2026-08-05T08:03:03.042580+00:00",
+      "duration_seconds": 0.048746,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 51,
+      "started_at": "2026-08-05T08:03:11.043285+00:00",
+      "ended_at": "2026-08-05T08:03:11.122164+00:00",
+      "duration_seconds": 0.078879,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 52,
+      "started_at": "2026-08-05T08:03:19.123133+00:00",
+      "ended_at": "2026-08-05T08:03:19.172099+00:00",
+      "duration_seconds": 0.048966,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 53,
+      "started_at": "2026-08-05T08:03:27.173001+00:00",
+      "ended_at": "2026-08-05T08:03:27.237585+00:00",
+      "duration_seconds": 0.064584,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 54,
+      "started_at": "2026-08-05T08:03:35.237824+00:00",
+      "ended_at": "2026-08-05T08:03:35.300830+00:00",
+      "duration_seconds": 0.063006,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 55,
+      "started_at": "2026-08-05T08:03:43.301904+00:00",
+      "ended_at": "2026-08-05T08:03:43.370562+00:00",
+      "duration_seconds": 0.068658,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 56,
+      "started_at": "2026-08-05T08:03:51.371390+00:00",
+      "ended_at": "2026-08-05T08:03:51.420744+00:00",
+      "duration_seconds": 0.049354,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 57,
+      "started_at": "2026-08-05T08:03:59.421320+00:00",
+      "ended_at": "2026-08-05T08:03:59.469762+00:00",
+      "duration_seconds": 0.048442,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 58,
+      "started_at": "2026-08-05T08:04:07.470986+00:00",
+      "ended_at": "2026-08-05T08:04:07.554239+00:00",
+      "duration_seconds": 0.083253,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 59,
+      "started_at": "2026-08-05T08:04:15.554728+00:00",
+      "ended_at": "2026-08-05T08:04:15.637536+00:00",
+      "duration_seconds": 0.082808,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 60,
+      "started_at": "2026-08-05T08:04:23.638339+00:00",
+      "ended_at": "2026-08-05T08:04:23.691160+00:00",
+      "duration_seconds": 0.052821,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 61,
+      "started_at": "2026-08-05T08:04:31.691488+00:00",
+      "ended_at": "2026-08-05T08:04:31.762745+00:00",
+      "duration_seconds": 0.071257,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 62,
+      "started_at": "2026-08-05T08:04:39.763223+00:00",
+      "ended_at": "2026-08-05T08:04:39.853452+00:00",
+      "duration_seconds": 0.090229,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 63,
+      "started_at": "2026-08-05T08:04:47.854584+00:00",
+      "ended_at": "2026-08-05T08:04:47.946237+00:00",
+      "duration_seconds": 0.091653,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 64,
+      "started_at": "2026-08-05T08:04:55.946518+00:00",
+      "ended_at": "2026-08-05T08:04:56.018127+00:00",
+      "duration_seconds": 0.071609,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 65,
+      "started_at": "2026-08-05T08:05:04.018893+00:00",
+      "ended_at": "2026-08-05T08:05:04.074966+00:00",
+      "duration_seconds": 0.056073,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 66,
+      "started_at": "2026-08-05T08:05:12.075501+00:00",
+      "ended_at": "2026-08-05T08:05:12.163264+00:00",
+      "duration_seconds": 0.087763,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 67,
+      "started_at": "2026-08-05T08:05:20.164258+00:00",
+      "ended_at": "2026-08-05T08:05:20.225247+00:00",
+      "duration_seconds": 0.060989,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 68,
+      "started_at": "2026-08-05T08:05:28.225615+00:00",
+      "ended_at": "2026-08-05T08:05:28.314060+00:00",
+      "duration_seconds": 0.088445,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 69,
+      "started_at": "2026-08-05T08:05:36.314705+00:00",
+      "ended_at": "2026-08-05T08:05:36.393834+00:00",
+      "duration_seconds": 0.079129,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 70,
+      "started_at": "2026-08-05T08:05:44.395488+00:00",
+      "ended_at": "2026-08-05T08:05:44.479559+00:00",
+      "duration_seconds": 0.084071,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 71,
+      "started_at": "2026-08-05T08:05:52.479979+00:00",
+      "ended_at": "2026-08-05T08:05:52.551554+00:00",
+      "duration_seconds": 0.071575,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 72,
+      "started_at": "2026-08-05T08:06:00.552354+00:00",
+      "ended_at": "2026-08-05T08:06:00.625193+00:00",
+      "duration_seconds": 0.072839,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 73,
+      "started_at": "2026-08-05T08:06:08.626769+00:00",
+      "ended_at": "2026-08-05T08:06:08.706213+00:00",
+      "duration_seconds": 0.079444,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 74,
+      "started_at": "2026-08-05T08:06:16.707145+00:00",
+      "ended_at": "2026-08-05T08:06:16.796097+00:00",
+      "duration_seconds": 0.088952,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    }
+  ],
+  "measurements": {
+    "issue_opened_at": "2026-08-05T07:56:25.865313+00:00",
+    "agent_processing_seconds": 0.00104,
+    "signal_threshold": 0.095,
+    "p95_crossed_signal_threshold_at": "2026-08-05T07:56:22.741000+00:00",
+    "p95_crossed_2s_at": null,
+    "mttd_from_signal_threshold_seconds": 3.124313,
+    "mttd_from_fixed_2s_seconds": null
+  },
+  "incidents": [
+    {
+      "jira_key": "INC-1",
+      "title": "[P4] service-thanh-toan: http_request_duration_seconds p95 = 0.47 (ngưỡng 0.10)",
+      "severity": "P4",
+      "state": "Awaiting Approval",
+      "affected_services": [
+        "service-thanh-toan"
+      ],
+      "detected_at": "2026-08-05T07:56:25.864273Z",
+      "resolved_at": null,
+      "signal": {
+        "affected_service": "service-thanh-toan",
+        "severity": "P4",
+        "detected_at": "2026-08-05T07:56:25.864273Z",
+        "metric_name": "http_request_duration_seconds p95",
+        "metric_value": 0.475,
+        "threshold": 0.095,
+        "breached_for_seconds": 60.0,
+        "evidence": [
+          {
+            "name": "http_request_duration_seconds p95",
+            "value": 0.475,
+            "baseline": 0.0475,
+            "unit": "s",
+            "promql": "\n(\nhistogram_quantile(0.95,\n  sum(rate(http_request_duration_seconds_bucket{handler!=\"/metrics\"}[1m])) by (le, service)\n)\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+          },
+          {
+            "name": "db_pool_connections_in_use / db_pool_size",
+            "value": 0.2,
+            "baseline": null,
+            "unit": "",
+            "promql": "max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])"
+          },
+          {
+            "name": "tỷ lệ lỗi 5xx",
+            "value": 0.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "\n(\n(\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\", status=~\"5..\"}[1m]))\n  or\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) * 0\n)\n/ sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m]))\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+          }
+        ]
+      },
+      "hypotheses": [
+        {
+          "statement": "service-thanh-toan bất thường ở http_request_duration_seconds p95 (0.47, ngưỡng 0.10).",
+          "confidence": 0.3,
+          "evidence": [
+            {
+              "name": "http_request_duration_seconds p95",
+              "value": 0.475,
+              "baseline": 0.0475,
+              "unit": "s",
+              "promql": "\n(\nhistogram_quantile(0.95,\n  sum(rate(http_request_duration_seconds_bucket{handler!=\"/metrics\"}[1m])) by (le, service)\n)\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+            },
+            {
+              "name": "db_pool_connections_in_use / db_pool_size",
+              "value": 0.2,
+              "baseline": null,
+              "unit": "",
+              "promql": "max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])"
+            },
+            {
+              "name": "tỷ lệ lỗi 5xx",
+              "value": 0.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "\n(\n(\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\", status=~\"5..\"}[1m]))\n  or\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) * 0\n)\n/ sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m]))\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+            }
+          ],
+          "related_deploy": null,
+          "reasoning": ""
+        }
+      ],
+      "proposal": {
+        "action": "scale_up",
+        "target": "service-thanh-toan",
+        "params": {
+          "replicas": 3
+        },
+        "runbook": "1. Tăng service-thanh-toan lên 3 instance để chia tải.\n2. Theo dõi `http_request_duration_seconds p95` — phải giảm dưới ngưỡng 0.095.\n3. Không đỡ thì nguyên nhân không phải thiếu năng lực xử lý, cần chẩn đoán lại.",
+        "risk": "⚠️ Đây là phương án MẶC ĐỊNH vì bằng chứng chưa chỉ ra nguyên nhân gốc: không có deploy nào trùng thời gian, pool cũng không cạn. Thêm instance có thể chỉ che triệu chứng. Người duyệt nên đọc lại phần giả thuyết trước khi chấp nhận.",
+        "requires_approval": true
+      },
+      "timeline": [
+        {
+          "at": "2026-08-05T07:56:25.865313Z",
+          "actor": "agent",
+          "action": "mở war room",
+          "detail": "[P4] service-thanh-toan: http_request_duration_seconds p95 = 0.47 (ngưỡng 0.10)"
+        },
+        {
+          "at": "2026-08-05T07:56:25.865313Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Bối cảnh thu thập được lúc phát hiện:\n\n- http_request_duration_seconds p95: 0.475s — lệch 10.0× baseline\n\n- db_pool_connections_in_use / db_pool_size: 0.2\n\n- tỷ lệ lỗi 5xx: 0"
+        },
+        {
+          "at": "2026-08-05T07:56:35.826006Z",
+          "actor": "agent",
+          "action": "giả thuyết",
+          "detail": "service-thanh-toan bất thường ở http_request_duration_seconds p95 (0.47, ngưỡng 0.10)."
+        },
+        {
+          "at": "2026-08-05T07:56:35.871692Z",
+          "actor": "agent",
+          "action": "đề xuất khắc phục",
+          "detail": "scale_up"
+        },
+        {
+          "at": "2026-08-05T07:56:35.871692Z",
+          "actor": "agent",
+          "action": "chuyển trạng thái",
+          "detail": "Awaiting Approval"
+        },
+        {
+          "at": "2026-08-05T07:56:43.936758Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.249 (ngưỡng 0.095), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:56:51.989832Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.248 (ngưỡng 0.095), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:00.067584Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.246 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:08.121157Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.246 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:16.195569Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.245 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:24.270011Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:32.329821Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:40.401968Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:48.452367Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:57:56.516652Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.135), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:04.570899Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:12.646647Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:20.700620Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:28.776665Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:36.850426Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:44.934179Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:58:52.985511Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.173), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:59:01.053460Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:59:09.122515Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:59:17.211587Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:59:25.280079Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 120s."
+        },
+        {
+          "at": "2026-08-05T07:59:33.357419Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T07:59:41.434370Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T07:59:49.508806Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T07:59:57.560936Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 0.242 (ngưỡng 0.212), đã vượt liên tục 300s."
+        }
+      ],
+      "postmortem": null,
+      "related_incidents": []
+    }
+  ]
+}

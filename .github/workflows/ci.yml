@@ -8,7 +8,11 @@ on:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    # Runner của BTC, dùng chung cho tất cả team, job xếp hàng FIFO.
+    # Đổi từ `ubuntu-latest` ngày 04/08: org hết hạn mức GitHub Actions nên job
+    # bị chặn trước khi khởi động (không phải lỗi code — xem WORKLOG 04/08).
+    # Muốn tự host runner riêng thì tạo ticket cho BTC.
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4

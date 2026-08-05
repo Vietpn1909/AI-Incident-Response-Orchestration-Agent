@@ -45,8 +45,20 @@ class Settings(BaseSettings):
     #: làm cùng một bằng chứng ra kết luận khác nhau mỗi lần chạy, không đo được.
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
-    # Database
-    database_url: str = "sqlite:///./data/app.db"
+    # Database — lịch sử deploy, nguồn bằng chứng cho `correlate_deploy`
+    #
+    # Chỗ duy nhất đọc biến này là `services/deploys.py`, để lấy bảng
+    # `deploy_history` mà `demo/seed.py` sinh ra. Nó KHÔNG phải database của app.
+    #
+    # ⚠️ Mặc định của template là `sqlite:///./data/app.db`, mà `asyncpg` không
+    # parse được URL sqlite — nên trên máy mới clone, đối chiếu deploy **không
+    # bao giờ chạy** và chỉ để lại một dòng warning. Hệ quả đo được ngày 04/08:
+    # giả thuyết mất bằng chứng deploy, độ tin cậy tụt từ 90% xuống 40%. Đây là
+    # đúng loại "fail âm thầm" mà JOURNAL đã ghi ba lần.
+    #
+    # Máy nào đã có Postgres chiếm 5432 thì đổi cả `DEMO_POSTGRES_PORT` lẫn
+    # cổng trong biến này — xem demo/README.md.
+    database_url: str = "postgresql://demo:demo@localhost:5432/demo"
 
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
@@ -55,6 +67,9 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = "P-035"
     langchain_tracing_v2: bool = False
+
+    # Prometheus — nguồn tín hiệu phát hiện sự cố (ADR-0002, không dùng Alertmanager)
+    prometheus_url: str = "http://localhost:9090"
 
     # Jira — lớp quản lý vòng đời incident (ADR-0001)
     jira_base_url: str = ""
@@ -94,6 +109,25 @@ def configure_tracing() -> bool:
     return True
 
 
+def force_utf8_console() -> None:
+    """Ép stdout/stderr về UTF-8.
+
+    Console Windows mặc định dùng cp1252, không có ký tự tiếng Việt. Mọi thứ
+    đội in ra đều là tiếng Việt, nên chưa ép thì chương trình **chết giữa
+    chừng** với `UnicodeEncodeError` — không phải in ra chữ xấu, mà là dừng hẳn.
+    3/4 thành viên dùng Windows.
+
+    Tách riêng khỏi `configure_logging()` vì có chỗ cần ép UTF-8 **trước** khi
+    dựng logging: `argparse` in `--help` và thông báo lỗi tham số thẳng ra
+    stdout ngay trong `parse_args()`, tức trước cả dòng log đầu tiên.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
+        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def configure_logging() -> None:
     """Dựng logging cho toàn app, và ép console về UTF-8.
 
@@ -110,14 +144,10 @@ def configure_logging() -> None:
        nên `logger.info` của `webhooks.py` hay `prometheus.py` biến mất không
        dấu vết.
 
-    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự gọi
-    `sys.stdout.reconfigure` của riêng nó vì không đi qua `main.py`.
+    Gọi một lần lúc khởi động app. Script chạy tay (`spike/`, `demo/`) tự ép
+    UTF-8 của riêng nó vì không đi qua `main.py`.
     """
-    for stream in (sys.stdout, sys.stderr):
-        # `reconfigure` chỉ có ở TextIOWrapper — khi stdout bị thay bằng thứ
-        # khác (pytest capture chẳng hạn) thì bỏ qua, không phải lỗi.
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8")
+    force_utf8_console()
 
     settings = get_settings()
     logging.basicConfig(

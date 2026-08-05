@@ -105,16 +105,29 @@ Còn tồn sang tuần 2: `main` thiếu 28 commit so với `develop` (chưa m�
 
 ### Đã hoàn thành
 - **02/08 — Ba tài liệu Gate 1** ([`docs/brief.md`](docs/brief.md), [`docs/prd.md`](docs/prd.md), [`docs/ui-flow.md`](docs/ui-flow.md)) và bảng "Tài liệu nộp" ở đầu README. Kiến trúc, README, AI log hook đã có sẵn từ tuần 1 nên chỉ thiếu đúng 3 thứ này.
+- **02/08 — Chuỗi detect chạy được** (viết hộ Việt lúc Việt vắng): [`detect`](src/agents/nodes/detect.py) → [`open_war_room`](src/agents/nodes/open_war_room.py) → [`detection_loop`](src/agents/detection_loop.py), chạy bằng [`scripts/run_agent.py`](scripts/run_agent.py). `prometheus.py` và `rules.py` Việt viết tuần này giờ mới có chỗ gọi. 15 test mới, 133/133 pass.
 
 ### Khó khăn & Giải pháp
 | Khó khăn | Giải pháp | Kết quả |
 |----------|-----------|---------|
 | Tài liệu nằm rải khắp repo (ADR, contracts, use-cases, architecture) nhưng mentor mở repo ra không có đường vào — README chỉ dẫn link lẻ trong từng đoạn văn | Thêm bảng "Tài liệu nộp" ngay đầu README, mỗi dòng một tài liệu kèm mô tả một câu | Mở repo là thấy toàn bộ deliverable, không phải đọc hết README để nhặt link |
 | Quyết định "war room không có nút duyệt" nằm trong code từ tuần 1 nhưng **không ở đâu ghi lý do** | Viết thành mục riêng trong `ui-flow.md` kèm sequence diagram | Người review đọc được là quyết định có chủ đích, không phải quên làm |
+| `rules.detect()` cần `breached_for_seconds` nhưng Agent poll theo chu kỳ — giữ mốc bắt đầu trong RAM thì restart là mất, nhiều instance thì mỗi con một số | Hỏi thẳng Prometheus bằng `min_over_time(metric[Ws])`, thử 4 cửa sổ rồi lấy cửa sổ lớn nhất còn trên ngưỡng | Không giữ state, restart không ảnh hưởng, test chỉ cần một `MockTransport` |
+| Bản đầu của `detect` chỉ đo thời lượng theo p95 → cửa "đủ lâu" luôn thấy 0 với sự cố không làm chậm latency, làm **cả UC-2 không thể phát hiện được** | Đo cả ba đường mà `rules.detect()` chấp nhận (p95, error rate, lệch baseline), lấy cửa sổ lớn nhất | Thêm 2 test cho hai đường trước đây chết; đã đỏ trước khi sửa, xanh sau khi sửa |
+| Chạy load test thật thì Agent không mở issue nào — nhưng không rõ lỗi ở detect hay ở demo | Đo tay từng lớp: p95 server-side, phân bố bucket, rps, `db_pool_connections_in_use`, và bắn tải lại từ trong mạng compose | Xác định được lỗi **không** nằm ở detect: service thật sự nhanh (98,7% request dưới 50ms), demo chưa tái hiện được UC-1 |
+
+### Việc chuyển cho Việt khi về
+| Việc | Vì sao cần Việt quyết |
+|------|----------------------|
+| UC-2 hiện không phát hiện được: OOM làm `RestartCount` lên 7 nhưng **không sinh 5xx nào** — process chết giữa request nên không kịp ghi metric. `up` = 0 và `changes(process_start_time_seconds)` = 3 thì có sẵn | Nhận hai tín hiệu đó phải thêm tham số vào `rules.detect()` — chữ ký hàm của Việt |
+| UC-1 chưa tái hiện được: không có mức tải nào làm p95 server-side vượt ngưỡng, vì pool 5 connection chưa bao giờ là nút thắt (mỗi query ~3ms) | Cần đổi thiết kế `/pay` cho nặng lên, đụng cả phần Trung |
+| Thay vòng lặp tuần tự bằng LangGraph state machine | Hai node giữ nguyên chữ ký, chỉ thay chỗ nối |
 
 ### Bài học
 - **Viết PRD sau khi đã code một phần thì phát hiện được thứ mà lúc thiết kế không thấy.** Đi ngược từ code lên tiêu chí nghiệm thu làm lộ ra những quyết định đã cài trong code nhưng chưa được viết ra ở đâu — như chuyện UI cố ý không có nút duyệt. Thứ không được viết ra thì người review đọc thành thiếu sót, và người mới vào sẽ "sửa" nó.
 - **Chốt ground truth trước là điều kiện để phép đo có nghĩa.** `use-cases.md` viết ngày 30/07, trước `rules.py`. Nếu chạy Agent xong mới ghi "nguyên nhân gốc là gì" thì độ chính xác luôn 3/3 và không đo gì cả. Thứ tự chính là toàn bộ giá trị.
+- **Cửa lọc phải đo đúng cái điều kiện mà nó đang lọc.** `detect` đặt cửa "đã bất thường đủ 30 giây chưa" trước ba đường phát hiện, nhưng chỉ đo thời lượng theo một đường. Hai đường còn lại vẫn nằm trong code, vẫn có test riêng, và vĩnh viễn không chạy. Cùng họ với bucket mặc định hôm 29/07 và ngưỡng P2 trong `rules.py`: **bảng có nhiều nhánh, thực tế chạy được một, và không có gì đỏ lên để báo.** Ba lần rồi — đây là dạng lỗi đặc trưng của dự án này.
+- **Test giả mà sai thì cả file test thành vô nghĩa, và nó không đỏ để báo.** Bộ nhận diện PromQL trong fake sai hai lần liên tiếp, cả hai lần test vẫn xanh — chỉ là xanh vì lý do khác với lý do tôi nghĩ. Nguyên nhân: các hằng PromQL lồng vào nhau (`P95_LATENCY` chứa `http_requests_total` vì bộ lọc chống NaN; `P95_BASELINE_30M` bọc một `histogram_quantile`). Từ giờ fake nào phân nhánh theo nội dung đầu vào thì bản thân nó cần một test.
 - **Rủi ro nguy hiểm nhất của dự án này đều thuộc họ "fail âm thầm".** Metric lệch tên → Prometheus trả rỗng chứ không lỗi. Rollback chỉ ghi log → `verify` không hồi phục → lặp vô hạn giữa buổi demo. Không cái nào ném exception, nên không cái nào chặn được bằng cách "nhớ kiểm tra lúc test" — phải viết thành tiêu chí nghiệm thu trước.
 
 ### Kế hoạch tuần sau

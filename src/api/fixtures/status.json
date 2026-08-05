@@ -17,8 +17,8 @@
   "active_incidents": [
     {
       "jira_key": "INC-12",
-      "title": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
-      "severity": "P2",
+      "title": "[P1] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
+      "severity": "P1",
       "state": "Awaiting Approval",
       "affected_services": ["service-thanh-toan"],
       "detected_at": "2026-07-28T14:32:04Z",

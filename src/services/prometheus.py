@@ -143,6 +143,44 @@ AUTH_FAILURE_RATE = """
 sum by (service) (rate(http_requests_total{handler="/login", status=~"4.."}[1m]))
 """
 
+# ---------------------------------------------------------------------------
+# UC-2 — service chết vì OOM rồi restart liên tục
+# ---------------------------------------------------------------------------
+#
+# ⚠️ UC-2 KHÔNG bắt được bằng `ERROR_RATE`. Đức đo ngày 02/08: ép OOM làm
+# `RestartCount` lên 7, container chết và sống lại thật, nhưng
+# `http_requests_total{status=~"5.."}` **bằng 0 tuyệt đối** — process chết giữa
+# request nên không kịp ghi metric, và counter trong process reset sạch sau mỗi
+# lần restart. Sự cố nặng nhất lại là sự cố để lại ít dấu vết nhất trong metric
+# của chính service.
+#
+# Hai tín hiệu dưới đây do Prometheus tự sinh, không cần service làm gì thêm,
+# nên chúng sống sót kể cả khi process chết.
+
+#: 1 nếu Prometheus scrape được service ở lần gần nhất, 0 nếu không.
+SERVICE_UP = "up"
+
+#: 1 khi service chết, 0 khi sống — dạng đảo của `SERVICE_UP`.
+#:
+#: Có bản này để đo "chết liên tục bao lâu" bằng chung một helper với các đường
+#: khác: `min_over_time(SERVICE_DOWN[Ws]) > 0.5` nghĩa là suốt W giây đó chưa
+#: lúc nào service sống lại.
+SERVICE_DOWN = f"1 - ({SERVICE_UP})"
+
+#: Số lần process khởi động lại trong 10 phút.
+#:
+#: Phân biệt được **restart loop** với **tắt hẳn**: tắt hẳn thì `up` = 0 mà số
+#: này không tăng. Một lần trong 10 phút nhiều khả năng là deploy bình thường,
+#: nên ngưỡng là ≥ 2 (`rules.CRASHLOOP_RESTARTS`).
+#:
+#: ⚠️ Con số này **đếm thiếu**, và cố ý chấp nhận. Đo trên OOM thật 03/08:
+#: Docker báo `RestartCount` = 5 nhưng Prometheus chỉ thấy 2 — lúc container
+#: chết thì không scrape được, nên vài mốc `process_start_time_seconds` trôi
+#: qua giữa hai lần scrape mà không ai ghi lại. Ngưỡng 2 vẫn bắt được; nhưng
+#: **đừng nâng ngưỡng lên gần con số Docker báo**, vì hai bên đếm khác nhau và
+#: chênh lệch càng lớn khi service chết càng nhanh.
+RESTART_COUNT_10M = "changes(process_start_time_seconds[10m])"
+
 _AVG_LATENCY_RAW = """
 sum(rate(http_request_duration_seconds_sum{handler!="/metrics"}[1m])) by (service)
   / sum(rate(http_request_duration_seconds_count{handler!="/metrics"}[1m])) by (service)

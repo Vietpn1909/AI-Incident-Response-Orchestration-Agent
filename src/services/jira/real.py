@@ -46,6 +46,8 @@ from src.services.jira.mapping import (
     jira_status_for,
     jql_open_incidents,
     labels_for,
+    replace_severity_label,
+    retitle_severity,
     service_from_labels,
     service_label,
     severity_from_labels,
@@ -366,6 +368,32 @@ class RealJiraClient:
 
     # ------------------------------------------------------------ đọc dữ liệu
 
+    def set_severity(self, jira_key: str, severity: Severity) -> None:
+        """Đổi mức độ: sửa label `severity-*` VÀ tiền tố `[P2]` trong summary.
+
+        Một lần `PUT /issue` cho cả hai. Sửa riêng lẻ thì có khoảng thời gian
+        label và tiêu đề nói hai mức khác nhau, mà `severity_from_labels()` đọc
+        label còn người đọc board đọc tiêu đề.
+
+        Đọc lại issue trước khi ghi vì cần biết label cũ để bỏ — Jira API ghi
+        `labels` là ghi đè toàn bộ danh sách, không phải thêm vào.
+        """
+        issue = self._call("GET", f"/rest/api/3/issue/{jira_key}?fields=summary,labels")
+        fields = issue.get("fields", {})
+        labels_cu = fields.get("labels", []) or []
+        summary_cu = fields.get("summary", "") or ""
+
+        self._call(
+            "PUT",
+            f"/rest/api/3/issue/{jira_key}",
+            {
+                "fields": {
+                    "labels": replace_severity_label(labels_cu, severity),
+                    "summary": retitle_severity(summary_cu, severity)[:250],
+                }
+            },
+        )
+
     def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
         """Ai đã chuyển issue sang trạng thái này, lần gần nhất.
 
@@ -373,8 +401,32 @@ class RealJiraClient:
         Jira tự ghi khi có thao tác, Agent không khai báo được nên không giả mạo
         được.
         """
+        return self._lan_chuyen_gan_nhat(jira_key, to_state)[0]
+
+    def get_transition_time(self, jira_key: str, to_state: IncidentState) -> datetime | None:
+        """Issue được chuyển sang trạng thái này lúc nào, lần gần nhất.
+
+        Dùng cho node `escalate` để biết đề xuất đã treo chờ duyệt bao lâu.
+        """
+        return self._lan_chuyen_gan_nhat(jira_key, to_state)[1]
+
+    def _lan_chuyen_gan_nhat(
+        self, jira_key: str, to_state: IncidentState
+    ) -> tuple[str | None, datetime | None]:
+        """Đi changelog một lượt, trả `(accountId, thời điểm)` của lần chuyển gần nhất.
+
+        Gộp hai câu hỏi vào một lượt đi vì cả hai đọc cùng một nguồn. Tách thành
+        hai hàm mỗi hàm tự phân trang là gọi Jira API gấp đôi cho cùng dữ liệu,
+        mà Jira Cloud có rate limit.
+
+        ⚠️ Tác giả và thời điểm phải lấy từ **cùng một** entry. Bản đầu lấy tác
+        giả ở hàm này và thời điểm ở hàm khác thì khi có nhiều lần chuyển sang
+        cùng trạng thái, hai giá trị có thể thuộc hai lần khác nhau — cổng HITL
+        sẽ nói "người X duyệt" kèm mốc thời gian của một lần chuyển khác.
+        """
         target = jira_status_for(to_state)
         author: str | None = None
+        at: datetime | None = None
         start = 0
         while True:
             page = self._call("GET", f"/rest/api/3/issue/{jira_key}/changelog?startAt={start}&maxResults=100")
@@ -382,12 +434,13 @@ class RealJiraClient:
                 for item in entry.get("items", []):
                     if item.get("field") == "status" and item.get("toString") == target:
                         author = (entry.get("author") or {}).get("accountId") or author
+                        at = _parse_jira_datetime(entry.get("created")) or at
             if page.get("isLast", True):
                 break
             start += len(page.get("values", []))
             if not page.get("values"):
                 break
-        return author
+        return author, at
 
     def _to_incident(self, issue: dict[str, Any]) -> Incident:
         fields = issue.get("fields", {})
@@ -438,8 +491,10 @@ class RealJiraClient:
                 f"/rest/api/3/issue/{jira_key}"
                 "?fields=summary,labels,status,created,resolutiondate,issuelinks",
             )
-        except JiraApiError:
-            return None
+        except JiraApiError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
         incident = self._to_incident(issue)
         incident.timeline = self._timeline_from_changelog(jira_key)
 

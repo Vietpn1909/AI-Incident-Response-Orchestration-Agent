@@ -21,7 +21,11 @@ services:
       POSTGRES_PASSWORD: demo
       POSTGRES_DB: demo
     ports:
-      - "5432:5432"
+      # Máy nào đã có Postgres native chạy sẵn thì đổi port host:
+      #   DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+      #   DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+      # Các service demo nói chuyện với nhau qua mạng compose nên không bị ảnh hưởng.
+      - "${DEMO_POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U demo"]
       interval: 5s
@@ -31,6 +35,21 @@ services:
   service-thanh-toan:
     build:
       context: ./demo
+    # Đây là service DUY NHẤT có `build:`. `service-dat-hang` dùng lại đúng
+    # image này — hai service chung một Dockerfile và một build context, chỉ
+    # khác `command` lúc chạy.
+    #
+    # Không đặt `image:` thì compose tự sinh tên theo từng service
+    # (`p035-demo-service-thanh-toan`, `p035-demo-service-dat-hang`) rồi build
+    # HAI LẦN cùng một nội dung. Đo ngày 05/08: hai image 357MB có layer trùng
+    # hoàn toàn — 714MB cho thứ 357MB là đủ, và gấp đôi thời gian build, trên
+    # máy của cả bốn người.
+    #
+    # ⚠️ Đừng thêm `build:` vào service-dat-hang rồi cho hai bên cùng `image:`
+    # này. Đã thử: hai build song song tranh nhau đặt cùng một tag, buildx báo
+    # `ERROR: image "...": already exists` và `docker compose build` **exit 1**
+    # — image vẫn ra nhưng lệnh coi như thất bại, đủ để làm đỏ CI hay script.
+    image: p035-demo-service:latest
     command: sh -c "exec uvicorn service_thanh_toan.main:app --host 0.0.0.0 --port 8001"
     # UC-2: giới hạn thấp có chủ đích để /pay/batch tạo OOM trong thời gian demo.
     mem_limit: 128m
@@ -53,8 +72,10 @@ services:
         condition: service_healthy
 
   service-dat-hang:
-    build:
-      context: ./demo
+    # KHÔNG có `build:` — dùng lại đúng image mà service-thanh-toan build ra.
+    image: p035-demo-service:latest
+    # Không bao giờ hỏi registry: image này chỉ tồn tại local.
+    pull_policy: never
     command: sh -c "exec uvicorn service_dat_hang.main:app --host 0.0.0.0 --port 8002"
     environment:
       # Tên host = tên service trong file này, không phải localhost.

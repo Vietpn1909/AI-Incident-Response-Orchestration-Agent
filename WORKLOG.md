@@ -180,6 +180,11 @@ Việc phát sinh cho Trung: `PROFILE_DEMO` trong `demo/loadtest.py` đã có b�
 | Việt | Fix log tiếng Việt vỡ trên console Windows — `configure_logging()` ép UTF-8 cho cả stdout lẫn stderr | ✅ Done | `src/config.py`, gọi trong `lifespan` | - |
 | Việt | **Cài 4 hàm trong `src/services/rules.py`** (`classify_severity`, `detect`, `classify_auth_burst`, `is_spreading`) | ✅ Done | 39 test, 107 test toàn repo pass | - |
 | Việt | **Phát hiện mức P3 và P4 không đạt tới được** với ngưỡng ghi trong stub | ✅ Done | sửa cửa `detect` xuống ngưỡng P3 + thêm `BASELINE_DEVIATION_RATIO` | - |
+| Việt | Node `detect` + `BreachTracker` — quy tắc "liên tục ≥ 30s" bắc qua nhiều vòng poll | ✅ Done | `src/agents/nodes/detect.py` | - |
+| Việt | Node `classify_severity` — nâng P1 khi sự cố lan sang ≥ 2 service | ✅ Done | `src/agents/nodes/classify_severity.py` | - |
+| Việt | Node `open_war_room` — `find_open_incident()` TRƯỚC `create_incident()` | ✅ Done | `src/agents/nodes/open_war_room.py` | - |
+| Việt | Nối 3 node thành `incident_graph.py`, chạy thật trên Prometheus + load test | ✅ Done | 3 vòng đầu không mở incident, vòng 4 mở `INC-1`, vòng 5–7 dùng lại | - |
+| Việt | 28 test cho node và graph, dùng client giả nên chạy được trong CI | ✅ Done | 135 test toàn repo pass, ruff clean | - |
 
 **Tổng kết ngày:** PR #10 merge — hai lỗi làm bằng chứng số sai im lặng đã vào `develop`, cả đội pull về là có. Đây cũng là PR đầu tiên của Việt đi đúng quy trình `feature/*` → `develop` thay vì merge thẳng như lần trước.
 
@@ -199,6 +204,16 @@ Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đâ
 
 `classify_auth_burst` (UC-3) đi nhánh riêng, không dùng chung bảng với UC-1: burst credential-stuffing xảy ra khi hệ thống **hoàn toàn khoẻ**, nên severity dựa trên số tuyệt đối request/giây. Có test chứng minh cùng bộ số liệu đó `detect()` trả `None` còn `classify_auth_burst()` trả P1 — nếu hai nhánh dùng chung ngưỡng thì Agent sẽ kết luận "service quá tải" thay vì "vấn đề bảo mật", và theo use-cases.md thì đó là chẩn đoán SAI.
 
+**Ba node đầu của graph, và Agent đã chạy thật.** `detect` → `classify_severity` → `open_war_room`, nối trong `src/agents/incident_graph.py` (tách khỏi `graph.py` của template).
+
+Mảnh thiết kế phải giải trước khi viết `detect`: quy tắc "vượt ngưỡng liên tục ≥ 30s" bắc qua **nhiều vòng poll**, mà state của LangGraph chỉ sống trong một lần chạy graph. Nếu không có chỗ nhớ riêng thì `breached_for_seconds` luôn bằng 0 và quy tắc chống nhiễu quan trọng nhất trở thành vô hiệu. Giải bằng `BreachTracker` — một object sống ở module, nhớ mốc bắt đầu vượt ngưỡng của từng service, và **xoá mốc khi service hồi phục** để hai sự cố cách nhau một tiếng không bị cộng dồn thành một.
+
+`detect` **không hardcode danh sách service**: Prometheus trả mỗi service một series nên service nào có traffic thì tự xuất hiện. Thêm service mới chỉ cần sửa `prometheus.yml`, không đụng code Agent.
+
+`classify_severity` thoạt nhìn thừa vì `rules.detect()` đã gán severity rồi. Nhưng nó gán dựa trên **một** service, mà contract ① có vế "≥ 2 service bị ảnh hưởng → P1" — vế đó chỉ nhìn thấy khi đã có đủ tín hiệu cả vòng poll. Hai service mỗi cái p95 = 3s, xét riêng đều là P2; xét cùng nhau là P1.
+
+Chạy thật trên Prometheus + `loadgen` xác nhận **cả hai quy tắc chống nhiễu**: ba vòng poll đầu đã thấy vượt ngưỡng nhưng chưa đủ 30s nên không mở incident; vòng thứ tư (32s liên tục) mở `INC-1`; ba vòng sau dùng lại `INC-1` thay vì tạo trùng. Severity P3 đúng theo số đo, vì p95 = 1.90s còn dưới ngưỡng P2.
+
 ---
 
 ## 2026-08-02
@@ -210,6 +225,10 @@ Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đâ
 | Trương Công Thái Đức | Viết PRD — 8 user story, 16 yêu cầu chức năng kèm tiêu chí nghiệm thu, 12 NFR, kế hoạch phát hành R0–R5 | ✅ Done | `docs/prd.md` | - |
 | Trương Công Thái Đức | Viết UI Flow + wireframe 2 trang Streamlit, ghi rõ lý do war room không có nút duyệt | ✅ Done | `docs/ui-flow.md` | - |
 | Trương Công Thái Đức | Thêm bảng "Tài liệu nộp" đầu README — mentor mở repo là thấy link, không phải đi tìm | ✅ Done | `README.md` | - |
+| Trương Công Thái Đức *(viết hộ Việt, Việt vắng)* | Node `detect` — đọc Prometheus, đo thời lượng bất thường không cần giữ state, gọi `rules.detect()` | ✅ Done | `src/agents/nodes/detect.py` | - |
+| Trương Công Thái Đức *(viết hộ Việt)* | Node `open_war_room` + vòng lặp quét + CLI chạy Agent | ✅ Done | `src/agents/nodes/open_war_room.py`, `src/agents/detection_loop.py`, `scripts/run_agent.py` | - |
+| Trương Công Thái Đức | 15 test cho chuỗi detect, gồm test canh chính bộ nhận diện PromQL của fake | ✅ Done | `tests/test_agents/test_detection.py` — 133/133 pass | - |
+| Trương Công Thái Đức | Đo thật trên stack demo: load test **không** tạo được sự cố latency, OOM **không** sinh 5xx nào | ⚠️ Blocker cho Việt | Số liệu ở dưới | - |
 
 **Tổng kết ngày:** Bổ sung 3 tài liệu Gate 1 còn thiếu. Ba chỗ đáng ghi lại vì chúng lộ ra khi viết chứ không phải khi code:
 
@@ -218,6 +237,227 @@ Rule engine cũng **từ chối NaN bằng `ValueError`** thay vì cho qua. Đâ
 **Ba rủi ro trong brief đều là rủi ro "fail âm thầm".** Metric lệch tên → Prometheus trả rỗng chứ không lỗi. Rollback chỉ ghi log → `verify` không hồi phục → vòng lặp vô hạn giữa buổi demo. Agent mở incident trùng khi load test → war room thành rác. Cùng một họ với `setup_hooks.sh` tuần trước: không có exception nào để lần theo, nên phải chặn bằng tiêu chí nghiệm thu viết sẵn chứ không bằng việc nhớ ra lúc test.
 
 **Viết UI flow mới thấy phải nói rõ vì sao war room không có nút duyệt.** Người đọc mặc định coi đó là thiếu sót. Thật ra một nút duyệt trong Streamlit sẽ tạo đường thứ hai tới `execute_remediation` — mà FR-08 đòi mọi đường phải qua `assert_human_approved()`, và cổng đó xác minh danh tính bằng changelog Jira, cần một transition có tác giả thật. Streamlit không có đăng nhập nên nút đó là đường vòng qua cổng. Quyết định này đã nằm trong code từ đầu, nhưng chưa ở đâu ghi lý do — người review sẽ đọc là quên làm.
+
+### Chiều: viết hộ Việt phần `detect`
+
+Việt vắng, mà `src/agents/nodes/` mới chỉ có `example_node.py` của template — tức là `prometheus.py` và `rules.py` Việt viết xong tuần này vẫn chưa có ai gọi. Viết ba mảnh nối chúng lại: `detect` (đọc → quyết định), `open_war_room` (mở Jira, chống mở trùng), và một vòng lặp tuần tự tối thiểu. **Chưa phải LangGraph** — cố ý, để Việt về dựng state machine mà không phải gỡ thứ tôi làm dở.
+
+**Đo thời lượng bất thường không giữ state.** `rules.detect()` cần `breached_for_seconds`, mà Agent thì poll theo chu kỳ. Giữ mốc bắt đầu trong RAM là cách dễ nghĩ nhất nhưng sai ba chỗ: restart là mất, chạy nhiều instance thì mỗi con một số, và test phải giả lập thời gian. Thay vào đó hỏi thẳng Prometheus — `min_over_time(p95[30s])` mà vẫn trên ngưỡng nghĩa là suốt 30 giây đó chưa lúc nào tụt xuống. Thử 4 cửa sổ (30/60/120/300s) rồi lấy cửa sổ lớn nhất còn thoả.
+
+**Lỗi của chính tôi, tìm ra bằng cách đọc lại `rules.detect()` chứ không phải bằng test.** Bản đầu chỉ đo thời lượng theo p95. Nhưng cửa 1 của `detect()` (`breached_for_seconds >= 30`) chặn **trước** cả ba đường của cửa 2. Hệ quả: sự cố nào không làm chậm latency thì `breached_for_seconds` luôn bằng 0, và **đường error-rate cùng đường lệch baseline vĩnh viễn không với tới được** — tức là toàn bộ UC-2. Đúng cùng một họ lỗi mà Việt đã ghi trong docstring `rules.detect()` và tôi mắc trong bucket hôm 29/07: bảng có nhiều nhánh, thực tế chạy được một. **Cửa lọc "đủ lâu" phải đo đúng cái điều kiện mà nó đang lọc.** Sửa: đo cả ba đường, lấy cửa sổ lớn nhất trong ba.
+
+**Fake trong test sai hai lần liên tiếp, mà test vẫn xanh cả hai lần.** Bộ nhận diện câu PromQL của fake phân loại theo chuỗi đặc trưng. Lần một: xét `http_requests_total` trước → nhận nhầm mọi câu p95 thành câu error, vì `P95_LATENCY` có chứa `http_requests_total` — đó là bộ lọc `_HAS_TRAFFIC` chống NaN của Việt. Lần hai: xét "có chứa `histogram_quantile`" → nhận nhầm baseline thành câu đo lệch, vì `P95_BASELINE_30M` bọc một `histogram_quantile` bên trong. Cả hai lần test vẫn pass, chỉ là **pass vì lý do khác** — `NGHEN` có error 12% nên vẫn ra P2, đúng con số tôi assert. Đã thêm `test_fake_phan_loai_dung_tung_cau_promql` canh chính cái fake. Test giả mà sai thì cả file test thành vô nghĩa, và nó không đỏ để báo.
+
+### Đo thật trên stack demo — hai chỗ demo không tái hiện được sự cố
+
+Chạy `docker compose -f docker-compose.demo.yml up` + `demo/seed.py` + `demo/loadtest.py` để xem Agent có tự mở issue không. **Không mở.** Đào ra hai chuyện, cả hai đều là chuyện thật của demo chứ không phải của detect:
+
+**1. Load test không tạo được sự cố latency.** `loadtest.py` in ra `p95: 0.585s` ở bậc 200 concurrent, nhưng đó là **p95 đo phía client**. Server-side Prometheus đọc **0,048s** suốt cả 5 bậc, và histogram cho thấy 35.202/35.650 request xong dưới 50ms — service không hề chậm. Đã loại trừ từng nghi vấn:
+
+| Thử | rps đạt được | p95 server-side |
+|-----|--------------|-----------------|
+| `demo/loadtest.py` (200 concurrent, từ host) | 294 | 0,048s |
+| Bỏ hàng rào `gather`+`sleep`, nâng `max_connections` (từ host) | 294 | 0,050s |
+| 150 worker liên tục, chạy **trong** mạng compose | 421 | 0,048s |
+
+Trần ~294 rps từ host là port-forward của Docker Desktop trên macOS; vào trong mạng thì lên 421 rps và trần mới là uvicorn một worker. Nhưng p95 server-side **không nhúc nhích ở cả ba lần**, và `db_pool_connections_in_use` chỉ bằng 1 — pool 5 connection chưa bao giờ là nút thắt vì mỗi query xong trong ~3ms. Xếp hàng xảy ra ở socket backlog, **trước khi** ASGI app nhìn thấy request, nên histogram không đo được. Kết luận: câu TODO trong `loadtest.py` — "ghi lại mức tải làm p95 vượt 2s" — trên máy này **không có mức tải nào làm được**. Muốn UC-1 tái hiện thì phải làm việc trong `/pay` nặng lên, không phải bắn thêm tải.
+
+**2. OOM không sinh ra 5xx nào cả.** Gọi `/pay/batch` liên tục: `RestartCount` lên **7**, container chết và restart thật. Nhưng `http_requests_total{status=~"5.."}` **bằng 0 tuyệt đối** — process chết giữa request nên không kịp ghi metric, và counter trong process reset sạch sau restart. Tức là UC-2 hiện **không thể phát hiện được** bằng error-rate, dù `rules.detect()` có đường cho nó.
+
+Prometheus vẫn thấy sự cố, chỉ là bằng metric khác: `min_over_time(up[5m])` = **0**, và `changes(process_start_time_seconds[10m])` = **3**. Hai tín hiệu này có sẵn miễn phí, không cần service làm gì thêm. Nhưng nhận chúng thì phải thêm tham số vào `rules.detect()` — đó là chữ ký hàm của Việt, nên để Việt quyết chứ tôi không tự đổi. Đây là việc đầu tiên Việt cần xem khi về.
+
+**Chuyện nhỏ dọc đường:** máy tôi có Postgres native chiếm sẵn cổng 5432 nên compose không lên được. Đổi thành `${DEMO_POSTGRES_PORT:-5432}` — mặc định giữ nguyên nên cả nhóm không bị ảnh hưởng, ai trùng cổng thì set biến môi trường.
+
+---
+
+**Việt (tối 02/08) — gỡ conflict và nối lại phần lan truyền.**
+
+Sáng 02/08 tôi cũng viết `detect` + `open_war_room` + graph LangGraph (`e4488ee`) nhưng **không push**, nên Đức không thấy và viết bản của mình lúc tối. Lỗi ở tôi: hôm 01/08 đã tự xếp "3 commit chưa push" là mục số 1 trong danh sách rà lỗi rồi vẫn để đó. Hai bản viết song song, và lúc merge `develop` vào `viet` thì branch vỡ — `detect.py` thành bản Đức trong khi `incident_graph.py` và 2 file test của tôi vẫn gọi `BreachTracker`, `detect_node`.
+
+Giữ bản Đức, bỏ bản mình. Cách đo `breached_for_seconds` bằng `min_over_time` **đúng hơn** `BreachTracker` của tôi ở cả ba điểm Đức nêu: restart mất state, nhiều instance mỗi con một số, test phải giả lập thời gian. Xoá `incident_graph.py`, `test_detect.py`, `test_incident_graph.py` — khôi phục được từ `e4488ee` khi dựng state machine.
+
+Port sang phần bản Đức chưa có: **`escalate_spreading()`**. `rules.detect()` gán severity dựa trên *một* service, còn vế "≥ 2 service bị ảnh hưởng → P1" của contract ① chỉ thấy được khi nhìn cả vòng quét — hai service mỗi cái p95 = 3s, xét riêng đều P2, xét cùng nhau là P1. Trước đó `is_spreading()` viết xong từ 01/08 nhưng **chưa chỗ nào gọi**, tức luật lan truyền đang là code chết.
+
+Gọi trong `run_cycle()` **trước** `open_war_room` — severity đi vào tiêu đề issue lúc tạo, nâng sau khi tạo thì tiêu đề mang mức sai. Vẫn mở **một war room cho mỗi service** như thiết kế của Đức, không gộp: đúng mẫu INC-12/INC-13 trong fixture, việc nối là của `link_incidents`.
+
+⚠️ **Mâu thuẫn contract cần Đức chốt:** contract ① ghi "≥ 2 service bị ảnh hưởng → P1", nhưng `fixtures/incidents.json` lại có INC-12 (P2) và INC-13 (P3) nối với nhau — hai service dính mà không cái nào P1. Tôi làm theo chữ trong contract ①. Nếu Đức muốn theo fixture (hiểu "≥ 2 service" là `affected_services` của **một** incident có 2 phần tử) thì sửa một dòng.
+
+**Bug mới, ảnh hưởng cả Trung:** `pip install -r demo/requirements.txt` **fail trên Windows** — pip đọc file bằng cp1252 mà file có comment tiếng Việt, `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8d`. CI chạy Linux nên xanh. Vá tạm bằng `PYTHONUTF8=1 pip install -r demo/requirements.txt`; nên bỏ dấu khỏi file hoặc ghi cách này vào README.
+
+142 test pass, ruff sạch.
+
+**Rà toàn bộ bẫy Windows — 3/4 thành viên dùng Windows, chỉ Đức dùng macOS.**
+
+Kiểm tra: không còn conflict marker, working tree sạch, 142 test pass, `.gitattributes` khớp với line ending thực tế trên đĩa (`git add --renormalize` không sinh thay đổi nào), `.sh` là LF, `.cmd`/`.ps1` là CRLF, mọi `open()` đều có `encoding=` hoặc dùng chế độ nhị phân.
+
+Nhưng tìm ra **ba lỗi chỉ xảy ra trên Windows**, CI chạy Linux nên xanh hết:
+
+1. **`scripts/run_agent.py` — điểm khởi chạy Agent — chết ngay `--help`.** `configure_logging()` được gọi *sau* `parse_args()`, mà argparse in help và thông báo lỗi tham số thẳng ra stdout ngay trong `parse_args()`. Console Windows là CP1252 nên `UnicodeEncodeError: can't encode character 'ệ'` — chết hẳn, không phải in ra chữ xấu. Tách `force_utf8_console()` khỏi `configure_logging()` và gọi trước `parse_args()`.
+2. **`demo/loadtest.py` chết ngay dòng output đầu tiên** trên Windows — cùng nguyên nhân. Đây là script của Trung mà Trung cũng dùng Windows. `demo/attack.py` đã có cách vá đúng từ trước, chỉ `loadtest.py` và `seed.py` thiếu; áp cùng cách để `demo/` vẫn độc lập, không import `src`.
+3. **`scripts/verify_e2e.py`** cùng lỗi, đã vá.
+
+Cộng thêm lỗi `pip install -r demo/requirements.txt` fail trên Windows (ghi ở trên) — bốn lỗi cùng một họ: **file và luồng ra mặc định CP1252 gặp nội dung tiếng Việt**. Đội viết tài liệu và log bằng tiếng Việt nên bẫy này sẽ còn lặp lại; quy ước nên là mọi script có `print`/`argparse` tiếng Việt đều ép UTF-8 ở dòng đầu của `main()`.
+
+**Chạy trọn chuỗi trên Windows để xác nhận:** `docker compose -f docker-compose.demo.yml up` → 2 target Prometheus UP → `seed.py` 3000 orders + 5000 payments → `loadtest.py` in tiếng Việt bình thường → `run_agent.py --fake --once` chạy sạch, báo "Vòng 1: bình thường" (đúng, vì UC-1 chưa tái hiện được như Đức đã ghi).
+
+**Một khác biệt máy nữa:** Windows của tôi có Postgres native chiếm sẵn 5432 giống hệt máy Đức, nên `seed.py` nối nhầm vào đó và fail `InvalidPasswordError`. Đường vá `DEMO_POSTGRES_PORT` Đức thêm hôm nay **chạy đúng**, đã verify:
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
+
+---
+
+## 2026-08-04
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Review + đo độc lập PR #13 (Việt) và PR #14 (Trung), merge cả hai | ✅ Done | `develop` = `95eb539`, CI xanh | - |
+| Trương Công Thái Đức | Review PR #15 (`hypothesize`) — chạy thật với LLM thật trên stack demo | ✅ Done | Xác nhận LLM tuân ràng buộc prompt | - |
+| Trương Công Thái Đức | Tìm ra `DATABASE_URL` vẫn là placeholder của template → `correlate_deploy` chết âm thầm | ✅ Done | `src/config.py`, `.env.example`, `demo/README.md` | - |
+| Trương Công Thái Đức | Test gác `DATABASE_URL`, đã mutation-test | ✅ Done | `tests/test_services/test_deploys_config.py` — 205 test pass | - |
+| Trương Công Thái Đức | CI bị chặn vì org hết hạn mức Actions → chuyển sang self-hosted runner của BTC | ✅ Done | `.github/workflows/ci.yml`, run `30920675914` xanh | - |
+| Trương Công Thái Đức | Node `propose_remediation` + `services/runbooks.py` — nối cổng HITL vào luồng Agent | ✅ Done | 21 test mới, 226 test pass; verify trên Jira thật (KAN-6) | - |
+| Trương Công Thái Đức | Node `escalate` + nới contract ③ (`get_transition_time`, `set_severity`) | ✅ Done | 8 test mới, 234 test pass | - |
+
+**Tổng kết ngày:** Hai PR của Việt và Trung đưa dự án qua mốc lớn nhất từ đầu: **cả 3 use case đều phát hiện được, và Agent đã có LLM trong luồng chạy**. Đo lại độc lập từng cái thay vì tin số người khai.
+
+**PR #14 (Trung) — UC-1 cuối cùng tái hiện được.** Cách sửa đúng nguyên tắc: `pg_sleep(0.2)` đặt **bên trong** `pool.acquire()` nên request giữ connection Postgres thật; đặt ngoài pool thì chỉ làm handler chậm chứ không tạo được bằng chứng pool cạn. Dựng lại stack đo trên macOS: p95 server-side **3,93s** (trước 0,048s), đỉnh pool **5/5**, một request đơn lẻ 0,225s. Trung đo trên Windows ra 4,06s — lệch do khác máy, cùng độ lớn.
+
+**PR #15 (Việt) — `hypothesize`, và `llm.py` lần đầu được gọi sau 8 ngày nằm không.** Thiết kế hai pha: `rules.build_hypothesis()` dựng `evidence` + `confidence` + một `statement` dự phòng (tất định, không mạng), rồi LLM viết lại `statement` và thêm `reasoning`. Pha 2 hỏng thì giả thuyết vẫn giữ nguyên giá trị chấm điểm — DashScope hết quota giữa buổi demo là chuyện có thật.
+
+Chạy thật với `qwen-plus`, LLM tuân đúng cả ba ràng buộc khó nhất trong prompt: chỉ dùng số có trong phần bằng chứng, không tự nhận độ tin cậy, và **viết "trùng thời gian với deploy v1.4.2" chứ không viết "do deploy gây ra"** — đúng luật số 4. Đây là chỗ dễ mất điểm nhất nếu buông: một Agent in ra đoạn văn nghe hay mà không truy ngược được về số liệu nào thì là chatbot, không phải công cụ vận hành.
+
+**Lỗi tìm được, thuộc đúng họ "fail âm thầm" mà JOURNAL đã ghi ba lần: `DATABASE_URL` chưa ai sửa khỏi placeholder của template.** Biến này chỉ có `services/deploys.py` đọc, tức nó **là** DB lịch sử deploy chứ không phải database của app. Mặc định template là `sqlite:///./data/app.db` mà `asyncpg` không parse nổi, còn `.env.example` là `postgresql://user:password@localhost:5432/dbname`. Nên trên **mọi máy mới clone**, `correlate_deploy` không bao giờ chạy — `deploys.py` bắt lỗi và chỉ log một dòng warning.
+
+Hệ quả đo được trên cùng một sự cố:
+
+| | `DATABASE_URL` sai | `DATABASE_URL` đúng |
+|---|---|---|
+| Độ tin cậy | **40%** | **90%** |
+| `related_deploy` | *(không có)* | **v1.4.2** |
+| LLM nhắc tới deploy | không | "trùng thời gian với deploy v1.4.2" |
+
+Mất hơn nửa độ tin cậy và mất hẳn nghi phạm `v1.4.2` — thứ mà `demo/seed.py` cắm sẵn làm linh hồn của UC-1. Không có exception nào để lần theo. Đã sửa mặc định trong `config.py`, sửa `.env.example`, ghi cảnh báo vào `demo/README.md`, và thêm test gác.
+
+**Test gác của tôi ban đầu cũng sai, theo đúng cách tôi vừa cảnh báo Việt.** Bản đầu assert trên `Settings().database_url` — mà `pydantic-settings` đọc `.env`, nên nó đỏ trên máy có `.env` và xanh trên CI (không có `.env`). Xanh đỏ theo máy chứ không theo code, vô dụng làm cổng gác. Sửa thành đọc `Settings.model_fields[...].default`, rồi mutation-test: đặt lại placeholder → 2 test đỏ, khôi phục → xanh.
+
+### Chiều: CI bị chặn ở tầng thanh toán, rồi chuyển sang runner của BTC
+
+Org hết hạn mức 2.000 phút/tháng của GitHub Actions. Job bị chặn **trước khi khởi động** — không phải lỗi code. Ba dấu hiệu phân biệt, đáng ghi lại vì lần sau gặp sẽ nhận ra ngay:
+
+1. Lần chạy đỏ chỉ **10 giây**, trong khi bình thường 31–49 giây — chưa kịp cài dependency
+2. `gh run view --log-failed` trả `log not found` — không có gì được chạy để ghi log
+3. Dòng ANNOTATIONS ghi thẳng `"The job was not started because recent account payments have failed or your spending limit needs to be increased"`
+
+Mức dùng của nhóm, tách theo workflow:
+
+| Workflow | Số lần | Tổng thời gian | Trung bình |
+|---|---:|---:|---:|
+| CI (lint + test) | 72 | 2.241s | 31s |
+| Running Copilot Code Review | 7 | 1.349s | **192s** |
+
+Tổng phút bị tính khoảng **100 / 2.000**, tức 5%. Cohort 3 có 35+ đề dùng chung quota nên đây là tổng của tất cả các nhóm, không phải một nhóm lạm dụng. Đáng chú ý: Copilot Code Review chỉ chạy 7 lần mà đốt gần nửa số giây của 72 lần CI — mỗi lượt tốn **6 lần** một lượt CI. Nếu phải tiết giảm thì tắt cái đó trước, không phải tắt CI.
+
+**Cách BTC đưa ra: đổi `runs-on: ubuntu-latest` thành `runs-on: self-hosted`.** Chỉ đổi đúng một dòng, cố ý không tinh chỉnh gì thêm — lo ngại ban đầu của tôi là runner dùng chung giữa các team thì `pip install` đi vào Python hệ thống là rủi ro hai chiều, nhưng thay vì đoán trước rồi thêm venv, cứ chạy một lần rồi đọc log.
+
+Đọc log thấy lo ngại đó không có cơ sở: runner tên `eph-vmrunner-8dbd4adc`, đường dẫn `/home/gh-runner/eph/8dbd4adc/` — **`eph` là ephemeral**, mỗi job một VM mới. Không cần venv. Đây là lần thứ hai trong ngày việc đo trước khi sửa tiết kiệm được một thay đổi vô ích.
+
+Kiểm chứng chạy thật chứ không tin dấu ✅: đếm được **205 dòng `PASSED`** trong log, đúng bằng số test local. Một CI "xanh" mà bỏ qua test thì tệ hơn CI đỏ.
+
+Giá phải trả: **2m49s** thay vì 31s. Runner không có sẵn tool cache nên `setup-python` phải tải Python 3.11.15 về mỗi lần, cộng thời gian xếp hàng FIFO với các team khác. Chấp nhận được — chậm hơn 5 lần nhưng vẫn còn cổng gác.
+
+### Tối: `propose_remediation` — cổng HITL cuối cùng nằm trong luồng Agent
+
+Trước hôm nay Agent chẩn đoán được nguyên nhân rồi **dừng**. Cổng HITL đã verify chạy thật trên Jira từ 01/08 (KAN-11), nhưng việc chuyển issue sang `Awaiting Approval` do [`scripts/verify_e2e.py`](scripts/verify_e2e.py) làm **bằng tay** — nên cổng tồn tại mà chưa bao giờ nằm trên đường đi của Agent. Node này đóng chỗ hở đó.
+
+**Quyết định đi chệch tài liệu, đã ghi lý do vào `docs/architecture_diagram.md`: LLM không chọn runbook.** Sơ đồ kiến trúc viết từ 28/07 rằng *"LLM chỉ chuyển bằng chứng thành lời giải thích và chọn runbook"*. Tôi bỏ phần chọn runbook khỏi vai của LLM, vì `action` không phải câu văn — nó là thứ **được thi hành lên production**, và chênh giữa `rollback` với `block_ip` là chênh giữa hạ một phiên bản và chặn truy cập của người dùng thật. Docstring `remediation.SUPPORTED_ACTIONS` vốn đã ghi lý do có danh sách trắng là *"tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù"* — nhưng cho LLM chọn **trong** danh sách trắng thì vẫn là LLM quyết định làm gì lên production, chỉ khác là bị giới hạn phạm vi. Ranh giới bây giờ: **LLM diễn giải, luật đề xuất, người duyệt.**
+
+Bảng chọn hành động ở `services/runbooks.py`, thứ tự xét là **UC-3 → UC-2 → UC-1**, khớp `detect.py::_one_per_service` nhưng vì lý do khác: một vụ credential-stuffing xảy ra đúng lúc vừa deploy thì rollback không chặn được cuộc tấn công, chỉ mất thời gian và thêm một lần đổi phiên bản vô ích giữa lúc đang có sự cố.
+
+Ba chỗ chọn cách "nói thật thay vì im lặng":
+
+- **UC-2 không có deploy → `scale_up`, và `risk` ghi rõ đây là GIẢM NHẸ.** Service chết vì hết RAM thì cách đúng là tăng `mem_limit` hoặc sửa rò rỉ — cả hai **không** nằm trong `SUPPORTED_ACTIONS`. Đề xuất một phương án không sửa gốc mà không nói ra là để người duyệt tưởng đã xử lý xong.
+- **UC-3 không chọn `block_ip` dù nó nằm trong danh sách trắng**, vì Agent chưa thu thập IP nguồn — chọn nó lúc này là chặn mù.
+- **Không biết rollback về đâu thì không đề xuất rollback.** `_phien_ban_truoc()` trả `None` thì rơi sang `increase_pool`. Để `remediation._describe()` điền "phiên bản trước" là đẩy việc đoán xuống lúc thi hành.
+
+**Test canh chuỗi tên bằng chứng, đúng bài học sáng nay.** `runbooks.py` phân nhánh theo tên `MetricEvidence`, mà tên đó là chuỗi literal trong `rules.py` của Việt. Việt sửa một chữ là chỗ này lặng lẽ không nhận ra use case nữa rồi **mọi** sự cố rơi vào nhánh mặc định `scale_up` — sai hành động lên production mà không có gì đỏ lên. Nên `test_ten_bang_chung_con_khop_voi_rules` gọi thẳng `rules.detect*()` rồi đối chiếu, không hardcode kỳ vọng ở hai nơi.
+
+**Verify trên Jira thật, không chỉ FakeJira.** Lần chạy đầu với `RealJiraClient` đi vào nhánh "cập nhật KAN-6 đã mở" nên `propose_remediation` **không chạy** — đúng thiết kế, nhưng nghĩa là chưa kiểm được thứ đáng lo nhất: tên transition `Awaiting Approval` có tồn tại trên board thật không. Gọi thẳng vào KAN-6 thì cả ba chỗ đều đúng:
+
+```
+lịch sử deploy đọc được : ['v1.4.2', 'v1.4.1']            ← Postgres thật
+đề xuất                 : rollback → to_version=v1.4.1     ← đúng bản NGAY TRƯỚC
+trạng thái KAN-6        : Remediating → Awaiting Approval  ← transition có trên board
+```
+
+Chuỗi đầy đủ chạy một lần không script tay: `detect` (p95 3,481s, vượt liên tục 60s) → `open_war_room` → `hypothesize` (90%, "pool cạn kiệt") → `runbooks` (rollback v1.4.2 → v1.4.1) → `propose_remediation` → **dừng, chờ người**.
+
+Graph kết thúc ở đây là **cố ý**, không phải chuỗi làm dở: bước tiếp theo do người khởi động, và Agent tự chuyển sang `Remediating` thì `assert_human_approved()` so `accountId` thấy trùng account Agent rồi tự khoá chính nó khỏi bước thi hành. Cổng không dựa vào việc Agent ngoan.
+
+### `escalate` — cổng HITL là điểm chết đơn lẻ
+
+Cổng phê duyệt là điểm mạnh của thiết kế, nhưng nó cũng có mặt kia: người trực đi ngủ, không thấy thông báo, hoặc đang xử lý việc khác thì đề xuất nằm im trong `Awaiting Approval` trong khi sự cố vẫn diễn ra. `escalate` nâng mức từng bậc (P4→P3→P2→P1, không nhảy thẳng — nhảy thẳng thì mọi thứ treo đều thành P1 và mức độ mất ý nghĩa phân loại) và ghi rõ đã treo bao lâu.
+
+**Giới hạn phải nói ra, đã ghi trong docstring:** sơ đồ kiến trúc viết *"tăng severity, thông báo"*, nhưng phần **thông báo** hiện chưa làm được — đội không có PagerDuty, Slack webhook hay bất cứ kênh gọi người nào. Nâng mức trên Jira chỉ có tác dụng nếu có người đang xem board. Không giả vờ node này gọi được người dậy.
+
+Phải nới contract ③ hai hàm, và cả hai đều có bẫy:
+
+- **`get_transition_time()`** — cần biết đã treo bao lâu. Đọc từ changelog thay vì Agent tự ghi nhớ, vì **người trực có thể tự chuyển trạng thái trên UI** mà Agent không hề biết. Gộp chung một lượt đi changelog với `get_transition_author()`: tách hai hàm mỗi hàm tự phân trang là gọi Jira API gấp đôi cho cùng dữ liệu, mà quan trọng hơn là tác giả và thời điểm **phải lấy từ cùng một entry** — không thì khi có nhiều lần chuyển sang cùng trạng thái, cổng HITL sẽ nói "người X duyệt" kèm mốc của một lần chuyển khác.
+- **`set_severity()`** — mức độ nằm ở **hai chỗ**: label `severity-P2` và tiền tố `[P2]` trong tiêu đề. Sửa một chỗ thì `severity_from_labels()` và mắt người đọc board nói hai điều khác nhau. Hai helper `replace_severity_label()` / `retitle_severity()` đặt trong `mapping.py` để hiểu biết về định dạng label nằm đúng một chỗ.
+
+**Lỗi tìm được nhờ test, và nó là lỗi chỉ xuất hiện trên một trong hai bản cài đặt.** Bản đầu đọc `incident.severity` **sau** khi gọi `set_severity()`. `FakeJiraClient` sửa thẳng vào object nó đang giữ, còn `RealJiraClient` thì `get_incident()` trả object mới đọc từ API — nên cùng một dòng code cho ra mức MỚI trên bản giả và mức CŨ trên bản thật. Hệ quả thấy được: comment post lên war room ghi **"Nâng mức P2 → P2"**. Sửa bằng cách chốt `muc_cu` vào biến trước khi gọi. Đây là loại lỗi mà chỉ đọc code khó thấy, vì nó phụ thuộc vào việc bản cài đặt nào trả object dùng chung.
+
+**Test quan trọng nhất là `test_khong_bao_gio_tu_duyet_thay_nguoi`.** `escalate` sinh ra vì cổng HITL là điểm chết đơn lẻ, nên nó chính là chỗ dễ bị "cải tiến" thành *tự duyệt sau X phút* nhất. Test đó nâng mức 5 lần liên tiếp với mốc thời gian gấp 100 lần ngưỡng, rồi chốt lại: issue vẫn ở `Awaiting Approval`, `assert_human_approved()` vẫn ném `ApprovalError`, và Agent không hề tự chuyển sang `Remediating`. Nâng mức KHÔNG kèm quyền thi hành.
+
+---
+
+## 2026-08-05
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Việt phản ánh dự án sinh nhiều image Docker → truy nguyên và sửa | ✅ Done | `docker-compose.demo.yml` — 714MB → 357MB | - |
+| Trương Công Thái Đức | Node `propose_remediation` + `escalate`, nối cổng HITL vào luồng Agent | ✅ Done | verify trên Jira thật (KAN-6) | - |
+| Trương Công Thái Đức | Review + merge PR #16 (Long) và #17 (Trung) | ✅ Done | phát hiện 2 lỗi lúc ghép, đã vá | - |
+| Trương Công Thái Đức | Gỡ 2 endpoint template khỏi URL công khai, thay bằng `/api/v1/agent/health` | ✅ Done | `src/api/routes.py` — 236 test pass | - |
+
+**Tổng kết ngày:** Việt phản ánh dự án "không thống nhất nên sinh nhiều image Docker". Đo lại thì **Việt đúng về sự thật, sai về nguyên nhân** — và cách sửa hiển nhiên lại làm hỏng thứ khác.
+
+**Không phải do cấu hình không thống nhất.** `docker-compose.demo.yml` có `name: p035-demo` từ commit đầu tiên (`ac96ed9`, 29/07), và cả ba nhánh `trung`/`viet`/`develop` đều có dòng đó — nên compose luôn dùng đúng một project name trên mọi máy. Ba image lạ trên máy tôi (`p035pr9`, `p035rev2`, `p035review`, 357MB mỗi cái) là do **tôi tự đặt `-p`** khi review PR song song để không giết stack đang chạy, rồi không dọn. Đó là rác của riêng tôi, và image Docker là local nên không thể sang máy Việt.
+
+**Nhưng có một chuyện thật, và nó có trên máy của cả bốn người.** `service-thanh-toan` và `service-dat-hang` cùng build từ `./demo` với cùng `Dockerfile`, khác nhau **chỉ ở `command` lúc chạy**. Compose không biết điều đó nên sinh hai tên image theo từng service và build hai lần. Đo bằng layer digest: hai image **trùng hoàn toàn** — 714MB cho thứ 357MB là đủ, cộng gấp đôi thời gian build.
+
+**Cách sửa hiển nhiên thì sai.** Cho cả hai service cùng `image: p035-demo-service:latest` và giữ `build:` ở cả hai → hai build song song tranh nhau đặt cùng một tag, buildx báo `ERROR: image "...": already exists` và **`docker compose build` exit 1**. Image vẫn ra nhưng lệnh coi như thất bại — đủ để làm đỏ CI hoặc bất cứ script nào kiểm exit code. Nếu chỉ đọc log rồi thấy image đúng 357MB là đã kết luận xong thì đã đẩy một lệnh fail vào repo.
+
+**Cách đúng:** chỉ `service-thanh-toan` có `build:`, `service-dat-hang` dùng lại `image:` đó kèm `pull_policy: never` (image chỉ tồn tại local, không được hỏi registry). Verify trên tình huống **máy mới clone** — xoá sạch image rồi chạy `up -d` **không kèm** `--build`:
+
+```
+up exit: 0                          image: 1 × 357MB
+thanh-toan:200  dat-hang:200  prometheus:200
+Prometheus targets: service-thanh-toan up · service-dat-hang up
+```
+
+Compose tự build một lần rồi service thứ hai dùng lại, không cần ai nhớ thêm cờ nào.
+
+**Bài học lặp lại lần thứ năm trong tuần:** phản ánh của người dùng đúng về triệu chứng nhưng lệch về nguyên nhân, và nếu tin nguyên nhân họ nêu thì sẽ đi sửa cấu hình project name — thứ vốn đã đúng từ đầu. Phải đo mới ra chỗ thật.
+
+**Tối: gỡ hai endpoint template khỏi URL công khai.** Gọi thử Live URL — thứ nhóm nộp làm deliverable:
+
+```
+POST /api/v1/chat  {"message":"test"}
+→ {"response":"Kết quả dựa trên phân tích: Phân tích: test"}
+```
+
+Nó **lặp lại nguyên câu đầu vào**. Đây là graph mẫu 2 node của template, không gọi LLM. Cùng với `GET /api/v1/status` trả cứng `"LangGraph Agent v1.0"`. Render bật `autoDeploy` trên `develop` nên mỗi lần push là deploy lại.
+
+Vấn đề không phải code chết mà là **nói sai về sản phẩm**: người mở URL thấy tên "Chat với AI agent", gọi thử thì nó nhại lại câu hỏi, rồi kết luận Agent của nhóm là một con echo — trong khi thứ nhóm thật sự làm nằm ở `incident_graph.py` mà endpoint đó không hề dẫn tới.
+
+Thay bằng `GET /api/v1/agent/health` trả trạng thái **đo được**: Prometheus có trả lời không (hỏi một câu `up`), Jira đã cấu hình chưa, LLM model nào, graph có những node nào. Verify cả hai chiều — với `.env` thật thì `ready: true`, `hitl_gate: changelog`, `model: qwen-plus`; trong test thì `ready: false` vì `conftest` đã xoá cấu hình.
+
+Cố ý **không** làm endpoint chạy Agent qua HTTP: nó sẽ thành đường thứ hai tới `open_war_room`, tức mở incident thật trên Jira chỉ vì có người tò mò gọi URL. Đã ghi lý do vào README và docstring.
+
+Ba file template trong `src/agents/` (`graph.py`, `example_node.py`, `example_tool.py`) **để nguyên** — nằm trong phần Việt sở hữu, và hôm qua chính tôi nhắn Việt "ai định đụng file của người khác thì nhắn một câu trước, kể cả t".
 
 ---
 

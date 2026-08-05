@@ -18,7 +18,36 @@ Vì vậy thư mục này có `requirements.txt` và `Dockerfile` riêng.
 
 ## Chạy
 
-> **Windows:** cần **Docker Desktop đang chạy** trước khi gõ `docker compose`. Các lệnh `python ...` bên dưới giả định đã activate venv (`.venv\Scripts\activate`) và đã `pip install -r demo/requirements.txt`.
+> **Windows:** cần **Docker Desktop đang chạy** trước khi gõ `docker compose`. Các lệnh `python ...` bên dưới giả định đã activate venv (`.venv\Scripts\activate`).
+
+### Windows — hai bước bắt buộc, bỏ qua là gặp lỗi khó đoán
+
+**1. Cài dependency phải có `PYTHONUTF8=1`:**
+
+```bash
+PYTHONUTF8=1 pip install -r demo/requirements.txt
+```
+
+Thiếu biến đó thì pip **fail** với `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8d` — nó đọc file bằng CP1252 mà file này có comment tiếng Việt. Trên macOS và CI (Linux) mặc định đã là UTF-8 nên không thấy lỗi.
+
+**2. Nếu máy đã có Postgres chiếm cổng 5432, phải đổi cổng:**
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+```
+
+```bash
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
+
+⚠️ Đổi cổng thì phải sửa `DATABASE_URL` trong `.env` **luôn**, không chỉ lúc chạy
+`seed.py`. Agent đọc bảng `deploy_history` qua biến đó để đối chiếu deploy; trỏ
+sai thì `correlate_deploy` im lặng không tìm được gì và giả thuyết tụt từ 90%
+xuống 40% độ tin cậy — chỉ có một dòng warning, không có exception nào.
+
+Triệu chứng khi không đổi: `seed.py` fail với `asyncpg.exceptions.InvalidPasswordError: password authentication failed for user "demo"` — dễ tưởng sai mật khẩu, nhưng thật ra là đang nối vào Postgres cài sẵn trên máy chứ không phải container. Kiểm tra bằng `netstat -ano | findstr :5432`, thấy **hai** tiến trình cùng nghe là dính. Service trong compose không bị ảnh hưởng vì chúng nối qua mạng nội bộ (`postgres:5432`).
+
+Đã gặp trên cả macOS (máy Đức) lẫn Windows (máy Việt).
 
 ```bash
 docker compose -f ../docker-compose.demo.yml up --build     # từ trong demo/
@@ -85,12 +114,9 @@ curl -X POST localhost:8002/orders -H "Content-Type: application/json" \
 python demo/loadtest.py
 ```
 
-**Ghi lại mức tải làm p95 vượt 2s trên máy sẽ dùng demo** và điền vào cuối file này. Không có số đó thì hôm Demo Day phải mò.
-
-```
-Mức tải làm p95 > 2s trên máy demo: ~285 request/giây, 200 concurrent (Lỗi 51%)
-Đo ngày: 30/07/2026   Máy: LAPTOP-240I2QTN (Windows)
-```
+**Ghi lại mức tải làm p95 server-side vượt 2s trên máy sẽ dùng demo** và điền
+vào cuối file này. Không dùng p95 mà `loadtest.py` in ra để nghiệm thu vì đó
+là thời gian nhìn từ client.
 
 ## UC-2 — OOM và restart
 
@@ -132,6 +158,67 @@ Windows có thể thấp hơn mục tiêu dù service vẫn xử lý nhanh.
 Đã verify ngày 31/07/2026: 12.000/12.000 response là `401` trong 60 giây
 (200,0 request/giây); Prometheus đo p95 `/login` khoảng 0,048 giây, pool 0%,
 không có lỗi 5xx. Như vậy đây là bất thường truy cập, không phải quá tải.
+
+## ⚠️ Đo ngày 02/08/2026 — mức tải nào làm p95 vượt 2s?
+
+**Chưa có mức nào.** `loadtest.py` in ra `p95: 0.585s` ở bậc 200 concurrent,
+nhưng đó là p95 đo **phía client**. Prometheus đọc p95 **server-side** là
+**0,048 giây** suốt cả 5 bậc, và histogram cho thấy 35.202/35.650 request xong
+dưới 50ms.
+
+Đã loại trừ từng nghi vấn:
+
+| Thử | rps đạt được | p95 server-side |
+|-----|--------------|-----------------|
+| `loadtest.py` như hiện tại (200 concurrent, từ host) | 294 | 0,048s |
+| Bỏ hàng rào `gather`+`sleep(0.05)`, nâng `max_connections` | 294 | 0,050s |
+| 150 worker liên tục, chạy **trong** mạng compose | 421 | 0,048s |
+
+Trần ~294 rps từ host là port-forward của Docker Desktop trên macOS; vào trong
+mạng compose thì lên 421 rps, trần mới là uvicorn một worker. Nhưng p95
+server-side không nhúc nhích ở cả ba lần, và `db_pool_connections_in_use` chỉ
+bằng **1** — pool 5 connection chưa bao giờ là nút thắt, vì mỗi query xong
+trong khoảng 3ms. Việc xếp hàng xảy ra ở socket backlog, **trước khi** ASGI app
+nhìn thấy request, nên histogram không đo được.
+
+Muốn UC-1 tái hiện thì phải làm **việc trong `/pay` nặng lên** (query tốn thời
+gian hơn, hoặc `pg_sleep`), chứ bắn thêm tải không giải quyết được.
+
+### ✅ Đo lại ngày 03/08/2026 — UC-1 đã tái hiện được
+
+`/pay` hiện chạy `pg_sleep(0.2)` **bên trong** `pool.acquire()`, vì vậy mỗi
+request giữ một connection PostgreSQL thật trong ít nhất 0,2 giây. Trong lần
+chạy profile tăng dần trên máy `LAPTOP-240I2QTN`, Prometheus ghi nhận:
+
+| Metric server-side | Trước sửa | Sau sửa |
+|---|---:|---:|
+| p95 `service-thanh-toan` | 0,048 giây | **4,062 giây** |
+| `db_pool_connections_in_use` hiện tại | 1 | **5** |
+| Đỉnh pool 5 phút | 1 | **5** |
+| `db_pool_size` | 5 | **5** |
+
+Như vậy p95 đã vượt ngưỡng 2 giây và pool đạt 100% — đủ cả triệu chứng lẫn bằng
+chứng nguyên nhân gốc. Profile cũ lên tới 200 concurrent làm máy Windows demo
+không ổn định trước khi script in báo cáo cuối. Vì 75 concurrent đã đủ làm pool
+5 chỗ cạn, profile mặc định đã hạ trần xuống 75; tải tới 400 chỉ còn ở tùy chọn
+`--full` dành cho máy đủ mạnh.
+
+### OOM không sinh ra 5xx nào
+
+Gọi `/pay/batch` liên tục: `RestartCount` lên **7** — container chết và restart
+thật. Nhưng `http_requests_total{status=~"5.."}` **bằng 0 tuyệt đối**: process
+chết giữa request nên không kịp ghi metric, và counter trong process reset sạch
+sau restart.
+
+Prometheus vẫn thấy sự cố, chỉ bằng metric khác:
+
+```promql
+min_over_time(up[5m])                          # = 0
+changes(process_start_time_seconds[10m])       # = 3
+```
+
+Nên **UC-2 không phát hiện được bằng error rate**. Việc nhận hai tín hiệu trên
+cần thêm tham số vào `rules.detect()` — đang chờ Việt quyết.
 
 ## Vì sao pool = 5
 

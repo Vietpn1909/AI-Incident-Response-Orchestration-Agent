@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.models.incident import IncidentSignal, MetricEvidence, Severity
+from src.models.incident import DeployRecord, Hypothesis, IncidentSignal, MetricEvidence, Severity
 from src.services import prometheus
 
 # ---------------------------------------------------------------------------
@@ -59,6 +59,36 @@ AUTH_FAILURE_P2 = 10.0
 #: con số, nên chốt ở 1/giây: giữ liên tục 30 giây là 30 lần đăng nhập hỏng —
 #: người dùng gõ nhầm mật khẩu không tạo ra hình thái đó.
 AUTH_FAILURE_P3 = 1.0
+
+# Ngưỡng cho UC-2 (service chết vì OOM rồi restart liên tục).
+
+#: Số lần restart trong 10 phút để tính là crash loop.
+#:
+#: Một lần trong 10 phút nhiều khả năng là **deploy bình thường**, không phải sự
+#: cố — báo động ở mức đó thì mỗi lần đội deploy Agent lại mở một incident. Hai
+#: lần trở lên mới là hình thái "chết rồi sống lại rồi chết tiếp".
+CRASHLOOP_RESTARTS = 2.0
+
+# Ngưỡng dùng khi chẩn đoán (`correlate_deploy`, `build_hypothesis`).
+
+#: Deploy xa hơn ngần này phút thì không coi là trùng thời gian với sự cố.
+#:
+#: 15 phút vì `demo/seed.py` cắm dòng "nghi phạm" ở mốc 4 phút, và một sự cố do
+#: deploy gây ra thường lộ trong vòng vài phút. Nới rộng ra thì mọi sự cố đều
+#: "có deploy ngay trước", và bằng chứng đó mất giá trị.
+DEPLOY_WINDOW_MINUTES = 15.0
+
+#: Mức dùng pool từ đây trở lên thì coi là cạn kiệt.
+#:
+#: Không đòi đúng 1.0: gauge được scrape mỗi 5s nên có thể bắt đúng nhịp một
+#: connection vừa được trả về.
+POOL_EXHAUSTED_RATIO = 0.95
+
+#: p95 gấp bấy nhiêu lần baseline thì tính là bằng chứng mạnh cho chẩn đoán.
+#:
+#: Cao hơn `BASELINE_DEVIATION_RATIO` (2.0) dùng để *phát hiện*: phát hiện thì
+#: nên nhạy, còn tính điểm tin cậy thì nên chặt.
+BASELINE_DEVIATION_STRONG = 3.0
 
 
 def classify_severity(
@@ -224,6 +254,267 @@ def classify_auth_burst(failures_per_second: float, breached_for_seconds: float)
     return None
 
 
+def detect_auth_burst(
+    failures_per_second: float,
+    breached_for_seconds: float,
+    service: str,
+) -> IncidentSignal | None:
+    """Dựng tín hiệu UC-3 kèm bằng chứng. `None` nếu bình thường.
+
+    Đối xứng với `detect()` và `detect_crashloop()`: `classify_auth_burst()`
+    quyết định mức, hàm này gói lại thành `IncidentSignal`.
+
+    Tên metric ghi rõ **"mỗi giây"** chứ không phải tỷ lệ phần trăm. Đây không
+    phải chuyện chữ nghĩa: nếu kẻ tấn công là nguồn traffic duy nhất thì tỷ lệ
+    lỗi là 100% ngay từ request đầu, chưa nói được gì về mức nghiêm trọng — nên
+    UC-3 đo số tuyệt đối. Người trực đọc war room phải thấy ngay điều đó.
+    """
+    severity = classify_auth_burst(failures_per_second, breached_for_seconds)
+    if severity is None:
+        return None
+
+    threshold = {
+        Severity.P1: AUTH_FAILURE_P1,
+        Severity.P2: AUTH_FAILURE_P2,
+        Severity.P3: AUTH_FAILURE_P3,
+    }[severity]
+
+    return IncidentSignal(
+        affected_service=service,
+        severity=severity,
+        detected_at=datetime.now(UTC),
+        metric_name="số request /login thất bại mỗi giây",
+        metric_value=failures_per_second,
+        threshold=threshold,
+        breached_for_seconds=breached_for_seconds,
+        evidence=[
+            MetricEvidence(
+                name="số request /login thất bại mỗi giây",
+                value=failures_per_second,
+                promql=prometheus.AUTH_FAILURE_RATE,
+            ),
+        ],
+    )
+
+
+def classify_crashloop(service_up: float, restarts: float, down_for_seconds: float) -> Severity | None:
+    """Phân loại UC-2 — service chết vì OOM rồi restart. `None` nếu bình thường.
+
+    Nhánh RIÊNG, không dùng `classify_severity()`, cùng lý do với
+    `classify_auth_burst()`: hình thái khác hẳn. UC-1 là service **còn sống
+    nhưng chậm**; UC-2 là service **chết rồi sống lại**. Latency và tỷ lệ lỗi
+    của một process đang chết đi sống lại không nói lên điều gì — counter reset
+    sau mỗi lần restart.
+
+    Luôn trả **P1**: service không phục vụ được, không phải chỉ chậm. Đây là mức
+    `docs/use-cases.md` UC-2 quy định.
+
+    Hai đường vào, đủ một là P1:
+
+    1. **Chết liên tục** ≥ `SUSTAINED_SECONDS` — `up` = 0 suốt khoảng đó. Cần
+       ngưỡng thời gian vì một lần scrape hụt cũng làm `up` = 0 một nhịp.
+    2. **Restart loop** — ≥ `CRASHLOOP_RESTARTS` lần trong 10 phút. Đường này
+       bắt được cả khi service đang **sống** ở đúng lúc quét: crash loop theo
+       định nghĩa là chết-sống xen kẽ, nên đòi "chết liên tục 30s" sẽ bỏ lọt.
+
+    Args:
+        service_up: 1 nếu Prometheus scrape được, 0 nếu không.
+        restarts: Số lần process khởi động lại trong 10 phút.
+        down_for_seconds: Đã chết liên tục bao lâu. 0 nếu đang sống.
+
+    Raises:
+        ValueError: khi có đầu vào là NaN — xem `classify_severity`.
+    """
+    _reject_nan(service_up=service_up, restarts=restarts, down_for_seconds=down_for_seconds)
+
+    if service_up < 1 and down_for_seconds >= SUSTAINED_SECONDS:
+        return Severity.P1
+    if restarts >= CRASHLOOP_RESTARTS:
+        return Severity.P1
+    return None
+
+
+def detect_crashloop(
+    service_up: float,
+    restarts: float,
+    down_for_seconds: float,
+    service: str,
+) -> IncidentSignal | None:
+    """Dựng tín hiệu UC-2 kèm bằng chứng. `None` nếu service bình thường.
+
+    Đối xứng với `detect()` của UC-1: `classify_crashloop()` quyết định mức,
+    hàm này gói lại thành `IncidentSignal` có bằng chứng số.
+
+    Bằng chứng luôn gồm **cả hai** tín hiệu, kể cả cái không kích hoạt. Chúng trả
+    lời hai câu khác nhau mà người trực cần cả hai: `up` nói *bây giờ có phục vụ
+    được không*, số lần restart nói *đây là chết hẳn hay đang chết đi sống lại*.
+    """
+    severity = classify_crashloop(service_up, restarts, down_for_seconds)
+    if severity is None:
+        return None
+
+    if service_up < 1:
+        metric_name, metric_value, threshold = "up (service còn sống không)", service_up, 1.0
+    else:
+        metric_name, metric_value, threshold = (
+            "số lần restart trong 10 phút",
+            restarts,
+            CRASHLOOP_RESTARTS,
+        )
+
+    return IncidentSignal(
+        affected_service=service,
+        severity=severity,
+        detected_at=datetime.now(UTC),
+        metric_name=metric_name,
+        metric_value=metric_value,
+        threshold=threshold,
+        breached_for_seconds=down_for_seconds,
+        evidence=[
+            MetricEvidence(
+                name="up (service còn sống không)",
+                value=service_up,
+                promql=prometheus.SERVICE_UP,
+            ),
+            MetricEvidence(
+                name="số lần restart trong 10 phút",
+                value=restarts,
+                promql=prometheus.RESTART_COUNT_10M,
+            ),
+        ],
+    )
+
+
+def correlate_deploy(
+    deploys: list[DeployRecord],
+    detected_at: datetime,
+    within_minutes: float = DEPLOY_WINDOW_MINUTES,
+) -> DeployRecord | None:
+    """Lần deploy gần nhất **trước** thời điểm phát hiện, trong cửa sổ cho phép.
+
+    Trả `None` nếu không có lần nào đủ gần. Đó là kết quả bình thường — phần
+    lớn sự cố không đi kèm deploy, và ép gán một lần deploy cũ vào mọi sự cố
+    làm bằng chứng mất giá trị.
+
+    ⚠️ Hàm này tìm **trùng thời gian**, không chứng minh **nhân quả**. Cách gọi
+    tên và cách `build_hypothesis()` diễn đạt kết quả phải giữ đúng ranh giới
+    đó — xem chú thích ở `_cau_giai_thuyet()`.
+
+    Args:
+        deploys: Lịch sử deploy của service, thứ tự nào cũng được.
+        detected_at: Thời điểm phát hiện sự cố.
+        within_minutes: Deploy xa hơn ngần này thì bỏ qua.
+    """
+    truoc_do = [deploy for deploy in deploys if 0 <= deploy.minutes_before(detected_at) <= within_minutes]
+    if not truoc_do:
+        return None
+    # `minutes_before` càng nhỏ càng gần thời điểm sự cố.
+    return min(truoc_do, key=lambda deploy: deploy.minutes_before(detected_at))
+
+
+def _diem_tin_cay(
+    evidence: list[MetricEvidence],
+    related_deploy: DeployRecord | None,
+) -> float:
+    """Cộng điểm tin cậy theo số bằng chứng độc lập cùng chỉ về một nguyên nhân.
+
+    Vì sao phải là **hàm của bằng chứng** chứ không phải một hằng số: contract ②
+    ghi `confidence` do rule engine tính chứ không phải LLM tự nhận. Nhưng một
+    con số cắm cứng cũng chẳng đo gì hơn — chỉ là người bịa thay vì máy bịa.
+    Muốn con số đó có nghĩa thì mỗi phần của nó phải truy ngược được về một
+    `MetricEvidence` cụ thể.
+
+    Bảng điểm, cộng dồn rồi chặn ở 1.0:
+
+    | Bằng chứng | Điểm | Vì sao ngần đó |
+    |---|---|---|
+    | Pool cạn ≥ 95% | 0.40 | Bằng chứng **nguyên nhân gốc**, nặng nhất |
+    | p95 lệch baseline ≥ 3× | 0.30 | Xác nhận bất thường thật, không phải dao động |
+    | Có deploy ngay trước | 0.20 | Chỉ là trùng thời gian, nên nhẹ |
+    | Tỷ lệ lỗi 5xx vượt ngưỡng | 0.10 | Triệu chứng kèm theo |
+
+    Một giả thuyết chỉ dựa trên "p95 cao" ra 0.30 — thấp, và **đáng thấp**.
+    """
+    diem = 0.0
+    for item in evidence:
+        if "db_pool" in item.name and item.value >= POOL_EXHAUSTED_RATIO:
+            diem += 0.40
+        elif "p95" in item.name and (item.deviation_ratio or 0) >= BASELINE_DEVIATION_STRONG:
+            diem += 0.30
+        elif "lỗi 5xx" in item.name and item.value > ERROR_RATE_P3:
+            diem += 0.10
+
+    if related_deploy is not None:
+        diem += 0.20
+
+    return min(diem, 1.0)
+
+
+def _cau_giai_thuyet(
+    signal: IncidentSignal,
+    evidence: list[MetricEvidence],
+    related_deploy: DeployRecord | None,
+) -> str:
+    """Câu giả thuyết do rule ghép, dùng khi LLM không viết được.
+
+    Cũng là **khuôn mẫu** cho câu LLM viết: nó nêu nguyên nhân gốc trước, và khi
+    có deploy thì nói "trùng thời gian" chứ **không** nói "vì".
+
+    Ranh giới đó không phải chuyện chữ nghĩa. `demo/seed.py` cắm một dòng
+    `v1.4.2` deploy trước 4 phút **mỗi lần chạy**, còn `pg_sleep(0.2)` trong
+    `/pay` thì luôn có mặt bất kể version nào — deploy trong demo **không gây ra
+    sự cố**. Viết "cạn vì deploy v1.4.2" là suy nhân quả từ tương quan: nghe
+    thuyết phục, và sai. `use-cases.md` UC-1 chấm chẩn đoán đúng khi nêu được
+    **pool cạn / truy vấn giữ connection lâu**, không phải khi nêu deploy.
+    """
+    pool_can = any("db_pool" in item.name and item.value >= POOL_EXHAUSTED_RATIO for item in evidence)
+
+    if pool_can:
+        cau = (
+            f"Connection pool của {signal.affected_service} cạn kiệt — mỗi request giữ "
+            "connection lâu hơn bình thường nên số chỗ trong pool hết sạch dưới tải."
+        )
+    else:
+        cau = (
+            f"{signal.affected_service} bất thường ở {signal.metric_name} "
+            f"({signal.metric_value:.2f}, ngưỡng {signal.threshold:.2f})."
+        )
+
+    if related_deploy is not None:
+        phut = related_deploy.minutes_before(signal.detected_at)
+        cau += (
+            f" Trùng thời gian: deploy {related_deploy.version} diễn ra {phut:.0f} phút "
+            "trước khi phát hiện — chưa xác minh nhân quả, nhưng đủ để rollback là "
+            "hành động thử đầu tiên."
+        )
+    return cau
+
+
+def build_hypothesis(
+    signal: IncidentSignal,
+    related_deploy: DeployRecord | None = None,
+) -> Hypothesis:
+    """Dựng giả thuyết từ bằng chứng — **không gọi LLM**.
+
+    Đây là nửa tất định của node `hypothesize`: `evidence`, `confidence` và một
+    `statement` dự phòng. Nửa còn lại (LLM viết lại `statement` và `reasoning`)
+    nằm ở [`nodes/hypothesize.py`](../agents/nodes/hypothesize.py).
+
+    Tách đôi để phần được chấm — con số và bằng chứng — test được mà không cần
+    mạng, và để chỗ ràng buộc LLM nằm gọn một nơi cho người review.
+
+    `confidence` do `_diem_tin_cay()` tính, `evidence` lấy nguyên từ tín hiệu
+    (số đo thật của Prometheus, kèm câu PromQL để kiểm chứng lại).
+    """
+    evidence = list(signal.evidence)
+    return Hypothesis(
+        statement=_cau_giai_thuyet(signal, evidence, related_deploy),
+        confidence=_diem_tin_cay(evidence, related_deploy),
+        evidence=evidence,
+        related_deploy=related_deploy,
+    )
+
+
 def is_spreading(signals: list[IncidentSignal], within_seconds: float = 60.0) -> bool:
     """Có dấu hiệu sự cố lan sang service khác không?
 
@@ -311,6 +602,10 @@ __all__ = [
     "AUTH_FAILURE_P2",
     "AUTH_FAILURE_P3",
     "BASELINE_DEVIATION_RATIO",
+    "BASELINE_DEVIATION_STRONG",
+    "CRASHLOOP_RESTARTS",
+    "DEPLOY_WINDOW_MINUTES",
+    "POOL_EXHAUSTED_RATIO",
     "ERROR_RATE_P1",
     "ERROR_RATE_P2",
     "ERROR_RATE_P3",
@@ -322,7 +617,12 @@ __all__ = [
     "SUSTAINED_SECONDS",
     "MetricEvidence",
     "classify_auth_burst",
+    "classify_crashloop",
     "classify_severity",
+    "correlate_deploy",
+    "build_hypothesis",
     "detect",
+    "detect_auth_burst",
+    "detect_crashloop",
     "is_spreading",
 ]

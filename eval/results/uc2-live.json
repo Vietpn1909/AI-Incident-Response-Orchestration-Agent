@@ -1,0 +1,478 @@
+{
+  "started_at": "2026-08-05T08:29:39.208652+00:00",
+  "ended_at": "2026-08-05T08:32:39.212986+00:00",
+  "duration_seconds": 180.004334,
+  "poll_interval_seconds": 8.0,
+  "cycle_count": 22,
+  "issue_count": 1,
+  "cycles": [
+    {
+      "number": 1,
+      "started_at": "2026-08-05T08:29:39.208652+00:00",
+      "ended_at": "2026-08-05T08:29:39.250373+00:00",
+      "duration_seconds": 0.041721,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 2,
+      "started_at": "2026-08-05T08:29:47.250906+00:00",
+      "ended_at": "2026-08-05T08:29:47.296253+00:00",
+      "duration_seconds": 0.045347,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 3,
+      "started_at": "2026-08-05T08:29:55.296730+00:00",
+      "ended_at": "2026-08-05T08:29:55.317255+00:00",
+      "duration_seconds": 0.020525,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 4,
+      "started_at": "2026-08-05T08:30:03.318206+00:00",
+      "ended_at": "2026-08-05T08:30:03.337418+00:00",
+      "duration_seconds": 0.019212,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 5,
+      "started_at": "2026-08-05T08:30:11.338156+00:00",
+      "ended_at": "2026-08-05T08:30:15.835295+00:00",
+      "duration_seconds": 4.497139,
+      "detected": 1,
+      "opened": [
+        "INC-1"
+      ],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 6,
+      "started_at": "2026-08-05T08:30:23.836443+00:00",
+      "ended_at": "2026-08-05T08:30:23.889818+00:00",
+      "duration_seconds": 0.053375,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 7,
+      "started_at": "2026-08-05T08:30:31.890778+00:00",
+      "ended_at": "2026-08-05T08:30:31.951005+00:00",
+      "duration_seconds": 0.060227,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 8,
+      "started_at": "2026-08-05T08:30:39.951831+00:00",
+      "ended_at": "2026-08-05T08:30:40.003210+00:00",
+      "duration_seconds": 0.051379,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 9,
+      "started_at": "2026-08-05T08:30:48.004214+00:00",
+      "ended_at": "2026-08-05T08:30:48.024526+00:00",
+      "duration_seconds": 0.020312,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 10,
+      "started_at": "2026-08-05T08:30:56.025779+00:00",
+      "ended_at": "2026-08-05T08:30:56.045644+00:00",
+      "duration_seconds": 0.019865,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 11,
+      "started_at": "2026-08-05T08:31:04.046307+00:00",
+      "ended_at": "2026-08-05T08:31:04.084529+00:00",
+      "duration_seconds": 0.038222,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 12,
+      "started_at": "2026-08-05T08:31:12.085535+00:00",
+      "ended_at": "2026-08-05T08:31:12.109161+00:00",
+      "duration_seconds": 0.023626,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 13,
+      "started_at": "2026-08-05T08:31:20.110050+00:00",
+      "ended_at": "2026-08-05T08:31:20.150593+00:00",
+      "duration_seconds": 0.040543,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 14,
+      "started_at": "2026-08-05T08:31:28.151063+00:00",
+      "ended_at": "2026-08-05T08:31:28.191534+00:00",
+      "duration_seconds": 0.040471,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 15,
+      "started_at": "2026-08-05T08:31:36.192527+00:00",
+      "ended_at": "2026-08-05T08:31:36.215149+00:00",
+      "duration_seconds": 0.022622,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 16,
+      "started_at": "2026-08-05T08:31:44.215707+00:00",
+      "ended_at": "2026-08-05T08:31:44.244538+00:00",
+      "duration_seconds": 0.028831,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 17,
+      "started_at": "2026-08-05T08:31:52.245067+00:00",
+      "ended_at": "2026-08-05T08:31:52.267438+00:00",
+      "duration_seconds": 0.022371,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 18,
+      "started_at": "2026-08-05T08:32:00.268134+00:00",
+      "ended_at": "2026-08-05T08:32:00.309159+00:00",
+      "duration_seconds": 0.041025,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 19,
+      "started_at": "2026-08-05T08:32:08.309986+00:00",
+      "ended_at": "2026-08-05T08:32:08.348111+00:00",
+      "duration_seconds": 0.038125,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 20,
+      "started_at": "2026-08-05T08:32:16.349166+00:00",
+      "ended_at": "2026-08-05T08:32:16.369526+00:00",
+      "duration_seconds": 0.02036,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 21,
+      "started_at": "2026-08-05T08:32:24.370382+00:00",
+      "ended_at": "2026-08-05T08:32:24.394239+00:00",
+      "duration_seconds": 0.023857,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 22,
+      "started_at": "2026-08-05T08:32:32.394433+00:00",
+      "ended_at": "2026-08-05T08:32:32.431344+00:00",
+      "duration_seconds": 0.036911,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    }
+  ],
+  "measurements": {
+    "issue_opened_at": "2026-08-05T08:30:11.377409+00:00",
+    "agent_processing_seconds": 0.005008
+  },
+  "incidents": [
+    {
+      "jira_key": "INC-1",
+      "title": "[P1] service-thanh-toan: số lần restart trong 10 phút = 2.00 (ngưỡng 2.00)",
+      "severity": "P1",
+      "state": "Awaiting Approval",
+      "affected_services": [
+        "service-thanh-toan"
+      ],
+      "detected_at": "2026-08-05T08:30:11.372401Z",
+      "resolved_at": null,
+      "signal": {
+        "affected_service": "service-thanh-toan",
+        "severity": "P1",
+        "detected_at": "2026-08-05T08:30:11.372401Z",
+        "metric_name": "số lần restart trong 10 phút",
+        "metric_value": 2.0,
+        "threshold": 2.0,
+        "breached_for_seconds": 0.0,
+        "evidence": [
+          {
+            "name": "up (service còn sống không)",
+            "value": 1.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "up"
+          },
+          {
+            "name": "số lần restart trong 10 phút",
+            "value": 2.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "changes(process_start_time_seconds[10m])"
+          }
+        ]
+      },
+      "hypotheses": [
+        {
+          "statement": "Service-thanh-toan không bị sập nhưng đang restart liên tục do lỗi khởi động lặp lại.",
+          "confidence": 0.0,
+          "evidence": [
+            {
+              "name": "up (service còn sống không)",
+              "value": 1.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "up"
+            },
+            {
+              "name": "số lần restart trong 10 phút",
+              "value": 2.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "changes(process_start_time_seconds[10m])"
+            }
+          ],
+          "related_deploy": null,
+          "reasoning": "Số lần restart trong 10 phút bằng 2, chứng tỏ quá trình khởi động thất bại và lặp lại. Giá trị up = 1 cho thấy service hiện tại đang chạy, không phải trạng thái tắt hoàn toàn. Không có deploy gần thời điểm sự cố nên nguyên nhân không liên quan tới thay đổi triển khai."
+        }
+      ],
+      "proposal": {
+        "action": "scale_up",
+        "target": "service-thanh-toan",
+        "params": {
+          "replicas": 3
+        },
+        "runbook": "1. Tăng service-thanh-toan lên 3 instance để tải RAM chia ra, giảm khả năng chạm giới hạn bộ nhớ.\n2. Theo dõi `số lần restart trong 10 phút` — phải về 0.\n3. Còn restart thì vấn đề là bản thân giới hạn bộ nhớ, cần người tăng `mem_limit`.",
+        "risk": "⚠️ Đây là phương án GIẢM NHẸ, không phải sửa gốc. Service chết vì hết bộ nhớ thì cách đúng là tăng giới hạn bộ nhớ hoặc sửa chỗ rò rỉ — cả hai đều KHÔNG nằm trong danh sách hành động Agent được phép làm. Thêm instance chỉ mua thêm thời gian. Người duyệt nên xử lý gốc song song.",
+        "requires_approval": true
+      },
+      "timeline": [
+        {
+          "at": "2026-08-05T08:30:11.377409Z",
+          "actor": "agent",
+          "action": "mở war room",
+          "detail": "[P1] service-thanh-toan: số lần restart trong 10 phút = 2.00 (ngưỡng 2.00)"
+        },
+        {
+          "at": "2026-08-05T08:30:11.377409Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Bối cảnh thu thập được lúc phát hiện:\n\n- up (service còn sống không): 1\n\n- số lần restart trong 10 phút: 2"
+        },
+        {
+          "at": "2026-08-05T08:30:15.802960Z",
+          "actor": "agent",
+          "action": "giả thuyết",
+          "detail": "Service-thanh-toan không bị sập nhưng đang restart liên tục do lỗi khởi động lặp lại."
+        },
+        {
+          "at": "2026-08-05T08:30:15.835295Z",
+          "actor": "agent",
+          "action": "đề xuất khắc phục",
+          "detail": "scale_up"
+        },
+        {
+          "at": "2026-08-05T08:30:15.835295Z",
+          "actor": "agent",
+          "action": "chuyển trạng thái",
+          "detail": "Awaiting Approval"
+        },
+        {
+          "at": "2026-08-05T08:30:23.888817Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:30:31.950005Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:30:40.002203Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:30:48.023525Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:30:56.044640Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:04.083539Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:12.108161Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:20.149594Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:28.190534Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:36.214140Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:44.243539Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:31:52.266430Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:32:00.308167Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:32:08.347104Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:32:16.368532Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:32:24.393242Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        },
+        {
+          "at": "2026-08-05T08:32:32.430827Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số lần restart trong 10 phút = 3.000 (ngưỡng 2.000), đã vượt liên tục 0s."
+        }
+      ],
+      "postmortem": null,
+      "related_incidents": []
+    }
+  ]
+}

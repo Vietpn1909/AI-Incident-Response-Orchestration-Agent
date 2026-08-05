@@ -128,9 +128,11 @@ async def jira_webhook(
         raise _jira_http_error(jira_key, exc) from exc
     proposal = incident.proposal if incident else None
     if proposal is None:
-        # RealJiraClient chưa dựng lại được `proposal` từ comment (xem docstring
-        # jira/real.py). Cho phép Jira Automation truyền hành động trong payload,
-        # và đây cũng là đường để test không phụ thuộc đường đọc.
+        # `proposal` có thể vẫn None nếu comment mang JSON bị hỏng/không parse được
+        # (xem except ValidationError trong RealJiraClient.get_incident), hoặc issue
+        # được tạo trước khi tính năng này tồn tại. Cho phép Jira Automation truyền
+        # hành động trong payload làm đường lùi, và đây cũng là đường để test không
+        # phụ thuộc đường đọc.
         action = payload.get("action")
         target = payload.get("target")
         params = payload.get("params") or {}

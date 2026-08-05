@@ -29,6 +29,7 @@ from src.models.incident import (
     IncidentState,
     Postmortem,
     RemediationProposal,
+    Severity,
     TimelineEvent,
 )
 
@@ -82,6 +83,35 @@ class JiraClient(Protocol):
         Returns:
             accountId của người thực hiện, None nếu chưa từng chuyển sang
             trạng thái đó.
+        """
+        ...
+
+    def set_severity(self, jira_key: str, severity: Severity) -> None:
+        """Đổi mức độ của một incident đã tồn tại.
+
+        Thêm ngày 04/08 cho node [`escalate`](../../agents/nodes/escalate.py).
+
+        ⚠️ Mức độ nằm ở **hai chỗ**: label `severity-P2` và tiền tố `[P2]` trong
+        tiêu đề (`IncidentSignal.title`). Sửa một chỗ thì
+        `severity_from_labels()` và mắt người đọc board nói hai điều khác nhau —
+        bản cài đặt phải sửa cả hai.
+        """
+        ...
+
+    def get_transition_time(self, jira_key: str, to_state: IncidentState) -> datetime | None:
+        """Issue được chuyển sang trạng thái này lúc nào (lần gần nhất)?
+
+        Thêm ngày 04/08 cho node [`escalate`](../../agents/nodes/escalate.py):
+        nó cần biết một đề xuất đã treo chờ duyệt bao lâu.
+
+        Vì sao đọc từ changelog thay vì Agent tự ghi nhớ lúc nó transition: Agent
+        restart là mất, chạy nhiều instance thì mỗi con một số, và quan trọng
+        nhất là **người trực có thể tự chuyển trạng thái trên UI Jira** mà Agent
+        không hề biết. Changelog là nguồn duy nhất biết hết mọi thay đổi — cùng
+        lý do cổng HITL dựa vào nó.
+
+        Returns:
+            Thời điểm có timezone, None nếu chưa từng chuyển sang trạng thái đó.
         """
         ...
 
@@ -149,6 +179,9 @@ class FakeJiraClient:
         self._verbose = verbose
         # (jira_key, to_state) -> accountId của người transition gần nhất
         self._transition_authors: dict[tuple[str, IncidentState], str] = {}
+        # (jira_key, to_state) -> thời điểm transition gần nhất. Bản thật đọc từ
+        # changelog; ở đây ghi lúc `transition()` được gọi.
+        self._transition_times: dict[tuple[str, IncidentState], datetime] = {}
 
     def _log(self, message: str) -> None:
         if self._verbose:
@@ -204,6 +237,7 @@ class FakeJiraClient:
         """Chuyển trạng thái. `actor` mặc định là Agent — đúng với thực tế là
         Agent gọi hàm này, còn người duyệt thì bấm trên UI Jira."""
         self._transition_authors[(jira_key, to_state)] = actor or self.AGENT_ACCOUNT_ID
+        self._transition_times[(jira_key, to_state)] = self._now()
         incident = self._incidents.get(jira_key)
         if incident is not None:
             incident.state = to_state
@@ -225,6 +259,21 @@ class FakeJiraClient:
 
     def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
         return self._transition_authors.get((jira_key, to_state))
+
+    def get_transition_time(self, jira_key: str, to_state: IncidentState) -> datetime | None:
+        return self._transition_times.get((jira_key, to_state))
+
+    def set_severity(self, jira_key: str, severity: Severity) -> None:
+        incident = self._incidents.get(jira_key)
+        if incident is None:
+            return
+        cu = incident.severity
+        incident.severity = severity
+        # Tiêu đề mang tiền tố `[P2]`, đổi luôn cho khớp — xem cảnh báo ở
+        # Protocol. Bản thật cũng phải làm y hệt trên summary của Jira.
+        incident.title = incident.title.replace(f"[{cu.value}]", f"[{severity.value}]", 1)
+        self._append_timeline(jira_key, "agent", "nâng mức", f"{cu.value} → {severity.value}")
+        self._log(f"{jira_key} mức {cu.value} → {severity.value}")
 
     def link_issues(self, from_key: str, to_key: str, link_type: str = "relates to") -> None:
         for a, b in ((from_key, to_key), (to_key, from_key)):
