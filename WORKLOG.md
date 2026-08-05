@@ -413,4 +413,32 @@ Phải nới contract ③ hai hàm, và cả hai đều có bẫy:
 
 ---
 
+## 2026-08-05
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Việt phản ánh dự án sinh nhiều image Docker → truy nguyên và sửa | ✅ Done | `docker-compose.demo.yml` — 714MB → 357MB | - |
+
+**Tổng kết ngày:** Việt phản ánh dự án "không thống nhất nên sinh nhiều image Docker". Đo lại thì **Việt đúng về sự thật, sai về nguyên nhân** — và cách sửa hiển nhiên lại làm hỏng thứ khác.
+
+**Không phải do cấu hình không thống nhất.** `docker-compose.demo.yml` có `name: p035-demo` từ commit đầu tiên (`ac96ed9`, 29/07), và cả ba nhánh `trung`/`viet`/`develop` đều có dòng đó — nên compose luôn dùng đúng một project name trên mọi máy. Ba image lạ trên máy tôi (`p035pr9`, `p035rev2`, `p035review`, 357MB mỗi cái) là do **tôi tự đặt `-p`** khi review PR song song để không giết stack đang chạy, rồi không dọn. Đó là rác của riêng tôi, và image Docker là local nên không thể sang máy Việt.
+
+**Nhưng có một chuyện thật, và nó có trên máy của cả bốn người.** `service-thanh-toan` và `service-dat-hang` cùng build từ `./demo` với cùng `Dockerfile`, khác nhau **chỉ ở `command` lúc chạy**. Compose không biết điều đó nên sinh hai tên image theo từng service và build hai lần. Đo bằng layer digest: hai image **trùng hoàn toàn** — 714MB cho thứ 357MB là đủ, cộng gấp đôi thời gian build.
+
+**Cách sửa hiển nhiên thì sai.** Cho cả hai service cùng `image: p035-demo-service:latest` và giữ `build:` ở cả hai → hai build song song tranh nhau đặt cùng một tag, buildx báo `ERROR: image "...": already exists` và **`docker compose build` exit 1**. Image vẫn ra nhưng lệnh coi như thất bại — đủ để làm đỏ CI hoặc bất cứ script nào kiểm exit code. Nếu chỉ đọc log rồi thấy image đúng 357MB là đã kết luận xong thì đã đẩy một lệnh fail vào repo.
+
+**Cách đúng:** chỉ `service-thanh-toan` có `build:`, `service-dat-hang` dùng lại `image:` đó kèm `pull_policy: never` (image chỉ tồn tại local, không được hỏi registry). Verify trên tình huống **máy mới clone** — xoá sạch image rồi chạy `up -d` **không kèm** `--build`:
+
+```
+up exit: 0                          image: 1 × 357MB
+thanh-toan:200  dat-hang:200  prometheus:200
+Prometheus targets: service-thanh-toan up · service-dat-hang up
+```
+
+Compose tự build một lần rồi service thứ hai dùng lại, không cần ai nhớ thêm cờ nào.
+
+**Bài học lặp lại lần thứ năm trong tuần:** phản ánh của người dùng đúng về triệu chứng nhưng lệch về nguyên nhân, và nếu tin nguyên nhân họ nêu thì sẽ đi sửa cấu hình project name — thứ vốn đã đúng từ đầu. Phải đo mới ra chỗ thật.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
