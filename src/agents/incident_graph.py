@@ -41,7 +41,7 @@ from src.agents.nodes.hypothesize import hypothesize
 from src.agents.nodes.open_war_room import open_war_room
 from src.agents.nodes.propose_remediation import propose_remediation
 from src.agents.state import IncidentAgentState
-from src.models.incident import Hypothesis, RemediationProposal
+from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
 from src.services import rules
 from src.services.jira import JiraClient
 from src.services.prometheus import PrometheusClient, PrometheusError
@@ -127,15 +127,9 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             jira_key = war_rooms.get(signal.affected_service)
             if not jira_key:
                 continue
-            hypothesis = hypothesize(signal)
-            jira.post_hypothesis(jira_key, hypothesis)
-            hypotheses[jira_key] = hypothesis
-            logger.info(
-                "%s: giả thuyết (tin cậy %.0f%%) — %s",
-                jira_key,
-                hypothesis.confidence * 100,
-                hypothesis.statement,
-            )
+            hypothesis = _chan_doan_mot_issue(jira, jira_key, signal)
+            if hypothesis is not None:
+                hypotheses[jira_key] = hypothesis
         return {"hypotheses": hypotheses}
 
     def propose_remediation_node(state: IncidentAgentState) -> dict:
@@ -213,6 +207,42 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     graph.add_edge("escalate", END)
 
     return graph.compile()
+
+
+def _chan_doan_mot_issue(jira: JiraClient, jira_key: str, signal: IncidentSignal) -> Hypothesis | None:
+    """Chẩn đoán một incident và post lên war room, nuốt lỗi của riêng issue đó.
+
+    Cùng lý do với `_xet_nang_muc()`: `run_cycle()` không bọc gì và
+    `run_agent.py` chỉ bắt `KeyboardInterrupt`, nên một lần Jira đáp 429 ở giữa
+    vòng lặp sẽ **giết cả tiến trình Agent** — kể cả khi những incident khác vẫn
+    xử lý bình thường được.
+
+    Khác một điểm so với nâng mức: ở đây bọc **riêng phần post lên Jira**, không
+    bọc phần chẩn đoán. `hypothesize()` đã tự chịu lỗi LLM và lỗi đọc
+    `deploy_history` bên trong nó, và giả thuyết vẫn có giá trị kể cả khi không
+    post lên được — nên vẫn trả về để `propose_remediation` dùng tiếp.
+    """
+    try:
+        hypothesis = hypothesize(signal)
+    except Exception as error:
+        logger.error("%s: không chẩn đoán được (%s)", jira_key, error)
+        return None
+
+    logger.info(
+        "%s: giả thuyết (tin cậy %.0f%%) — %s",
+        jira_key,
+        hypothesis.confidence * 100,
+        hypothesis.statement,
+    )
+
+    try:
+        jira.post_hypothesis(jira_key, hypothesis)
+    except Exception as error:
+        # Giả thuyết vẫn dùng được cho bước sau, chỉ là người trực chưa đọc
+        # được nó trên Jira.
+        logger.error("%s: không post được giả thuyết lên Jira (%s)", jira_key, error)
+
+    return hypothesis
 
 
 def _xet_nang_muc(jira: JiraClient, jira_key: str) -> bool:
