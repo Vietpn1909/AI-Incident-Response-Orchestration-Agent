@@ -6,9 +6,11 @@ from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
 
 
 class AgentState(TypedDict, total=False):
-    """State schema cho LangGraph agent mẫu (endpoint `/api/v1/chat`).
+    """State schema của graph mẫu trong template (`src/agents/graph.py`).
 
-    Giữ lại từ template. Agent ứng phó sự cố dùng `IncidentAgentState` bên dưới.
+    Endpoint `/api/v1/chat` từng dùng nó đã bị gỡ ngày 05/08 — xem docstring
+    `src/api/routes.py`. Class này và `graph.py` vẫn còn vì nằm trong phần Việt
+    sở hữu; Agent ứng phó sự cố dùng `IncidentAgentState` bên dưới.
     """
 
     query: str

@@ -418,6 +418,9 @@ Phải nới contract ③ hai hàm, và cả hai đều có bẫy:
 | Member | Task | Status | Output | Time |
 |--------|------|--------|--------|------|
 | Trương Công Thái Đức | Việt phản ánh dự án sinh nhiều image Docker → truy nguyên và sửa | ✅ Done | `docker-compose.demo.yml` — 714MB → 357MB | - |
+| Trương Công Thái Đức | Node `propose_remediation` + `escalate`, nối cổng HITL vào luồng Agent | ✅ Done | verify trên Jira thật (KAN-6) | - |
+| Trương Công Thái Đức | Review + merge PR #16 (Long) và #17 (Trung) | ✅ Done | phát hiện 2 lỗi lúc ghép, đã vá | - |
+| Trương Công Thái Đức | Gỡ 2 endpoint template khỏi URL công khai, thay bằng `/api/v1/agent/health` | ✅ Done | `src/api/routes.py` — 236 test pass | - |
 
 **Tổng kết ngày:** Việt phản ánh dự án "không thống nhất nên sinh nhiều image Docker". Đo lại thì **Việt đúng về sự thật, sai về nguyên nhân** — và cách sửa hiển nhiên lại làm hỏng thứ khác.
 
@@ -438,6 +441,23 @@ Prometheus targets: service-thanh-toan up · service-dat-hang up
 Compose tự build một lần rồi service thứ hai dùng lại, không cần ai nhớ thêm cờ nào.
 
 **Bài học lặp lại lần thứ năm trong tuần:** phản ánh của người dùng đúng về triệu chứng nhưng lệch về nguyên nhân, và nếu tin nguyên nhân họ nêu thì sẽ đi sửa cấu hình project name — thứ vốn đã đúng từ đầu. Phải đo mới ra chỗ thật.
+
+**Tối: gỡ hai endpoint template khỏi URL công khai.** Gọi thử Live URL — thứ nhóm nộp làm deliverable:
+
+```
+POST /api/v1/chat  {"message":"test"}
+→ {"response":"Kết quả dựa trên phân tích: Phân tích: test"}
+```
+
+Nó **lặp lại nguyên câu đầu vào**. Đây là graph mẫu 2 node của template, không gọi LLM. Cùng với `GET /api/v1/status` trả cứng `"LangGraph Agent v1.0"`. Render bật `autoDeploy` trên `develop` nên mỗi lần push là deploy lại.
+
+Vấn đề không phải code chết mà là **nói sai về sản phẩm**: người mở URL thấy tên "Chat với AI agent", gọi thử thì nó nhại lại câu hỏi, rồi kết luận Agent của nhóm là một con echo — trong khi thứ nhóm thật sự làm nằm ở `incident_graph.py` mà endpoint đó không hề dẫn tới.
+
+Thay bằng `GET /api/v1/agent/health` trả trạng thái **đo được**: Prometheus có trả lời không (hỏi một câu `up`), Jira đã cấu hình chưa, LLM model nào, graph có những node nào. Verify cả hai chiều — với `.env` thật thì `ready: true`, `hitl_gate: changelog`, `model: qwen-plus`; trong test thì `ready: false` vì `conftest` đã xoá cấu hình.
+
+Cố ý **không** làm endpoint chạy Agent qua HTTP: nó sẽ thành đường thứ hai tới `open_war_room`, tức mở incident thật trên Jira chỉ vì có người tò mò gọi URL. Đã ghi lý do vào README và docstring.
+
+Ba file template trong `src/agents/` (`graph.py`, `example_node.py`, `example_tool.py`) **để nguyên** — nằm trong phần Việt sở hữu, và hôm qua chính tôi nhắn Việt "ai định đụng file của người khác thì nhắn một câu trước, kể cả t".
 
 ---
 
