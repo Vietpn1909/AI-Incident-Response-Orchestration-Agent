@@ -494,6 +494,44 @@ Cố ý **không** làm endpoint chạy Agent qua HTTP: nó sẽ thành đườn
 
 Ba file template trong `src/agents/` (`graph.py`, `example_node.py`, `example_tool.py`) **để nguyên** — nằm trong phần Việt sở hữu, và hôm qua chính tôi nhắn Việt "ai định đụng file của người khác thì nhắn một câu trước, kể cả t".
 
+**Đêm: LLM bịa nguyên nhân ở UC-3, và bỏ LLM đi thì chẩn đoán ĐÚNG.**
+
+Việt sửa xong UC-2 rồi tự merge PR #19. Code tốt — chạy A/B trên cùng bộ dữ liệu OOM thật: `develop` cũ cho *"lỗi khởi động không ổn định"* (sai, 20%), nhánh Việt cho *"OOMKilled do bộ nhớ vượt ngưỡng 128 MB"* (đúng ground truth, 80%). Nhưng chạy tiếp UC-3 thì lộ ra một lỗi nặng hơn.
+
+Bắn tấn công thật (12.000 request `/login`, 200 req/s). Bằng chứng **duy nhất** Agent có là `số request /login thất bại mỗi giây = 182,813`. Luật ghép câu **đúng**:
+
+> *"…183 lượt đăng nhập thất bại mỗi giây — hình thái phù hợp với credential-stuffing, **không phải quá tải**. Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx."* — tin cậy 40%
+
+LLM viết lại thành:
+
+> *"Connection pool của service-thanh-toan cạn, gây thất bại khi xử lý request /login."* — tin cậy **60%**
+
+Không có chữ "pool" nào trong bằng chứng. Ba điều lộ ra:
+
+1. **LLM bịa nguyên nhân, không chỉ bịa số.** Prompt cấm thêm số liệu và nó tuân. Nhưng "pool cạn" không phải một con số — nó là một **nguyên nhân**, và prompt không có luật nào chặn việc lấy nguyên nhân từ kiến thức sẵn có của mô hình.
+2. **Tin cậy 60% gắn vào một câu mà luật không hề nói.** `confidence` do luật tính trên **bằng chứng**, `statement` do LLM viết — nên câu bịa thừa hưởng con số nghe đáng tin. Đây là chỗ hở trong contract ② `Hypothesis` do tôi viết ngày 28/07, không phải lỗi của LLM.
+3. **Sai theo hướng tệ nhất có thể.** `use-cases.md` ghi rõ kết luận "service quá tải" cho một vụ credential-stuffing là chẩn đoán **SAI**. LLM đi đúng vào bẫy đó, và tự tin hơn câu đúng.
+
+Nghịch lý đáng ghi lại: **ở UC-3, bỏ LLM đi thì chẩn đoán đúng.** Pha 2 đang làm chất lượng tệ hơn, không phải tốt hơn — ngược hẳn với UC-1 và UC-2.
+
+**Cách sửa: thêm cửa kiểm căn cứ vào pha 2.** Câu của LLM nêu nguyên nhân nào thì bằng chứng phải có mặt cho nguyên nhân đó — nói "pool" thì phải có `db_pool`, nói "bộ nhớ/OOM" thì phải có bằng chứng bộ nhớ, nói "deploy" thì `correlate_deploy()` phải thật sự tìm ra một lần deploy. Vi phạm thì **bỏ cả `statement` lẫn `reasoning`** của LLM và giữ câu của luật — giữ `reasoning` lại là diễn giải cho một kết luận vừa bị bỏ, tự mâu thuẫn.
+
+Chặn ở code chứ không chỉ dặn thêm trong prompt: dặn thì phải tin mô hình tuân, mà chính chỗ này là bằng chứng nó không luôn tuân.
+
+Cố ý **không** chặn theo từ khoá "latency" hay "chậm": câu đúng của luật cho UC-3 có chứa *"latency bình thường"* — một khẳng định **phủ định**, không phải nêu nguyên nhân. Chặn theo đó là bỏ đúng câu mình muốn giữ.
+
+Verify bằng LLM thật cả hai chiều:
+
+```
+UC-3  → BỎ câu LLM ("Connection pool… cạn"), giữ câu luật (credential-stuffing) ✅
+UC-1  → GIỮ câu LLM ("Connection pool cơ sở dữ liệu cạn kiệt"), 90%, có lý giải ✅
+UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 80%, có lý giải ✅
+```
+
+**Chuyện quy trình:** Việt tự merge PR #19 không qua review. Code đúng, nhưng lỗi UC-3 này nằm ngay trong phạm vi PR đó và có review thì bắt được trước khi vào `develop`.
+
+251 test pass, ruff sạch.
+
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

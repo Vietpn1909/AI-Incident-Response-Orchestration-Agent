@@ -17,6 +17,7 @@ import pytest
 from src.agents.nodes import hypothesize as node
 from src.agents.nodes.hypothesize import _parse, hypothesize
 from src.models.incident import DeployRecord, IncidentSignal, MetricEvidence, Severity
+from src.services import rules
 
 NOW = datetime(2026, 8, 3, 16, 13, 0, tzinfo=UTC)
 
@@ -181,3 +182,88 @@ def test_parse_gop_lam_nhieu_dong_cua_ly_giai():
     _, reasoning = _parse("GIẢ THUYẾT: A.\nLÝ GIẢI: câu một.\ncâu hai.\ncâu ba.")
 
     assert reasoning == "câu một. câu hai. câu ba."
+
+
+# ───────────────────── cửa kiểm căn cứ (thêm 05/08)
+
+
+class _LlmNoiSai:
+    """LLM trả về một nguyên nhân không có bằng chứng nào chống lưng."""
+
+    def __init__(self, statement: str) -> None:
+        self._statement = statement
+
+    def invoke(self, messages):
+        class _Reply:
+            content = f"GIẢ THUYẾT: {self._statement}\nLÝ GIẢI: Theo kinh nghiệm thường là vậy."
+
+        _Reply.content = f"GIẢ THUYẾT: {self._statement}\nLÝ GIẢI: Theo kinh nghiệm thường là vậy."
+        return _Reply()
+
+
+def _tin_hieu_uc3():
+    """Đúng tín hiệu UC-3 đo được lúc 22:40 ngày 05/08 trên tấn công thật."""
+    return rules.detect_auth_burst(
+        failures_per_second=182.813, breached_for_seconds=300.0, service="service-thanh-toan"
+    )
+
+
+def test_bo_cau_llm_khi_neu_nguyen_nhan_khong_co_bang_chung(monkeypatch):
+    """UC-3: LLM nói "pool cạn" mà bằng chứng chỉ có tỷ lệ login thất bại.
+
+    Đo thật ngày 05/08: luật ghép câu ĐÚNG ("không phải quá tải"), LLM viết lại
+    thành "Connection pool cạn" — đúng cái `use-cases.md` gọi là chẩn đoán SAI,
+    và còn tự tin hơn (60% so với 40%).
+    """
+    signal = _tin_hieu_uc3()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(signal, llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."))
+
+    assert "pool" not in h.statement.lower(), "phải bỏ câu của LLM, giữ câu của luật"
+    assert "credential-stuffing" in h.statement
+    # `reasoning` của LLM cũng phải bỏ: nó diễn giải cho một kết luận vừa bị bỏ.
+    assert h.reasoning == ""
+
+
+def test_giu_cau_llm_khi_nguyen_nhan_co_bang_chung(monkeypatch):
+    """Không được chặn oan: có bằng chứng pool thì nói pool là hợp lệ."""
+    signal = rules.detect(
+        p95_now=3.3, p95_baseline=0.7, error_rate=0.0, pool_saturation=1.0,
+        service="service-thanh-toan", breached_for_seconds=60.0,
+    )
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(signal, llm=_LlmNoiSai("Connection pool cạn nên request phải xếp hàng."))
+
+    assert "pool" in h.statement.lower()
+
+
+def test_bo_cau_llm_khi_noi_deploy_ma_khong_co_deploy_nao(monkeypatch):
+    """`correlate_deploy()` không tìm ra gì thì LLM không được nhắc deploy."""
+    signal = _tin_hieu_uc3()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(signal, llm=_LlmNoiSai("Sự cố do deploy phiên bản mới gây ra."))
+
+    assert "deploy" not in h.statement.lower()
+
+
+def test_khoa_can_cu_con_khop_voi_rules():
+    """Chuỗi nhận diện bằng chứng phải khớp thứ `rules.py` thật sự sinh ra.
+
+    Cùng loại canh với `test_runbooks.py`: `rules.py` đổi một chữ trong tên
+    `MetricEvidence` là cửa này lặng lẽ chặn oan hoặc bỏ lọt.
+    """
+    uc1 = rules.detect(
+        p95_now=3.3, p95_baseline=0.7, error_rate=0.0, pool_saturation=1.0,
+        service="s", breached_for_seconds=60.0,
+    )
+    uc2 = rules.detect_crashloop(
+        service_up=1.0, restarts=4.0, down_for_seconds=0.0, service="s",
+        memory_ratio=0.89, memory_peak_mb=113.0,
+    )
+    ten_uc1 = " ".join(e.name for e in uc1.evidence).lower()
+    assert "db_pool" in ten_uc1
+    if uc2 is not None:
+        assert "bộ nhớ" in " ".join(e.name for e in uc2.evidence).lower()

@@ -184,7 +184,89 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
         logger.warning("%s: không tách được giả thuyết từ câu trả lời LLM", signal.affected_service)
         return hypothesis
 
+    thieu_can_cu = _nguyen_nhan_khong_co_can_cu(statement, signal, deploy)
+    if thieu_can_cu:
+        logger.warning(
+            "%s: BỎ câu của LLM vì nêu nguyên nhân '%s' mà không có bằng chứng chống lưng. "
+            "Giữ câu do luật ghép. Câu bị bỏ: %s",
+            signal.affected_service,
+            thieu_can_cu,
+            statement,
+        )
+        # Giữ nguyên `statement` của luật, nhưng vẫn KHÔNG lấy `reasoning` của
+        # LLM: nó diễn giải cho một kết luận vừa bị bỏ, giữ lại là tự mâu thuẫn.
+        return hypothesis
+
     return hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning})
+
+
+#: Nguyên nhân LLM hay nêu → bằng chứng phải có mặt để nêu được nó.
+#:
+#: `(từ khoá trong câu, chuỗi con trong tên MetricEvidence)`. Chuỗi con khớp
+#: `MetricEvidence.name` do `rules.py` sinh, xem `test_khoa_can_cu_con_khop_voi_rules`.
+#:
+#: CỐ Ý không có "latency" hay "chậm": câu đúng của luật cho UC-3 có chứa
+#: "latency bình thường" — một khẳng định **phủ định**, không phải nêu nguyên
+#: nhân. Chặn theo từ khoá đó là bỏ đúng câu mình muốn giữ.
+_CAN_CU_BAT_BUOC: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("pool", "connection"), "db_pool"),
+    (("bộ nhớ", "memory", "oom", "ram"), "bộ nhớ"),
+)
+
+#: Từ khoá chỉ được dùng khi `correlate_deploy()` thật sự tìm ra một lần deploy.
+_TU_KHOA_DEPLOY = ("deploy", "phiên bản", "rollback", "release")
+
+
+def _nguyen_nhan_khong_co_can_cu(
+    statement: str,
+    signal: IncidentSignal,
+    deploy: DeployRecord | None,
+) -> str | None:
+    """Câu này có nêu nguyên nhân nào mà không có bằng chứng chống lưng không?
+
+    Trả từ khoá vi phạm đầu tiên, `None` nếu câu có căn cứ.
+
+    ## Vì sao cần cửa này — đo được ngày 05/08 trên tấn công thật
+
+    UC-3, 182,8 request `/login` thất bại mỗi giây, bằng chứng **duy nhất** là
+    chính con số đó. Luật ghép câu đúng:
+
+        "…183 lượt đăng nhập thất bại mỗi giây — hình thái phù hợp với
+         credential-stuffing, KHÔNG PHẢI quá tải…"
+
+    LLM viết lại thành:
+
+        "Connection pool của service-thanh-toan cạn, gây thất bại khi xử lý
+         request /login."
+
+    Không có chữ "pool" nào trong bằng chứng. Prompt cấm thêm **số liệu** và LLM
+    tuân — nhưng "pool cạn" không phải một con số, nó là **một nguyên nhân**, và
+    prompt không có luật nào chặn việc lấy nguyên nhân từ kiến thức sẵn có của
+    mô hình.
+
+    Sai theo hướng tệ nhất: `docs/use-cases.md` ghi rõ kết luận "service quá
+    tải" cho một vụ credential-stuffing là chẩn đoán **SAI**. Và nó còn tự tin
+    hơn câu đúng (60% so với 40%), vì `confidence` do luật tính trên **bằng
+    chứng** còn câu thì do LLM viết — nên một câu bịa vẫn thừa hưởng con số nghe
+    đáng tin. Đó là chỗ hở trong contract ② `Hypothesis`, không phải lỗi của LLM.
+
+    Nghịch lý đáng ghi lại: ở UC-3, **bỏ LLM đi thì chẩn đoán đúng**. Pha 2 đang
+    làm chất lượng tệ hơn, không phải tốt hơn.
+
+    Chặn ở code chứ không chỉ dặn thêm trong prompt: dặn thì phải tin mô hình
+    tuân, mà chính chỗ này là bằng chứng nó không luôn tuân.
+    """
+    cau = statement.lower()
+    ten_bang_chung = " ".join(item.name for item in signal.evidence).lower()
+
+    for tu_khoa, chuoi_can_co in _CAN_CU_BAT_BUOC:
+        if any(tu in cau for tu in tu_khoa) and chuoi_can_co.lower() not in ten_bang_chung:
+            return next(tu for tu in tu_khoa if tu in cau)
+
+    if deploy is None and any(tu in cau for tu in _TU_KHOA_DEPLOY):
+        return next(tu for tu in _TU_KHOA_DEPLOY if tu in cau)
+
+    return None
 
 
 def _ask_llm(signal: IncidentSignal, deploy: DeployRecord | None, llm) -> str:
