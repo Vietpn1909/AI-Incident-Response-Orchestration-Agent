@@ -1,0 +1,762 @@
+{
+  "started_at": "2026-08-05T08:06:54.789466+00:00",
+  "ended_at": "2026-08-05T08:16:54.785920+00:00",
+  "duration_seconds": 599.996454,
+  "poll_interval_seconds": 8.0,
+  "cycle_count": 75,
+  "issue_count": 0,
+  "cycles": [
+    {
+      "number": 1,
+      "started_at": "2026-08-05T08:06:54.789466+00:00",
+      "ended_at": "2026-08-05T08:06:54.870341+00:00",
+      "duration_seconds": 0.080875,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 2,
+      "started_at": "2026-08-05T08:07:02.870751+00:00",
+      "ended_at": "2026-08-05T08:07:02.938896+00:00",
+      "duration_seconds": 0.068145,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 3,
+      "started_at": "2026-08-05T08:07:10.939782+00:00",
+      "ended_at": "2026-08-05T08:07:11.010945+00:00",
+      "duration_seconds": 0.071163,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 4,
+      "started_at": "2026-08-05T08:07:19.012143+00:00",
+      "ended_at": "2026-08-05T08:07:19.096338+00:00",
+      "duration_seconds": 0.084195,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 5,
+      "started_at": "2026-08-05T08:07:27.097052+00:00",
+      "ended_at": "2026-08-05T08:07:27.179007+00:00",
+      "duration_seconds": 0.081955,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 6,
+      "started_at": "2026-08-05T08:07:35.179782+00:00",
+      "ended_at": "2026-08-05T08:07:35.249380+00:00",
+      "duration_seconds": 0.069598,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 7,
+      "started_at": "2026-08-05T08:07:43.250615+00:00",
+      "ended_at": "2026-08-05T08:07:43.327501+00:00",
+      "duration_seconds": 0.076886,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 8,
+      "started_at": "2026-08-05T08:07:51.328214+00:00",
+      "ended_at": "2026-08-05T08:07:51.384643+00:00",
+      "duration_seconds": 0.056429,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 9,
+      "started_at": "2026-08-05T08:07:59.384965+00:00",
+      "ended_at": "2026-08-05T08:07:59.463736+00:00",
+      "duration_seconds": 0.078771,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 10,
+      "started_at": "2026-08-05T08:08:07.464857+00:00",
+      "ended_at": "2026-08-05T08:08:07.535630+00:00",
+      "duration_seconds": 0.070773,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 11,
+      "started_at": "2026-08-05T08:08:15.536170+00:00",
+      "ended_at": "2026-08-05T08:08:15.587728+00:00",
+      "duration_seconds": 0.051558,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 12,
+      "started_at": "2026-08-05T08:08:23.588953+00:00",
+      "ended_at": "2026-08-05T08:08:23.638915+00:00",
+      "duration_seconds": 0.049962,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 13,
+      "started_at": "2026-08-05T08:08:31.639278+00:00",
+      "ended_at": "2026-08-05T08:08:31.709705+00:00",
+      "duration_seconds": 0.070427,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 14,
+      "started_at": "2026-08-05T08:08:39.711144+00:00",
+      "ended_at": "2026-08-05T08:08:39.759983+00:00",
+      "duration_seconds": 0.048839,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 15,
+      "started_at": "2026-08-05T08:08:47.760399+00:00",
+      "ended_at": "2026-08-05T08:08:47.842176+00:00",
+      "duration_seconds": 0.081777,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 16,
+      "started_at": "2026-08-05T08:08:55.843224+00:00",
+      "ended_at": "2026-08-05T08:08:55.938406+00:00",
+      "duration_seconds": 0.095182,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 17,
+      "started_at": "2026-08-05T08:09:03.939111+00:00",
+      "ended_at": "2026-08-05T08:09:04.032049+00:00",
+      "duration_seconds": 0.092938,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 18,
+      "started_at": "2026-08-05T08:09:12.033390+00:00",
+      "ended_at": "2026-08-05T08:09:12.125789+00:00",
+      "duration_seconds": 0.092399,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 19,
+      "started_at": "2026-08-05T08:09:20.127170+00:00",
+      "ended_at": "2026-08-05T08:09:20.305071+00:00",
+      "duration_seconds": 0.177901,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 20,
+      "started_at": "2026-08-05T08:09:28.306423+00:00",
+      "ended_at": "2026-08-05T08:09:28.396036+00:00",
+      "duration_seconds": 0.089613,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 21,
+      "started_at": "2026-08-05T08:09:36.396529+00:00",
+      "ended_at": "2026-08-05T08:09:36.472861+00:00",
+      "duration_seconds": 0.076332,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 22,
+      "started_at": "2026-08-05T08:09:44.473677+00:00",
+      "ended_at": "2026-08-05T08:09:44.564394+00:00",
+      "duration_seconds": 0.090717,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 23,
+      "started_at": "2026-08-05T08:09:52.564885+00:00",
+      "ended_at": "2026-08-05T08:09:52.676312+00:00",
+      "duration_seconds": 0.111427,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 24,
+      "started_at": "2026-08-05T08:10:00.677556+00:00",
+      "ended_at": "2026-08-05T08:10:00.770302+00:00",
+      "duration_seconds": 0.092746,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 25,
+      "started_at": "2026-08-05T08:10:08.771042+00:00",
+      "ended_at": "2026-08-05T08:10:08.861559+00:00",
+      "duration_seconds": 0.090517,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 26,
+      "started_at": "2026-08-05T08:10:16.862275+00:00",
+      "ended_at": "2026-08-05T08:10:16.958010+00:00",
+      "duration_seconds": 0.095735,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 27,
+      "started_at": "2026-08-05T08:10:24.959228+00:00",
+      "ended_at": "2026-08-05T08:10:25.037796+00:00",
+      "duration_seconds": 0.078568,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 28,
+      "started_at": "2026-08-05T08:10:33.038209+00:00",
+      "ended_at": "2026-08-05T08:10:33.111502+00:00",
+      "duration_seconds": 0.073293,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 29,
+      "started_at": "2026-08-05T08:10:41.112011+00:00",
+      "ended_at": "2026-08-05T08:10:41.210533+00:00",
+      "duration_seconds": 0.098522,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 30,
+      "started_at": "2026-08-05T08:10:49.211002+00:00",
+      "ended_at": "2026-08-05T08:10:49.280694+00:00",
+      "duration_seconds": 0.069692,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 31,
+      "started_at": "2026-08-05T08:10:57.281265+00:00",
+      "ended_at": "2026-08-05T08:10:57.385411+00:00",
+      "duration_seconds": 0.104146,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 32,
+      "started_at": "2026-08-05T08:11:05.386399+00:00",
+      "ended_at": "2026-08-05T08:11:05.482032+00:00",
+      "duration_seconds": 0.095633,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 33,
+      "started_at": "2026-08-05T08:11:13.482842+00:00",
+      "ended_at": "2026-08-05T08:11:13.532192+00:00",
+      "duration_seconds": 0.04935,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 34,
+      "started_at": "2026-08-05T08:11:21.533122+00:00",
+      "ended_at": "2026-08-05T08:11:21.622487+00:00",
+      "duration_seconds": 0.089365,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 35,
+      "started_at": "2026-08-05T08:11:29.623027+00:00",
+      "ended_at": "2026-08-05T08:11:29.721782+00:00",
+      "duration_seconds": 0.098755,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 36,
+      "started_at": "2026-08-05T08:11:37.722462+00:00",
+      "ended_at": "2026-08-05T08:11:37.810848+00:00",
+      "duration_seconds": 0.088386,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 37,
+      "started_at": "2026-08-05T08:11:45.811144+00:00",
+      "ended_at": "2026-08-05T08:11:45.911256+00:00",
+      "duration_seconds": 0.100112,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 38,
+      "started_at": "2026-08-05T08:11:53.911947+00:00",
+      "ended_at": "2026-08-05T08:11:54.000497+00:00",
+      "duration_seconds": 0.08855,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 39,
+      "started_at": "2026-08-05T08:12:02.001188+00:00",
+      "ended_at": "2026-08-05T08:12:02.067623+00:00",
+      "duration_seconds": 0.066435,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 40,
+      "started_at": "2026-08-05T08:12:10.069082+00:00",
+      "ended_at": "2026-08-05T08:12:10.154940+00:00",
+      "duration_seconds": 0.085858,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 41,
+      "started_at": "2026-08-05T08:12:18.155225+00:00",
+      "ended_at": "2026-08-05T08:12:18.224256+00:00",
+      "duration_seconds": 0.069031,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 42,
+      "started_at": "2026-08-05T08:12:26.225676+00:00",
+      "ended_at": "2026-08-05T08:12:26.308667+00:00",
+      "duration_seconds": 0.082991,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 43,
+      "started_at": "2026-08-05T08:12:34.309541+00:00",
+      "ended_at": "2026-08-05T08:12:34.380417+00:00",
+      "duration_seconds": 0.070876,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 44,
+      "started_at": "2026-08-05T08:12:42.381272+00:00",
+      "ended_at": "2026-08-05T08:12:42.455179+00:00",
+      "duration_seconds": 0.073907,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 45,
+      "started_at": "2026-08-05T08:12:50.456242+00:00",
+      "ended_at": "2026-08-05T08:12:50.552727+00:00",
+      "duration_seconds": 0.096485,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 46,
+      "started_at": "2026-08-05T08:12:58.553516+00:00",
+      "ended_at": "2026-08-05T08:12:58.644862+00:00",
+      "duration_seconds": 0.091346,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 47,
+      "started_at": "2026-08-05T08:13:06.645298+00:00",
+      "ended_at": "2026-08-05T08:13:06.731626+00:00",
+      "duration_seconds": 0.086328,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 48,
+      "started_at": "2026-08-05T08:13:14.732398+00:00",
+      "ended_at": "2026-08-05T08:13:14.821538+00:00",
+      "duration_seconds": 0.08914,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 49,
+      "started_at": "2026-08-05T08:13:22.822337+00:00",
+      "ended_at": "2026-08-05T08:13:22.895452+00:00",
+      "duration_seconds": 0.073115,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 50,
+      "started_at": "2026-08-05T08:13:30.895882+00:00",
+      "ended_at": "2026-08-05T08:13:30.973706+00:00",
+      "duration_seconds": 0.077824,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 51,
+      "started_at": "2026-08-05T08:13:38.973927+00:00",
+      "ended_at": "2026-08-05T08:13:39.074625+00:00",
+      "duration_seconds": 0.100698,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 52,
+      "started_at": "2026-08-05T08:13:47.075043+00:00",
+      "ended_at": "2026-08-05T08:13:47.159909+00:00",
+      "duration_seconds": 0.084866,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 53,
+      "started_at": "2026-08-05T08:13:55.160588+00:00",
+      "ended_at": "2026-08-05T08:13:55.247264+00:00",
+      "duration_seconds": 0.086676,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 54,
+      "started_at": "2026-08-05T08:14:03.247966+00:00",
+      "ended_at": "2026-08-05T08:14:03.353351+00:00",
+      "duration_seconds": 0.105385,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 55,
+      "started_at": "2026-08-05T08:14:11.354530+00:00",
+      "ended_at": "2026-08-05T08:14:11.441417+00:00",
+      "duration_seconds": 0.086887,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 56,
+      "started_at": "2026-08-05T08:14:19.442522+00:00",
+      "ended_at": "2026-08-05T08:14:19.533402+00:00",
+      "duration_seconds": 0.09088,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 57,
+      "started_at": "2026-08-05T08:14:27.534932+00:00",
+      "ended_at": "2026-08-05T08:14:27.613198+00:00",
+      "duration_seconds": 0.078266,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 58,
+      "started_at": "2026-08-05T08:14:35.614576+00:00",
+      "ended_at": "2026-08-05T08:14:35.711501+00:00",
+      "duration_seconds": 0.096925,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 59,
+      "started_at": "2026-08-05T08:14:43.711949+00:00",
+      "ended_at": "2026-08-05T08:14:43.804250+00:00",
+      "duration_seconds": 0.092301,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 60,
+      "started_at": "2026-08-05T08:14:51.805282+00:00",
+      "ended_at": "2026-08-05T08:14:51.882087+00:00",
+      "duration_seconds": 0.076805,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 61,
+      "started_at": "2026-08-05T08:14:59.883345+00:00",
+      "ended_at": "2026-08-05T08:14:59.955698+00:00",
+      "duration_seconds": 0.072353,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 62,
+      "started_at": "2026-08-05T08:15:07.956949+00:00",
+      "ended_at": "2026-08-05T08:15:08.020515+00:00",
+      "duration_seconds": 0.063566,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 63,
+      "started_at": "2026-08-05T08:15:16.021405+00:00",
+      "ended_at": "2026-08-05T08:15:16.114745+00:00",
+      "duration_seconds": 0.09334,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 64,
+      "started_at": "2026-08-05T08:15:24.115116+00:00",
+      "ended_at": "2026-08-05T08:15:24.176381+00:00",
+      "duration_seconds": 0.061265,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 65,
+      "started_at": "2026-08-05T08:15:32.177510+00:00",
+      "ended_at": "2026-08-05T08:15:32.236368+00:00",
+      "duration_seconds": 0.058858,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 66,
+      "started_at": "2026-08-05T08:15:40.237383+00:00",
+      "ended_at": "2026-08-05T08:15:40.285811+00:00",
+      "duration_seconds": 0.048428,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 67,
+      "started_at": "2026-08-05T08:15:48.287202+00:00",
+      "ended_at": "2026-08-05T08:15:48.371693+00:00",
+      "duration_seconds": 0.084491,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 68,
+      "started_at": "2026-08-05T08:15:56.372487+00:00",
+      "ended_at": "2026-08-05T08:15:56.486576+00:00",
+      "duration_seconds": 0.114089,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 69,
+      "started_at": "2026-08-05T08:16:04.487227+00:00",
+      "ended_at": "2026-08-05T08:16:04.557748+00:00",
+      "duration_seconds": 0.070521,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 70,
+      "started_at": "2026-08-05T08:16:12.558408+00:00",
+      "ended_at": "2026-08-05T08:16:12.639462+00:00",
+      "duration_seconds": 0.081054,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 71,
+      "started_at": "2026-08-05T08:16:20.640490+00:00",
+      "ended_at": "2026-08-05T08:16:20.724355+00:00",
+      "duration_seconds": 0.083865,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 72,
+      "started_at": "2026-08-05T08:16:28.725889+00:00",
+      "ended_at": "2026-08-05T08:16:28.824625+00:00",
+      "duration_seconds": 0.098736,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 73,
+      "started_at": "2026-08-05T08:16:36.825663+00:00",
+      "ended_at": "2026-08-05T08:16:36.899483+00:00",
+      "duration_seconds": 0.07382,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 74,
+      "started_at": "2026-08-05T08:16:44.900960+00:00",
+      "ended_at": "2026-08-05T08:16:44.998271+00:00",
+      "duration_seconds": 0.097311,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 75,
+      "started_at": "2026-08-05T08:16:52.998908+00:00",
+      "ended_at": "2026-08-05T08:16:53.098226+00:00",
+      "duration_seconds": 0.099318,
+      "detected": 0,
+      "opened": [],
+      "updated": [],
+      "error": null
+    }
+  ],
+  "measurements": {},
+  "incidents": []
+}
