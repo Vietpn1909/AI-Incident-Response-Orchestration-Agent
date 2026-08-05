@@ -1,6 +1,6 @@
 # Báo cáo đánh giá Agent xử lý sự cố
 
-Ngày đo: **05/08/2026** · Người thực hiện: **Phạm Đức Trung**
+Ngày đo: **05–06/08/2026** · Người thực hiện: **Phạm Đức Trung**
 
 Mô hình: **Qwen Plus** (`qwen-plus`, temperature `0.2`) · Jira: **FakeJira**
 
@@ -25,7 +25,7 @@ Mỗi UC được tái hiện bằng tải thật và telemetry thật một l�
 | UC | Tín hiệu thật quan sát được | Agent phân loại | Kết quả |
 |---|---|---|---|
 | UC-1 | p95 = **4,529 giây**, ngưỡng 2 giây | P2 | Đúng |
-| UC-2 | Docker restart từ 0 lên 3; Agent bắt tín hiệu 2 restart/10 phút | P1 | Đúng |
+| UC-2 | Docker OOM-kill và restart; đỉnh bộ nhớ **125,9/128 MB** | P1 | Đúng |
 | UC-3 | 12.000 request đăng nhập sai trong 60 giây; đỉnh xấp xỉ 200 request/giây | P1 | Đúng |
 
 Độ chính xác severity trên ba lần tái hiện là **3/3 (100%)**. Cả ba incident đều mang theo ít nhất một `MetricEvidence` và câu PromQL, nên độ đầy đủ bằng chứng ở mức incident là **3/3 (100%)**.
@@ -35,13 +35,13 @@ Mỗi UC được tái hiện bằng tải thật và telemetry thật một l�
 | UC | Đúng / số lượt | Độ chính xác | Confidence quan sát | Nhận xét |
 |---|---:|---:|---:|---|
 | UC-1 | 10/10 | **100%** | 0,70 | Qwen nêu đúng connection pool cạn |
-| UC-2 | 0/8 | **0%** | 0,00 | Chỉ thấy restart và `up=1`, không có metric memory/OOM |
+| UC-2 | 3/8 | **37,5%** | 0,40 | Đã có đỉnh memory/OOM; Qwen vẫn phủ định nguyên nhân ở 5 lượt |
 | UC-3 | 0/8 | **0%** | 0,00 | Chỉ thấy tỷ lệ login thất bại; Agent không đủ bằng chứng để kết luận tấn công |
-| **Tổng** | **10/26** | **38,46%** | — | Chưa đạt mục tiêu chẩn đoán tổng quát |
+| **Tổng** | **13/26** | **50%** | — | UC-2 cải thiện nhưng chưa ổn định |
 
-Qwen không đoán bừa ở UC-2 và UC-3 mà trả lời “chưa xác định được nguyên nhân gốc”. Điều này an toàn hơn một kết luận sai, nhưng theo tiêu chí M3 vẫn phải chấm **sai** vì top-1 không khớp ground truth.
+UC-2 đã có đủ bằng chứng để bộ luật ghép đúng câu OOM-kill. Tuy nhiên, ở 5/8 lượt Qwen vẫn viết lại thành “không có nguyên nhân gốc từ quá tải bộ nhớ”, nên đầu ra top-1 bị chấm sai. Ba lượt còn lại giữ đúng kết luận OOM. UC-3 vẫn chưa có IP nguồn và số tài khoản trong snapshot Agent đã đo, nên 8/8 lượt đều chưa xác định được nguyên nhân gốc.
 
-Thời gian gọi LLM trung bình là **2,854 giây** (nhanh nhất 1,964 giây, chậm nhất 5,013 giây). Trung bình theo UC: UC-1 3,309 giây; UC-2 2,356 giây; UC-3 2,784 giây.
+Thời gian gọi LLM trung bình là **3,040 giây** (nhanh nhất 2,122 giây, chậm nhất 5,013 giây). Trung bình theo UC: UC-1 3,309 giây; UC-2 2,962 giây; UC-3 2,784 giây.
 
 ### Thời gian phát hiện, báo nhầm và chống mở trùng
 
@@ -61,8 +61,8 @@ Lần chạy tải nhẹ đầu tiên khi Prometheus chưa có baseline ổn đ�
 
 - Luồng phát hiện, phân loại severity, tạo incident và chống mở trùng hoạt động với cả ba UC.
 - UC-1 đã có đủ telemetry để chẩn đoán đúng ổn định.
-- UC-2 cần thu thêm container memory, memory limit và sự kiện OOM-kill; nếu chỉ có restart thì không thể chứng minh nguyên nhân OOM.
-- UC-3 cần thêm ngữ cảnh bảo mật như IP nguồn, số tài khoản bị thử, phân bố request và mẫu credential-stuffing; một metric 401 đơn lẻ chưa đủ kết luận tấn công.
+- UC-2 đã có tỷ lệ memory/limit và đỉnh memory 10 phút. M3 tăng từ 0/8 lên 3/8; phần Agent cần thêm chốt không cho LLM phủ định một kết luận đã có bằng chứng rõ.
+- Sau phép đo UC-3, phần demo đã bổ sung IP nguồn, số tài khoản bị thử và tỷ lệ từ nguồn lớn nhất. Chưa đo lại M3 vì các metric này chưa được nối vào `IncidentSignal` của Agent.
 - Cần thêm cơ chế warm-up hoặc ngưỡng sàn cho baseline để tránh báo nhầm sau khi Prometheus khởi động lại.
 - MTTD hiện dùng FakeJira nên chưa bao gồm độ trễ mạng/API Jira thật. Kết quả mới được kiểm chứng trên 2 service, chưa đại diện cho hệ thống hàng chục service.
 
