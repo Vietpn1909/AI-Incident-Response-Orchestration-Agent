@@ -25,6 +25,20 @@ def fmt_time_vn(iso: str) -> str:
     return dt.strftime("%H:%M:%S %d/%m/%Y")
 
 
+def fmt_duration(start_iso: str, end_iso: str | None = None) -> str:
+    """Khoảng thời gian từ `start_iso` tới `end_iso` (hoặc tới hiện tại nếu None).
+
+    "4 phút 20 giây" — thêm "X giờ" phía trước nếu >= 1 giờ.
+    """
+    start = datetime.fromisoformat(start_iso)
+    end = datetime.fromisoformat(end_iso) if end_iso else datetime.now(VN_TZ)
+    seconds = max(int((end - start).total_seconds()), 0)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    prefix = f"{hours} giờ " if hours else ""
+    return f"{prefix}{minutes} phút {secs} giây"
+
+
 st.set_page_config(page_title="War room", page_icon="🚨", layout="wide")
 st.title("War room — danh sách sự cố")
 
@@ -71,6 +85,10 @@ with col_list:
             st.markdown(f"{icon} **{inc['severity']}** · **{inc['jira_key']}** — {inc['state']}")
             st.write(inc["title"])
             st.caption(f"Phát hiện lúc {fmt_time_vn(inc['detected_at'])}")
+            if inc.get("resolved_at"):
+                st.caption(f"Đã kéo dài {fmt_duration(inc['detected_at'], inc['resolved_at'])}")
+            else:
+                st.caption(f"Đang kéo dài {fmt_duration(inc['detected_at'])}")
             if awaiting:
                 st.error("⏸ **ĐANG CHỜ DUYỆT**")
             if st.button(
@@ -102,6 +120,10 @@ with col_detail:
                 f"Phát hiện {fmt_time_vn(incident['detected_at'])}"
                 + (f" · Đã xử lý {fmt_time_vn(incident['resolved_at'])}" if incident.get("resolved_at") else "")
             )
+            if incident.get("resolved_at"):
+                st.caption(f"Đã kéo dài {fmt_duration(incident['detected_at'], incident['resolved_at'])}")
+            else:
+                st.caption(f"Đang kéo dài {fmt_duration(incident['detected_at'])}")
             if incident["state"] == "Awaiting Approval":
                 st.error("⏸ **ĐANG CHỜ DUYỆT** — cần người duyệt trước khi Agent thực thi đề xuất bên dưới")
 
