@@ -1,0 +1,781 @@
+{
+  "started_at": "2026-08-05T08:23:04.411689+00:00",
+  "ended_at": "2026-08-05T08:28:04.420161+00:00",
+  "duration_seconds": 300.008472,
+  "poll_interval_seconds": 8.0,
+  "cycle_count": 36,
+  "issue_count": 1,
+  "cycles": [
+    {
+      "number": 1,
+      "started_at": "2026-08-05T08:23:04.411689+00:00",
+      "ended_at": "2026-08-05T08:23:14.609555+00:00",
+      "duration_seconds": 10.197866,
+      "detected": 1,
+      "opened": [
+        "INC-1"
+      ],
+      "updated": [],
+      "error": null
+    },
+    {
+      "number": 2,
+      "started_at": "2026-08-05T08:23:22.610029+00:00",
+      "ended_at": "2026-08-05T08:23:22.674677+00:00",
+      "duration_seconds": 0.064648,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 3,
+      "started_at": "2026-08-05T08:23:30.675734+00:00",
+      "ended_at": "2026-08-05T08:23:30.746241+00:00",
+      "duration_seconds": 0.070507,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 4,
+      "started_at": "2026-08-05T08:23:38.747040+00:00",
+      "ended_at": "2026-08-05T08:23:38.797171+00:00",
+      "duration_seconds": 0.050131,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 5,
+      "started_at": "2026-08-05T08:23:46.798084+00:00",
+      "ended_at": "2026-08-05T08:23:46.849387+00:00",
+      "duration_seconds": 0.051303,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 6,
+      "started_at": "2026-08-05T08:23:54.849755+00:00",
+      "ended_at": "2026-08-05T08:23:54.906102+00:00",
+      "duration_seconds": 0.056347,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 7,
+      "started_at": "2026-08-05T08:24:02.907463+00:00",
+      "ended_at": "2026-08-05T08:24:02.960710+00:00",
+      "duration_seconds": 0.053247,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 8,
+      "started_at": "2026-08-05T08:24:10.961340+00:00",
+      "ended_at": "2026-08-05T08:24:11.022471+00:00",
+      "duration_seconds": 0.061131,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 9,
+      "started_at": "2026-08-05T08:24:19.023221+00:00",
+      "ended_at": "2026-08-05T08:24:19.071351+00:00",
+      "duration_seconds": 0.04813,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 10,
+      "started_at": "2026-08-05T08:24:27.072476+00:00",
+      "ended_at": "2026-08-05T08:24:27.152394+00:00",
+      "duration_seconds": 0.079918,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 11,
+      "started_at": "2026-08-05T08:24:35.153312+00:00",
+      "ended_at": "2026-08-05T08:24:35.213750+00:00",
+      "duration_seconds": 0.060438,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 12,
+      "started_at": "2026-08-05T08:24:43.214618+00:00",
+      "ended_at": "2026-08-05T08:24:43.278115+00:00",
+      "duration_seconds": 0.063497,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 13,
+      "started_at": "2026-08-05T08:24:51.278713+00:00",
+      "ended_at": "2026-08-05T08:24:51.327793+00:00",
+      "duration_seconds": 0.04908,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 14,
+      "started_at": "2026-08-05T08:24:59.328532+00:00",
+      "ended_at": "2026-08-05T08:24:59.379562+00:00",
+      "duration_seconds": 0.05103,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 15,
+      "started_at": "2026-08-05T08:25:07.381813+00:00",
+      "ended_at": "2026-08-05T08:25:07.449123+00:00",
+      "duration_seconds": 0.06731,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 16,
+      "started_at": "2026-08-05T08:25:15.450300+00:00",
+      "ended_at": "2026-08-05T08:25:15.524762+00:00",
+      "duration_seconds": 0.074462,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 17,
+      "started_at": "2026-08-05T08:25:23.525417+00:00",
+      "ended_at": "2026-08-05T08:25:23.591596+00:00",
+      "duration_seconds": 0.066179,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 18,
+      "started_at": "2026-08-05T08:25:31.592792+00:00",
+      "ended_at": "2026-08-05T08:25:31.672312+00:00",
+      "duration_seconds": 0.07952,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 19,
+      "started_at": "2026-08-05T08:25:39.673317+00:00",
+      "ended_at": "2026-08-05T08:25:39.746262+00:00",
+      "duration_seconds": 0.072945,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 20,
+      "started_at": "2026-08-05T08:25:47.747593+00:00",
+      "ended_at": "2026-08-05T08:25:47.820925+00:00",
+      "duration_seconds": 0.073332,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 21,
+      "started_at": "2026-08-05T08:25:55.821793+00:00",
+      "ended_at": "2026-08-05T08:25:55.873432+00:00",
+      "duration_seconds": 0.051639,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 22,
+      "started_at": "2026-08-05T08:26:03.873635+00:00",
+      "ended_at": "2026-08-05T08:26:03.925988+00:00",
+      "duration_seconds": 0.052353,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 23,
+      "started_at": "2026-08-05T08:26:11.927352+00:00",
+      "ended_at": "2026-08-05T08:26:11.991239+00:00",
+      "duration_seconds": 0.063887,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 24,
+      "started_at": "2026-08-05T08:26:19.991939+00:00",
+      "ended_at": "2026-08-05T08:26:20.059469+00:00",
+      "duration_seconds": 0.06753,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 25,
+      "started_at": "2026-08-05T08:26:28.060955+00:00",
+      "ended_at": "2026-08-05T08:26:28.122388+00:00",
+      "duration_seconds": 0.061433,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 26,
+      "started_at": "2026-08-05T08:26:36.123091+00:00",
+      "ended_at": "2026-08-05T08:26:36.183604+00:00",
+      "duration_seconds": 0.060513,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 27,
+      "started_at": "2026-08-05T08:26:44.184200+00:00",
+      "ended_at": "2026-08-05T08:26:44.234214+00:00",
+      "duration_seconds": 0.050014,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 28,
+      "started_at": "2026-08-05T08:26:52.234864+00:00",
+      "ended_at": "2026-08-05T08:26:52.294353+00:00",
+      "duration_seconds": 0.059489,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 29,
+      "started_at": "2026-08-05T08:27:00.294958+00:00",
+      "ended_at": "2026-08-05T08:27:00.359062+00:00",
+      "duration_seconds": 0.064104,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 30,
+      "started_at": "2026-08-05T08:27:08.360378+00:00",
+      "ended_at": "2026-08-05T08:27:08.411009+00:00",
+      "duration_seconds": 0.050631,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 31,
+      "started_at": "2026-08-05T08:27:16.412183+00:00",
+      "ended_at": "2026-08-05T08:27:16.541281+00:00",
+      "duration_seconds": 0.129098,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 32,
+      "started_at": "2026-08-05T08:27:24.542708+00:00",
+      "ended_at": "2026-08-05T08:27:24.592093+00:00",
+      "duration_seconds": 0.049385,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 33,
+      "started_at": "2026-08-05T08:27:32.592481+00:00",
+      "ended_at": "2026-08-05T08:27:32.643008+00:00",
+      "duration_seconds": 0.050527,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 34,
+      "started_at": "2026-08-05T08:27:40.643987+00:00",
+      "ended_at": "2026-08-05T08:27:40.712479+00:00",
+      "duration_seconds": 0.068492,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 35,
+      "started_at": "2026-08-05T08:27:48.713979+00:00",
+      "ended_at": "2026-08-05T08:27:48.767878+00:00",
+      "duration_seconds": 0.053899,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 36,
+      "started_at": "2026-08-05T08:27:56.768136+00:00",
+      "ended_at": "2026-08-05T08:27:56.841127+00:00",
+      "duration_seconds": 0.072991,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    }
+  ],
+  "measurements": {
+    "issue_opened_at": "2026-08-05T08:23:04.485983+00:00",
+    "agent_processing_seconds": 0.001,
+    "signal_threshold": 2.0,
+    "p95_crossed_signal_threshold_at": "2026-08-05T08:23:04.412000+00:00",
+    "p95_crossed_2s_at": "2026-08-05T08:23:04.412000+00:00",
+    "mttd_from_signal_threshold_seconds": 0.073983,
+    "mttd_from_fixed_2s_seconds": 0.073983
+  },
+  "incidents": [
+    {
+      "jira_key": "INC-1",
+      "title": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 4.59 (ngưỡng 2.00)",
+      "severity": "P2",
+      "state": "Awaiting Approval",
+      "affected_services": [
+        "service-thanh-toan"
+      ],
+      "detected_at": "2026-08-05T08:23:04.484983Z",
+      "resolved_at": null,
+      "signal": {
+        "affected_service": "service-thanh-toan",
+        "severity": "P2",
+        "detected_at": "2026-08-05T08:23:04.484983Z",
+        "metric_name": "http_request_duration_seconds p95",
+        "metric_value": 4.5928571428571425,
+        "threshold": 2.0,
+        "breached_for_seconds": 300.0,
+        "evidence": [
+          {
+            "name": "http_request_duration_seconds p95",
+            "value": 4.5928571428571425,
+            "baseline": 0.2425,
+            "unit": "s",
+            "promql": "\n(\nhistogram_quantile(0.95,\n  sum(rate(http_request_duration_seconds_bucket{handler!=\"/metrics\"}[1m])) by (le, service)\n)\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+          },
+          {
+            "name": "db_pool_connections_in_use / db_pool_size",
+            "value": 1.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])"
+          },
+          {
+            "name": "tỷ lệ lỗi 5xx",
+            "value": 0.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "\n(\n(\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\", status=~\"5..\"}[1m]))\n  or\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) * 0\n)\n/ sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m]))\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+          }
+        ]
+      },
+      "hypotheses": [
+        {
+          "statement": "Connection pool của service-thanh-toan cạn kiệt — mỗi request giữ connection lâu hơn bình thường nên số chỗ trong pool hết sạch dưới tải.",
+          "confidence": 0.7,
+          "evidence": [
+            {
+              "name": "http_request_duration_seconds p95",
+              "value": 4.5928571428571425,
+              "baseline": 0.2425,
+              "unit": "s",
+              "promql": "\n(\nhistogram_quantile(0.95,\n  sum(rate(http_request_duration_seconds_bucket{handler!=\"/metrics\"}[1m])) by (le, service)\n)\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+            },
+            {
+              "name": "db_pool_connections_in_use / db_pool_size",
+              "value": 1.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "max_over_time((db_pool_connections_in_use / db_pool_size)[5m:5s])"
+            },
+            {
+              "name": "tỷ lệ lỗi 5xx",
+              "value": 0.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "\n(\n(\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\", status=~\"5..\"}[1m]))\n  or\n  sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) * 0\n)\n/ sum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m]))\n)\nand on(service) (\nsum by (service) (rate(http_requests_total{handler!=\"/metrics\"}[1m])) > 0\n)\n"
+            }
+          ],
+          "related_deploy": null,
+          "reasoning": ""
+        }
+      ],
+      "proposal": {
+        "action": "increase_pool",
+        "target": "service-thanh-toan",
+        "params": {
+          "pool_size": 20
+        },
+        "runbook": "1. Nâng connection pool của service-thanh-toan lên 20.\n2. Theo dõi `db_pool_connections_in_use / db_pool_size` — phải tụt xuống dưới 1.0.\n3. Theo dõi p95 — phải về gần mức baseline trong 3 phút.\n4. Không đỡ thì nút thắt nằm ở Postgres chứ không ở pool, cần xem lại query.",
+        "risk": "Mỗi connection thêm là thêm tải lên Postgres; nâng lên 20 mà database đã gần giới hạn `max_connections` thì đổi một chỗ nghẽn sang chỗ khác. Agent KHÔNG đọc được `db_pool_size` hiện tại (bằng chứng chỉ có tỷ lệ, không có mẫu số), nên con số này là mặc định — người duyệt nên đối chiếu cấu hình thật.",
+        "requires_approval": true
+      },
+      "timeline": [
+        {
+          "at": "2026-08-05T08:23:04.485983Z",
+          "actor": "agent",
+          "action": "mở war room",
+          "detail": "[P2] service-thanh-toan: http_request_duration_seconds p95 = 4.59 (ngưỡng 2.00)"
+        },
+        {
+          "at": "2026-08-05T08:23:04.485983Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Bối cảnh thu thập được lúc phát hiện:\n\n- http_request_duration_seconds p95: 4.59286s — lệch 18.9× baseline\n\n- db_pool_connections_in_use / db_pool_size: 1\n\n- tỷ lệ lỗi 5xx: 0"
+        },
+        {
+          "at": "2026-08-05T08:23:14.575072Z",
+          "actor": "agent",
+          "action": "giả thuyết",
+          "detail": "Connection pool của service-thanh-toan cạn kiệt — mỗi request giữ connection lâu hơn bình thường nên số chỗ trong pool hết sạch dưới tải."
+        },
+        {
+          "at": "2026-08-05T08:23:14.608550Z",
+          "actor": "agent",
+          "action": "đề xuất khắc phục",
+          "detail": "increase_pool"
+        },
+        {
+          "at": "2026-08-05T08:23:14.608550Z",
+          "actor": "agent",
+          "action": "chuyển trạng thái",
+          "detail": "Awaiting Approval"
+        },
+        {
+          "at": "2026-08-05T08:23:22.674677Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.544 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:23:30.745241Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.535 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:23:38.796171Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.534 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:23:46.848380Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.553 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:23:54.906102Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.549 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:02.959697Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.549 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:11.021463Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.564 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:19.070353Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.554 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:27.151394Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.546 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:35.212759Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.561 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:43.277072Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.570 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:51.327273Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.549 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:24:59.379562Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.554 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:07.449123Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.564 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:15.523764Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.554 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:23.590589Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.553 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:31.671321Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.568 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:39.746262Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.564 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:47.819921Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.560 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:25:55.872432Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.582 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:03.924988Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.578 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:11.990247Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.568 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:20.059469Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.573 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:28.121375Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.583 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:36.182607Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.561 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:44.233214Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.569 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:26:52.293354Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.575 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:00.359062Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.572 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:08.410001Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.571 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:16.541281Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.588 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:24.591093Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.575 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:32.642007Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.558 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:40.712479Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.577 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:48.766352Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.576 (ngưỡng 2.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-05T08:27:56.840120Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: http_request_duration_seconds p95 = 4.557 (ngưỡng 2.000), đã vượt liên tục 300s."
+        }
+      ],
+      "postmortem": null,
+      "related_incidents": []
+    }
+  ]
+}
