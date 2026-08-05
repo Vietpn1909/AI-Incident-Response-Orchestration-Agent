@@ -155,10 +155,11 @@ Hiện có:
 | GET | `/api/incidents` | Danh sách incident (war-room view), lọc `?only_open=true` | fixture → Jira (tuần 3) |
 | GET | `/api/incidents/{jira_key}` | Chi tiết incident: giả thuyết, bằng chứng, timeline, postmortem | fixture → Jira (tuần 3) |
 | POST | `/webhooks/jira` | Nhận trigger từ Jira sau khi có người duyệt → thi hành khắc phục | Jira changelog |
-| POST | `/api/v1/chat` | Chat với agent (placeholder từ template) | — |
-| GET | `/api/v1/status` | Trạng thái agent | — |
+| GET | `/api/v1/agent/health` | Trạng thái Agent: node của graph, Prometheus có trả lời không, Jira/LLM đã cấu hình chưa | đo trực tiếp |
 
 Ba endpoint incident **đã trả dữ liệu thật ngay bây giờ** (từ fixture JSON), nên UI build được trước khi Agent và Jira tồn tại. Tuần 3 chỉ đổi nguồn dữ liệu, hình dạng response không đổi — xem [contract ④](src/api/incidents.py).
+
+**Cố ý không có endpoint nào chạy Agent qua HTTP.** Agent chạy theo chu kỳ qua `scripts/run_agent.py`; một endpoint kích hoạt được từ ngoài sẽ thành đường thứ hai tới `open_war_room`, tức mở incident thật trên Jira chỉ vì có người gọi URL. Hai endpoint `POST /api/v1/chat` và `GET /api/v1/status` của template đã bị gỡ ngày 05/08 — endpoint chat chỉ lặp lại câu đầu vào, làm người mở Live URL kết luận Agent của nhóm là một con echo.
 
 `POST /webhooks/jira` có **3 lớp bảo vệ**: shared secret → `assert_human_approved()` kiểm changelog Jira → danh sách hành động cho phép. Chi tiết: [src/api/webhooks.py](src/api/webhooks.py).
 
