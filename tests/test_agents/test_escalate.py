@@ -142,3 +142,29 @@ def test_incident_khong_ton_tai_thi_khong_no():
     result = escalate(jira, "KAN-999", bay_gio=LUC)
 
     assert result.escalated is False
+
+
+def test_loi_jira_o_mot_issue_khong_lam_sap_ca_vong_quet():
+    """Một issue lỗi không được làm mất vòng quét của những issue khác.
+
+    Từ 05/08 `RealJiraClient.get_incident()` chỉ trả `None` khi Jira đáp 404,
+    còn 401/429/500 thì raise. `escalate()` không bọc lỗi, `run_cycle()` cũng
+    không, và `run_agent.py` chỉ bắt KeyboardInterrupt — nên trước bản vá này,
+    một lần Jira đáp 429 sẽ giết cả tiến trình Agent.
+    """
+    from src.agents.incident_graph import _xet_nang_muc
+
+    jira, key = _cho_duyet()
+    goc = jira.get_incident
+
+    def get_incident_hong(k: str):
+        if k == "KAN-LOI":
+            raise RuntimeError("Jira 429 Too Many Requests")
+        return goc(k)
+
+    jira.get_incident = get_incident_hong  # type: ignore[method-assign]
+
+    # Issue lỗi: không ném ra ngoài, chỉ trả False.
+    assert _xet_nang_muc(jira, "KAN-LOI") is False
+    # Issue lành trong cùng vòng vẫn được xét bình thường.
+    assert _xet_nang_muc(jira, key) is False  # chưa quá ngưỡng nên không nâng

@@ -186,10 +186,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         if not dang_theo_doi:
             return {}
 
-        escalated: list[str] = []
-        for jira_key in dang_theo_doi:
-            if escalate(jira, jira_key).escalated:
-                escalated.append(jira_key)
+        escalated = [key for key in dang_theo_doi if _xet_nang_muc(jira, key)]
         return {"escalated": escalated}
 
     graph = StateGraph(IncidentAgentState)
@@ -216,6 +213,30 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     graph.add_edge("escalate", END)
 
     return graph.compile()
+
+
+def _xet_nang_muc(jira: JiraClient, jira_key: str) -> bool:
+    """Xét nâng mức một issue, nuốt lỗi để không làm sập cả vòng quét.
+
+    Tách ra khỏi node để test gọi được trực tiếp: node là closure bên trong
+    `build_incident_graph()`, mà muốn graph chạy tới nó thì phải dựng cả một sự
+    cố giả qua Prometheus — test dài mà lại nghiệm thu vòng vo.
+
+    Vì sao cần bọc lỗi: từ 05/08 `RealJiraClient.get_incident()` chỉ trả `None`
+    khi Jira đáp 404, còn 401/429/500 thì **raise** (Long sửa, và sửa đúng —
+    trước đó lỗi xác thực bị hiểu thành "không tìm thấy issue"). Nhưng
+    `escalate()` gọi `get_incident()` mà không bọc, `run_cycle()` cũng không
+    bọc, và `run_agent.py` chỉ bắt `KeyboardInterrupt` — nên một lần Jira đáp
+    429 sẽ **giết cả tiến trình Agent**.
+
+    Nâng mức là việc phụ. Mất nó không nghiêm trọng bằng mất toàn bộ vòng quét
+    của những incident khác, nên nuốt lỗi — nhưng log ở mức error.
+    """
+    try:
+        return escalate(jira, jira_key).escalated
+    except Exception as error:
+        logger.error("%s: không xét được việc nâng mức (%s)", jira_key, error)
+        return False
 
 
 def _co_dang_mo_war_room(state: IncidentAgentState) -> str:
