@@ -9,10 +9,18 @@ Dữ liệu đã có sẵn, không cần chờ Agent hay Jira. Xem ui/README.md.
 """
 
 import os
+import pathlib
+import sys
 from datetime import datetime, timedelta, timezone
 
 import requests
 import streamlit as st
+
+# `streamlit run ui/status_page.py` đặt thư mục ui/ vào sys.path, không đặt thư
+# mục gốc repo — xem chú thích cùng chỗ trong war_room.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from ui import labels  # noqa: E402
 
 API = os.getenv("API_URL", "https://p-035-incident-agent.onrender.com")
 
@@ -25,17 +33,12 @@ def fmt_time_vn(iso: str) -> str:
     return dt.strftime("%H:%M:%S %d/%m/%Y")
 
 
-# Ánh xạ trạng thái sang cách hiển thị. `health` là một trong 4 giá trị này —
-# contract ④, sẽ không đổi.
-HEALTH_DISPLAY = {
-    "operational": ("🟢", "Hoạt động bình thường"),
-    "degraded": ("🟡", "Suy giảm hiệu năng"),
-    "down": ("🔴", "Đang gặp sự cố"),
-    "maintenance": ("🔧", "Đang bảo trì"),
-}
-
 st.set_page_config(page_title="Trạng thái dịch vụ", page_icon="🟢")
 st.title("Trạng thái dịch vụ")
+st.caption(
+    "Trang công khai — ai cũng xem được, không cần đăng nhập. "
+    "Cập nhật tự động từ số liệu đo được của hệ thống."
+)
 
 
 @st.cache_data(ttl=10)
@@ -70,11 +73,15 @@ else:
     st.success("🟢 Tất cả dịch vụ hoạt động bình thường")
 
 for svc in services:
-    icon, label = HEALTH_DISPLAY[svc["health"]]
+    icon, label = labels.health(svc["health"])
     with st.container(border=True):
-        st.write(f"{icon} **{svc['name']}** — {svc['message']}")
+        # Tên dịch vụ dễ hiểu dẫn đường, tên kỹ thuật ở dòng dưới cho người trực
+        # — cùng nguyên tắc "dịch THÊM, không dịch THAY" như war_room.
+        st.write(f"{icon} **{labels.service(svc['name'])}** — {label}")
+        st.caption(f"↳ `{svc['name']}`")
+        st.write(svc["message"])
         if svc["active_incident"]:
-            st.caption(f"Incident: {svc['active_incident']} · {label}")
+            st.caption(f"Mã sự cố đang xử lý: `{svc['active_incident']}`")
 
 st.caption(f"Cập nhật lúc {fmt_time_vn(data['updated_at'])}")
 
@@ -82,5 +89,7 @@ if st.button("🔄 Tải lại"):
     load_status.clear()
     st.rerun()
 
-with st.expander("Dữ liệu API trả về (để tham khảo khi code)"):
+# Giữ lại nhưng gấp và đặt tên rõ là dành cho người trực. Đây là trang công
+# khai nên "để tham khảo khi code" đọc ra như trang chưa làm xong.
+with st.expander("Dữ liệu thô (dành cho người trực)"):
     st.json(data)

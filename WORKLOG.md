@@ -534,4 +534,170 @@ UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 8
 
 ---
 
+## 2026-08-06
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Review + merge PR #20 (Trung) — telemetry UC-3 và đo lại UC-2 | ✅ Done | 261 test pass | - |
+| Trương Công Thái Đức | Chốt chống LLM **phủ định** nguyên nhân đã có bằng chứng | ✅ Done | UC-2 từ 3/8 lên **6/6** đo bằng LLM thật | - |
+| Trương Công Thái Đức | Đồng bộ `develop` và `main` sau khi PR #20 nhắm nhầm base | ✅ Done | cả hai ở `5542130` | - |
+| Trương Công Thái Đức | Chạy thử trọn kịch bản demo trên Jira thật, tìm 4 chỗ sẽ vỡ | ✅ Done | KAN-12, `demo/README.md` | - |
+| Trương Công Thái Đức | Nhúng `IncidentSignal` vào description để war-room view đọc lại được | ✅ Done | `src/services/jira/real.py` | - |
+| Trương Công Thái Đức | Bảng dịch thuật ngữ cho UI — dịch THÊM, giữ nguyên tên metric + PromQL | ✅ Done | `ui/labels.py`, 10 test | - |
+| Trương Công Thái Đức | Viết lại phần diễn đạt của `war_room.py` và `status_page.py` (Đức nhận thay Long) | ✅ Done | 275 test pass, verify trên 9/9 incident thật | - |
+
+**Tổng kết ngày:** Hoàn tất cặp chốt bảo vệ ranh giới giữa luật và LLM. Và phát hiện ra một điều đáng suy nghĩ hơn cả con số M3.
+
+**Trung làm hai việc đúng.** Telemetry UC-3 (số IP nguồn, số tài khoản bị thử, tỷ lệ nguồn lớn nhất, cửa sổ trượt 60s) thiết kế tốt — dùng `set_function` nên tính lúc scrape, có lock, và **không đưa IP/username thô vào label**, tránh cả nổ cardinality lẫn chuyện riêng tư. Agent chưa đọc ba metric đó, nhưng anh ấy tự ghi rõ trong báo cáo; phần nối là `prometheus.py`/`rules.py` của Việt.
+
+**Con số 3/8 của UC-2 sửa lại hiểu biết của tôi.** Hôm qua tôi chạy **một** lượt thấy đúng nên tưởng đã xong. Trung chạy **8** lượt và chỉ 3 lượt đúng. Một lượt không đại diện — đây đúng là lý do phần eval cần nhiều lượt, và là lần thứ hai trong tuần một phép đo của người khác sửa lại kết luận của tôi.
+
+**Kiểu hỏng lộ ra từ dữ liệu thô của Trung.** LLM nhìn *"đỉnh bộ nhớ 10 phút = 125,9 MB"* trên trần 128 MB — **98,4% trần** — rồi viết *"cả hai đều nằm dưới giới hạn 128 MB, không cho thấy áp lực bộ nhớ"*. Đúng về số học, vô lý về vận hành. Nó còn cãi lại cả quyết định phát hiện: *"restart = 1, dưới ngưỡng kích hoạt là 2.000"*.
+
+**Đây là mặt ngược của lỗi UC-3 hôm qua**, và hai cái cộng lại mới lộ ra khiếm khuyết thật:
+
+| | LLM làm gì | Cửa chặn |
+|---|---|---|
+| UC-3 | **Bịa** nguyên nhân không có trong bằng chứng | `_nguyen_nhan_khong_co_can_cu()` (05/08) |
+| UC-2 | **Xoá** nguyên nhân đã có bằng chứng | `_phu_dinh_ket_luan_cua_luat()` (06/08) |
+
+Cùng một khiếm khuyết: **pha 2 được phép ghi đè pha 1 theo cả hai chiều.** Hai cửa cộng lại nói được một câu gọn: *LLM chỉ được diễn đạt lại kết luận của luật, không được đổi nó.*
+
+Cửa mới cố ý **hẹp**: không bắt "không phải" trơn, vì câu ĐÚNG của luật cho UC-3 chứa *"không phải quá tải"* — đó là loại trừ một nguyên nhân **sai**, chính là thứ cần giữ. Chỉ bắt việc phủ định **mọi** nguyên nhân. Và không chặn khi chính luật cũng chịu: câu luật ở nhánh mặc định có cụm "chưa đủ bằng chứng để nêu nguyên nhân" thì LLM nói "chưa xác định được" là **đồng ý**, giữ nguyên — chặn cả trường hợp đó là ép Agent khẳng định một nguyên nhân nó không có bằng chứng, đúng thứ cửa kia sinh ra để ngăn.
+
+**Đo bằng LLM thật, 6 lượt liên tiếp trên đúng bộ số đã làm Trung ra 3/8: 6/6 đúng.**
+
+**Nhưng con số đó nói ít hơn nó nghe, và đây mới là phần đáng báo cáo mentor.** Log cho thấy cửa chặn kích hoạt ở **5/6 lượt** — tức LLM vẫn cố phủ định gần như mọi lần, và câu đúng cuối cùng **đến từ luật, không phải từ LLM**. Cộng với UC-3 hôm qua (câu đúng cũng của luật), tình hình thật là:
+
+| UC | Câu chẩn đoán đúng đến từ đâu |
+|---|---|
+| UC-1 | **LLM viết**, có bằng chứng chống lưng |
+| UC-2 | **LUẬT viết** — LLM cố phủ định ở 5/6 lượt |
+| UC-3 | **LUẬT viết** — LLM bịa nguyên nhân, bị bỏ |
+
+Nếu chỉ báo cáo "M3 gần 100%" thì **nói quá về phần AI**. Sự thật là ở hai trong ba use case, LLM đang làm chất lượng chẩn đoán **tệ hơn**, và giá trị thật của nó nằm ở UC-1 cộng với việc viết câu cho người đọc. Đây là số liệu làm cho câu hỏi gửi mentor có sức nặng: *LLM chỉ diễn giải còn luật ra quyết định — có đủ coi là "AI Agent" không?*
+
+**Chuyện quy trình:** PR #20 của Trung nhắm base `main` thay vì `develop`, và tôi merge mà không kiểm base. Không gây hậu quả vì nhánh anh ấy đã chứa toàn bộ `develop` nên `main` nhận đủ, nhưng `develop` bị bỏ lại 4 commit — đã fast-forward lại. Lần sau phải xem `base=` trước khi merge.
+
+**Chiều: chạy thử trọn kịch bản demo trên Jira thật.** Bốn chỗ sẽ vỡ nếu không chạy thử trước, không chỗ nào đọc code mà thấy được.
+
+**1. `Incident.signal` không bao giờ dựng lại được từ Jira.** `create_incident()` gọi `_adf(text)` **không kèm payload**, nên `IncidentSignal` chỉ tồn tại dưới dạng văn bản cho người đọc. Hệ quả: war-room view của Long luôn hiện *"Chưa có tín hiệu gốc"* — mất đúng mục trưng bằng chứng kèm **PromQL kiểm chứng được**, tức thứ chứng minh "chẩn đoán có bằng chứng". Kiểm cả 6 incident trên board: `signal=None` hết.
+
+Sửa: nhúng payload `signal` vào description lúc tạo, và `get_incident()` đọc thêm field `description` rồi gộp payload từ đó với payload từ comment. Đặt ở description chứ không thêm comment nữa — mỗi war room đã có comment bối cảnh của `open_war_room`, thêm nữa chỉ làm ồn.
+
+Verify bằng cách tạo KAN-12 qua chuỗi đầy đủ: `signal` ✅ 3 bằng chứng có PromQL · `hypotheses` 1 · `proposal` · `timeline` 3 mốc. Bốn mục của UI giờ có dữ liệu.
+
+**2. Tín hiệu tan trong khoảng 60–90 giây sau khi tải dứt.** Lần chạy đầu tôi bắn tải xong rồi mới chạy Agent, và nó báo **"bình thường"** — `rate(...[1m])` không còn mẫu mới nên p95 thành `nan`. Lúc demo phải chạy Agent **trong lúc** tải còn chạy, và nên dùng `run_agent.py` không có `--once` để nó tự poll mỗi 10 giây.
+
+**3. Dòng deploy trong seed HẾT HẠN sau ~11 phút.** `seed.py` cắm `v1.4.2` ở mốc "4 phút trước lúc seed", còn `correlate_deploy()` có cửa sổ `DEPLOY_WINDOW_MINUTES = 15`. Nên phải phát hiện sự cố **trước `seed_time + 11 phút`**. Tôi seed lúc 17:35, chạy lúc 17:49 — deploy đã 22,2 phút tuổi, ngoài cửa sổ. Kết quả: đề xuất tụt từ `rollback v1.4.1` xuống `increase_pool`, tin cậy từ 90% xuống **70%**, và mất luôn nghi phạm — tức mất phần hay nhất của UC-1.
+
+**Phải seed lại ngay trước khi demo.** Đây là loại lỗi không có exception nào, chỉ là một đề xuất kém hơn mà không ai biết vì sao.
+
+**4. Incident đang mở làm Agent KHÔNG mở issue mới.** Luật chống mở trùng chạy đúng, nhưng nó giết mất khoảnh khắc chính của buổi demo. Board có KAN-4 (P2, Open) và KAN-6 (P1, Awaiting Approval) → Agent đi nhánh cập nhật. Phải đóng hết incident đang mở trước khi demo.
+
+**Được thêm một xác nhận ngoài dự tính:** `escalate` chạy thật trên Jira lần đầu — KAN-6 treo chờ duyệt **2610 phút** nên Agent nâng **P2 → P1**, và `set_severity()` sửa đúng **cả hai chỗ** như contract đòi (label `severity-P1` và tiền tố `[P1]` trong tiêu đề). Trước đó tôi chỉ test cái này bằng `FakeJiraClient`.
+
+**Tối: bảng dịch thuật ngữ cho UI.** Đức mở war room ra và không hiểu — mà Đức là người biết dự án rõ nhất. Ban giám khảo chỉ có 10 phút và không có bối cảnh gì, nên đó là vấn đề của UI chứ không của người xem.
+
+Ba lỗi cụ thể tìm ra khi đối chiếu với dữ liệu Jira thật:
+
+1. Trang danh sách là bức tường **9 dòng gần như giống hệt nhau**, 8 cái là rác test từ mấy ngày trước và 7 cái mở ra hiện "Chưa có tín hiệu gốc".
+2. **`(baseline None)` in ra thẳng trang**, hai lần — pool và tỷ lệ lỗi đều không có baseline. Trông như lỗi.
+3. Tiêu đề là tên metric thô: `http_request_duration_seconds p95 = 4.417 (ngưỡng 2.00)`.
+
+**Nguyên tắc chốt được sau khi Đức nhắc: dịch THÊM, không dịch THAY.** Trang này phục vụ **hai** người cùng lúc — người xem không biết tech cần biết chuyện gì đang xảy ra với khách hàng, còn **người trực cần tên metric gốc và câu PromQL nguyên văn** để copy vào Prometheus mà đào tiếp. Dịch mất thông tin thì tệ hơn không dịch: người trực mất đường đào, mà đó là người duy nhất thật sự sửa được sự cố.
+
+Nên mỗi bằng chứng trả về **hai tầng trên cùng một dòng**, không phải hai chế độ:
+
+```
+Thời gian khách phải chờ: 4.42 giây (thường 0.58 giây — lệch 7.6 lần)
+  ↳ http_request_duration_seconds p95 = 4.417s
+```
+
+`ui/labels.py` là **dữ liệu thuần, không đụng layout** — Long giữ phần thiết kế. Vì sao chia thế: `ui/` là của Long, và hôm 02/08 tôi đã đụng vào phần của Việt rồi tự nhắc "ai định đụng file của người khác thì nhắn một câu trước, kể cả t". Long không phải tự nghĩ ra 14 câu dịch, nhưng layout vẫn là quyết định của anh ấy.
+
+Hai test canh chuỗi, cùng họ với `test_runbooks.py`: bảng dịch so khớp theo chuỗi con của tên `MetricEvidence`, nên `rules.py` đổi một chữ là bảng lặng lẽ rơi về tên thô — không sai, nhưng mất hết công dịch và không có gì đỏ lên. `test_moi_ten_metric_deu_dich_duoc` gọi thẳng `rules.detect*()` cả ba UC rồi đối chiếu.
+
+Một chi tiết thứ tự có ý nghĩa: `"đỉnh bộ nhớ"` phải đứng **trước** `"bộ nhớ đang dùng"` trong bảng, không thì hai metric bộ nhớ của Việt dịch thành cùng một câu. Có test riêng cho chỗ đó.
+
+**Làm luôn phần layout UI thay Long, theo yêu cầu của Đức.** Ghi rõ ở đây vì `ui/` là của Long và hôm 02/08 tôi đã tự đặt luật "ai định đụng file của người khác thì nhắn một câu trước, kể cả t". Lần này Đức quyết, nhưng vẫn phải nói cho Long biết phần nào bị sửa và vì sao.
+
+Bốn thay đổi trong `war_room.py`:
+
+1. **Câu mở đầu trang** — ba câu nói AI làm gì và **không** tự sửa. Trước đó trang không nói nó là cái gì.
+2. **Tách danh sách thành "đang xảy ra" / "đã xử lý xong"**, gấp phần đã xong lại. Trước đó 9 incident đổ chung một chỗ mà 8 cái là sự cố cũ.
+3. **Đánh số ①②③** — người xem thấy đây là ba bước suy nghĩ, không phải ba khối rời.
+4. **Bằng chứng hai tầng**: câu tiếng Việt + dòng `↳` giữ nguyên văn tên metric, PromQL trong `st.code()` bấm copy được.
+
+`status_page.py`: tên dịch vụ thành "Thanh toán"/"Đặt hàng" nhưng vẫn giữ `↳ service-thanh-toan` bên dưới, và đổi tên khối JSON debug từ *"để tham khảo khi code"* thành *"Dữ liệu thô (dành cho người trực)"* — đây là trang công khai, câu cũ đọc ra như trang chưa làm xong.
+
+**Một lỗi bắt được nhờ không tin HTTP 200.** Cả hai trang trả 200 và log sạch, nhưng Streamlit chỉ chạy script khi có websocket — 200 chỉ là vỏ trang. Mô phỏng lại `sys.path` mà `streamlit run ui/war_room.py` thật sự dựng thì ra `ModuleNotFoundError: No module named 'ui'`: streamlit đặt **thư mục ui/** vào path, không đặt thư mục gốc repo. Pytest import được vì nó tự thêm rootdir.
+
+Tức là test xanh, trang trả 200, mà Long chạy thật sẽ vỡ ngay dòng import. Vá bằng `sys.path.insert` như `scripts/run_agent.py` đang làm. Cùng họ với vụ `.env` làm test đỏ theo máy hôm qua: **môi trường lúc test khác môi trường lúc chạy.**
+
+**Verify trên dữ liệu thật thay vì chỉ mở trang xem.** Chạy lại đúng các phép truy cập field của UI trên **cả 9 incident** trên board — kể cả 8 cái cũ thiếu `signal` và `hypotheses`, vì đó mới là chỗ dễ vỡ bằng `KeyError`. Kết quả 9/9 render được, 0 lỗi.
+
+
+---
+
+## 2026-08-06 — Việt
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Nối 3 metric hình dạng nguồn UC-3 của Trung vào `IncidentSignal` | ✅ Done | 1 → 4 bằng chứng |
+| Việt | Câu giả thuyết UC-3 chỉ nói "credential-stuffing" khi CÓ số chống lưng | ✅ Done | có số thì nêu, không có thì chỉ "vấn đề bảo mật" |
+| Việt | Baseline phải **đủ điểm** mới tin, không chỉ khác 0 | ✅ Done | `BASELINE_SAMPLE_COUNT_30M`, ngưỡng 20/30 điểm |
+| Việt | 7 test hồi quy + dạy fake Prometheus câu `count_over_time` | ✅ Done | 271 test pass, ruff sạch |
+
+**UC-3 — bằng chứng từ 1 lên 4.** Trước đó tín hiệu chỉ có tỷ lệ thất bại, mà con số đó **không phân biệt được tấn công với quá tải** — cả hai đều làm nhiều lượt đăng nhập hỏng. Đó là lý do LLM viết "connection pool cạn" cho một vụ credential-stuffing hôm 05/08: nó không có gì để phân biệt. Ba metric của Trung cho đúng thứ thiếu — hình **dạng** nguồn:
+
+| | nguồn | tài khoản | nguồn lớn nhất |
+|---|---|---|---|
+| Credential-stuffing | ít | **nhiều** | gần 1.0 |
+| Người dùng gõ nhầm | nhiều | ít | thấp |
+| Service lỗi | nhiều | nhiều | thấp |
+
+Đo trên tấn công thật: 118 lượt/giây, **1 IP nguồn, 100 tài khoản, tỷ lệ 1.0**.
+
+Một quyết định đi kèm: câu luật **chỉ nói "credential-stuffing" khi có hai con số chống lưng** (số tài khoản ≥ 10 và một nguồn chiếm > 50%). Không có số thì chỉ nói "vấn đề bảo mật, không phải quá tải". Khẳng định hình thái tấn công mà không có hình dạng nguồn là đoán — đúng cái mình đang cấm LLM làm, nên luật cũng không được phép. Có sửa một assert trong test của Đức theo hướng này, mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật".
+
+**Baseline — "có" phải nghĩa là "đủ điểm để tin".** `p95_baseline > 0` chỉ nói *có số*, không nói *số đó tính trên đủ dữ liệu*. Prometheus không có volume nên `docker compose down` là mất sạch lịch sử, mà `quantile_over_time(...[30m:1m])` **vẫn trả về một con số** dù chỉ có vài điểm. Thêm `BASELINE_SAMPLE_COUNT_30M` đếm điểm thật, ngưỡng 20/30. Verify ngay trong lần chạy hôm nay: sau khi dựng lại stack, số điểm là **1** — đúng tình huống Trung gặp báo nhầm.
+
+Chặn theo cấu trúc chứ không theo quy trình: không phụ thuộc ai nhớ chạy warm-up. Và **không làm Agent mù** — ngưỡng cứng vẫn xét bình thường, chỉ đường lệch baseline bị tạm ngưng. Có test riêng cho điều đó.
+
+Phải kèm cùng điều kiện vào `breached_seconds_by_service()` nữa, nếu không hai chỗ nói khác nhau về cùng một sự việc: `rules.detect()` im lặng còn log lại báo "đã bất thường 300s".
+
+**Fake Prometheus dính bẫy cũ lần thứ tư.** `count_over_time(...)` bọc ngoài câu p95 nên chứa `histogram_quantile`, rơi xuống nhánh p95 và số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, mọi test đi qua đường lệch baseline hỏng im lặng. Đã thêm nhánh và assert canh. Bốn lần cùng một chỗ: nếu thêm hằng PromQL nữa thì nên đổi hẳn sang so nguyên văn.
+
+**Chạy thật, cả chuỗi:** 118 lượt/giây → `INC-1` → giả thuyết 60% nêu đủ hình dạng nguồn → đề xuất `rate_limit` → `Awaiting Approval`.
+
+### Việt (chiều 06/08) — nối war room khi sự cố lan truyền
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Node `link_incidents` — gọi `jira.link_issues()` khi phát hiện lan truyền | ✅ Done | `INC-1 ↔ INC-2` trên sự cố thật |
+| Việt | Chống nối trùng: đọc lại `related_incidents` trước khi gọi | ✅ Done | vòng 2 trở đi không nối lại |
+| Việt | Thêm `all_war_rooms` vào state — sự cố lan **dần** vẫn nối được | ✅ Done | `state.py` |
+| Việt | 11 test mới | ✅ Done | 282 test pass, ruff sạch |
+
+`is_spreading()` phát hiện lan truyền và `classify_severity` nâng cả hai lên P1 từ hôm 03/08. Nhưng nâng mức chỉ nói **"nặng hơn"**, không nói **"hai cái này là một vụ"** — `jira.link_issues()` chưa từng được gọi. Người trực mở Jira thấy hai issue P1 rời rạc và phải tự đoán chúng có liên quan, đúng thứ Agent lẽ ra làm hộ. War-room view của Long đã có sẵn chỗ hiển thị `related_incidents` và cho bấm chuyển qua lại — trước node này chỗ đó luôn rỗng.
+
+**Hai quyết định đáng ghi:**
+
+`all_war_rooms` tách riêng khỏi `war_rooms`. `war_rooms` chỉ chứa issue **mới mở** (dùng cho `hypothesize`, để không chẩn đoán lại mỗi vòng). Nhưng sự cố lan **dần** — A hỏng trước, B hỏng sau vài phút — nên mỗi vòng chỉ có đúng một issue mới, và hai war room không bao giờ gặp nhau để nối. Có test riêng cho kịch bản đó.
+
+Chống nối trùng bằng cách đọc lại `related_incidents` trước khi gọi. `RealJiraClient.link_issues()` POST thẳng lên Jira, gọi lại là tạo link thứ hai giữa đúng hai issue — mà Agent poll vài giây một lần trong lúc sự cố kéo dài hàng chục phút. Cùng loại rác mà `find_open_incident()` chặn ở `open_war_room`.
+
+**Chạy thật trên sự cố lan truyền** (bắn tải cả hai service, p95 9.69s và 4.85s):
+
+```
+Sự cố lan sang 2 service — tính lại severity theo contract ①
+Mở war room INC-1 cho service-thanh-toan (P1)
+Mở war room INC-2 cho service-dat-hang (P1)
+Nối INC-1 ↔ INC-2 — cùng một sự cố lan truyền
+```
+
+**Còn thiếu một phần của ground truth.** `use-cases.md` yêu cầu ba thứ cho lan truyền: nhận ra `service-dat-hang` suy giảm **do phụ thuộc**, link hai incident, và nâng P1. Giờ có (2) và (3); (1) chưa. Giả thuyết cho `INC-2` ra `confidence 10%` và câu *"Chưa đủ bằng chứng để nêu nguyên nhân gốc"* — trung thực, nhưng chưa phải điều `use-cases.md` chấm là đúng. Cần bàn với Đức vì nó là một khẳng định gần với nhân quả.
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

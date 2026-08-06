@@ -104,6 +104,33 @@ BASELINE_DEVIATION_STRONG = 3.0
 #: hai đã trượt.
 MEMORY_NEAR_LIMIT_RATIO = 0.85
 
+# Hình dạng nguồn của credential-stuffing (UC-3).
+
+#: Số tài khoản khác nhau bị thử trong 1 phút để coi là quét danh sách.
+#:
+#: Một người quên mật khẩu thử lại tài khoản **của chính họ**, nên số này quanh
+#: 1. Vượt 10 nghĩa là ai đó đang duyệt qua một danh sách. Đo trên tấn công giả
+#: lập: 100 tài khoản.
+STUFFING_MIN_ACCOUNTS = 10.0
+
+#: Phần request đến từ IP nguồn lớn nhất để coi là tập trung.
+#:
+#: Traffic thật của người dùng trải ra nhiều IP; một nguồn chiếm quá nửa là dấu
+#: hiệu tự động hoá. Đo trên tấn công giả lập: 1.0 — toàn bộ từ một nguồn.
+STUFFING_TOP_SOURCE_RATIO = 0.5
+
+#: Số điểm dữ liệu tối thiểu trong cửa sổ 30 phút để baseline đáng tin.
+#:
+#: Cửa sổ `[30m:1m]` mong đợi 30 điểm. Đòi đủ 30 thì Agent mù suốt nửa tiếng đầu
+#: mỗi lần dựng lại stack — quá chặt cho một buổi demo. Đòi 20 (khoảng 2/3) là
+#: đủ để phân vị có nghĩa mà vẫn dùng được sau ~20 phút.
+#:
+#: Vì sao cần: Prometheus không có volume nên `docker compose down` là mất sạch
+#: lịch sử. Lúc mới chạy 2 phút, baseline tính trên 29 điểm / ~360 — Trung gặp
+#: báo nhầm lúc khởi động lạnh đúng vì thế. `p95_baseline > 0` chỉ nói "có số",
+#: không nói "số đó đáng tin".
+BASELINE_MIN_SAMPLES = 20.0
+
 
 def classify_severity(
     p95: float,
@@ -150,6 +177,7 @@ def detect(
     pool_saturation: float,
     service: str,
     breached_for_seconds: float,
+    baseline_samples: float = 0.0,
 ) -> IncidentSignal | None:
     """Quyết định có phải incident không. Trả `None` nếu bình thường.
 
@@ -178,6 +206,9 @@ def detect(
         p95_now: p95 hiện tại, giây.
         p95_baseline: mức p95 thường ngày, giây. 0 nghĩa là chưa có baseline —
             khi đó bỏ qua cửa lệch baseline, chỉ xét ngưỡng cứng.
+        baseline_samples: số điểm dữ liệu thật trong cửa sổ 30 phút. Dưới
+            `BASELINE_MIN_SAMPLES` thì baseline bị coi là chưa đáng tin và cửa
+            lệch baseline bị bỏ qua — ngưỡng cứng vẫn xét bình thường.
         error_rate: tỷ lệ lỗi 5xx, 0.0–1.0.
         pool_saturation: mức dùng connection pool, 0.0–1.0.
         service: tên service, khớp label `service` trong Prometheus.
@@ -200,7 +231,17 @@ def detect(
         return None
 
     breached_hard = p95_now > P95_P3_SECONDS or error_rate > ERROR_RATE_P3
-    deviated = p95_baseline > 0 and p95_now / p95_baseline >= BASELINE_DEVIATION_RATIO
+    # "Có baseline" phải nghĩa là ĐỦ ĐIỂM ĐỂ TIN, không chỉ là "khác 0".
+    #
+    # Prometheus không có volume nên `docker compose down` là mất sạch lịch sử.
+    # Lúc mới chạy 2 phút, `quantile_over_time(...[30m:1m])` vẫn trả về một con
+    # số — tính trên 29 điểm / ~360. Chia cho nó là báo nhầm, và Trung gặp đúng
+    # chuyện đó lúc khởi động lạnh.
+    #
+    # Chặn bằng số điểm là chặn theo CẤU TRÚC: không phụ thuộc ai nhớ chạy
+    # warm-up trước khi demo.
+    baseline_dung_duoc = p95_baseline > 0 and baseline_samples >= BASELINE_MIN_SAMPLES
+    deviated = baseline_dung_duoc and p95_now / p95_baseline >= BASELINE_DEVIATION_RATIO
     if not (breached_hard or deviated):
         return None
 
@@ -272,6 +313,9 @@ def detect_auth_burst(
     failures_per_second: float,
     breached_for_seconds: float,
     service: str,
+    unique_source_ips: float = 0.0,
+    unique_accounts: float = 0.0,
+    top_source_ratio: float = 0.0,
 ) -> IncidentSignal | None:
     """Dựng tín hiệu UC-3 kèm bằng chứng. `None` nếu bình thường.
 
@@ -282,7 +326,32 @@ def detect_auth_burst(
     phải chuyện chữ nghĩa: nếu kẻ tấn công là nguồn traffic duy nhất thì tỷ lệ
     lỗi là 100% ngay từ request đầu, chưa nói được gì về mức nghiêm trọng — nên
     UC-3 đo số tuyệt đối. Người trực đọc war room phải thấy ngay điều đó.
+
+    ⚠️ **Ba bằng chứng hình thái thêm ngày 06/08.** Trước đó tín hiệu chỉ có
+    đúng một con số (tỷ lệ thất bại), và số đó **không phân biệt được** tấn công
+    với quá tải — cả hai đều làm nhiều lượt đăng nhập hỏng. Đo thật 05/08: LLM
+    nhìn một bằng chứng duy nhất rồi viết "connection pool cạn" cho một vụ
+    credential-stuffing, đúng cái `use-cases.md` gọi là chẩn đoán SAI.
+
+    Hình dạng nguồn mới là thứ phân biệt:
+
+    | | nguồn | tài khoản | nguồn lớn nhất |
+    |---|---|---|---|
+    | Credential-stuffing | ít | **nhiều** | gần 1.0 |
+    | Người dùng gõ nhầm | nhiều | ít | thấp |
+    | Service lỗi | nhiều | nhiều | thấp |
+
+    Args:
+        unique_source_ips: Số IP nguồn khác nhau trong 1 phút.
+        unique_accounts: Số tài khoản khác nhau bị thử trong 1 phút.
+        top_source_ratio: Phần request đến từ IP nguồn lớn nhất, 0–1.
     """
+    _reject_nan(
+        unique_source_ips=unique_source_ips,
+        unique_accounts=unique_accounts,
+        top_source_ratio=top_source_ratio,
+    )
+
     severity = classify_auth_burst(failures_per_second, breached_for_seconds)
     if severity is None:
         return None
@@ -306,6 +375,21 @@ def detect_auth_burst(
                 name="số request /login thất bại mỗi giây",
                 value=failures_per_second,
                 promql=prometheus.AUTH_FAILURE_RATE,
+            ),
+            MetricEvidence(
+                name="số IP nguồn khác nhau (1 phút)",
+                value=unique_source_ips,
+                promql=prometheus.AUTH_UNIQUE_SOURCE_IPS,
+            ),
+            MetricEvidence(
+                name="số tài khoản bị thử (1 phút)",
+                value=unique_accounts,
+                promql=prometheus.AUTH_UNIQUE_ACCOUNTS,
+            ),
+            MetricEvidence(
+                name="tỷ lệ từ IP nguồn lớn nhất",
+                value=top_source_ratio,
+                promql=prometheus.AUTH_TOP_SOURCE_RATIO,
             ),
         ],
     )
@@ -618,9 +702,29 @@ def _cau_giai_thuyet(
     elif login is not None and login.value >= AUTH_FAILURE_P2:
         cau = (
             f"{signal.affected_service} đang nhận {login.value:.0f} lượt đăng nhập thất bại "
-            "mỗi giây — hình thái phù hợp với credential-stuffing, không phải quá tải. "
-            "Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx."
+            "mỗi giây — vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ: "
+            "latency bình thường và không có lỗi 5xx."
         )
+        # Hình dạng nguồn là thứ phân biệt tấn công với người dùng gõ nhầm.
+        # Chỉ nói ra khi số liệu thật sự chỉ về credential-stuffing — nhiều tài
+        # khoản bị thử từ ít nguồn. Nói "credential-stuffing" mà không có hai
+        # con số đó là đoán, đúng cái mình cấm LLM làm.
+        nguon = _tim("IP nguồn khác nhau")
+        tai_khoan = _tim("tài khoản bị thử")
+        ty_le = _tim("IP nguồn lớn nhất")
+        if (
+            tai_khoan is not None
+            and nguon is not None
+            and tai_khoan.value >= STUFFING_MIN_ACCOUNTS
+            and ty_le is not None
+            and ty_le.value >= STUFFING_TOP_SOURCE_RATIO
+        ):
+            cau += (
+                f" Hình thái credential-stuffing: {tai_khoan.value:.0f} tài khoản bị thử "
+                f"từ {nguon.value:.0f} IP nguồn, trong đó một nguồn chiếm "
+                f"{ty_le.value * 100:.0f}% số lượt — một người quên mật khẩu không tạo ra "
+                "hình dạng này."
+            )
     else:
         cau = (
             f"{signal.affected_service} bất thường ở {signal.metric_name} "
@@ -751,6 +855,7 @@ __all__ = [
     "AUTH_FAILURE_P3",
     "BASELINE_DEVIATION_RATIO",
     "BASELINE_DEVIATION_STRONG",
+    "BASELINE_MIN_SAMPLES",
     "CRASHLOOP_RESTARTS",
     "DEPLOY_WINDOW_MINUTES",
     "POOL_EXHAUSTED_RATIO",

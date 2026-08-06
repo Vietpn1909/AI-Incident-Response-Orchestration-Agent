@@ -240,12 +240,24 @@ class RealJiraClient:
                 "issuetype": {"name": "Task"},
                 "summary": signal.title[:250],
                 "labels": labels_for(signal.severity, signal.affected_service),
+                # Nhúng cả `IncidentSignal` dạng máy đọc vào description.
+                #
+                # Không có bước này thì `Incident.signal` KHÔNG BAO GIỜ dựng lại
+                # được từ Jira, và war-room view của Long luôn hiện "Chưa có tín
+                # hiệu gốc" — mất đúng mục trưng bằng chứng kèm PromQL kiểm chứng
+                # được, tức thứ chứng minh "chẩn đoán có bằng chứng". Phát hiện
+                # ngày 06/08 khi chạy thử UI: cả 6 incident trên board đều
+                # `signal=None`.
+                #
+                # Đặt ở description chứ không thêm một comment nữa: mỗi war room
+                # đã có comment bối cảnh của `open_war_room`, thêm nữa chỉ làm ồn.
                 "description": _adf(
                     f"Phát hiện tự động lúc {signal.detected_at:%Y-%m-%d %H:%M:%S %Z}.\n\n"
                     f"{signal.metric_name} = {signal.metric_value:.3f} "
                     f"(ngưỡng {signal.threshold:.3f}), vượt liên tục "
                     f"{signal.breached_for_seconds:.0f}s.\n\n"
-                    f"Service ảnh hưởng: {signal.affected_service}"
+                    f"Service ảnh hưởng: {signal.affected_service}",
+                    {_PAYLOAD_KEY: "signal", "data": signal.model_dump(mode="json")},
                 ),
             }
         }
@@ -489,7 +501,7 @@ class RealJiraClient:
             issue = self._call(
                 "GET",
                 f"/rest/api/3/issue/{jira_key}"
-                "?fields=summary,labels,status,created,resolutiondate,issuelinks",
+                "?fields=summary,labels,status,created,resolutiondate,issuelinks,description",
             )
         except JiraApiError as exc:
             if exc.status_code == 404:
@@ -501,12 +513,19 @@ class RealJiraClient:
         # Dựng lại dữ liệu có cấu trúc từ khối JSON trong comment. Không có
         # bước này thì `proposal` luôn None và webhook không biết thi hành hành
         # động gì — lỗi 422 gặp thật khi chạy verify end-to-end.
-        for payload in self._payloads_from_comments(jira_key):
+        # Description trước comment: `signal` nằm ở description (nhúng lúc tạo),
+        # còn `hypothesis`/`proposal` nằm ở comment.
+        payloads = _extract_payloads((issue.get("fields") or {}).get("description"))
+        payloads.extend(self._payloads_from_comments(jira_key))
+
+        for payload in payloads:
             kind, data = payload.get(_PAYLOAD_KEY), payload.get("data")
             if not isinstance(data, dict):
                 continue
             try:
-                if kind == "hypothesis":
+                if kind == "signal":
+                    incident.signal = IncidentSignal.model_validate(data)
+                elif kind == "hypothesis":
                     incident.hypotheses.append(Hypothesis.model_validate(data))
                 elif kind == "proposal":
                     # Lấy đề xuất MỚI NHẤT: incident có thể được đề xuất lại sau

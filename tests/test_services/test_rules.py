@@ -40,6 +40,9 @@ def _normal(**overrides) -> dict:
         "pool_saturation": 0.2,
         "service": "service-thanh-toan",
         "breached_for_seconds": 60.0,
+        # Đủ điểm để baseline đáng tin. Thêm 06/08: `p95_baseline > 0` chỉ nói
+        # "có số", không nói "số đó tính trên đủ dữ liệu".
+        "baseline_samples": 30.0,
     } | overrides
 
 
@@ -266,3 +269,36 @@ def test_detect_tu_choi_nan():
 def test_classify_auth_burst_tu_choi_nan():
     with pytest.raises(ValueError, match="NaN"):
         classify_auth_burst(float("nan"), breached_for_seconds=60.0)
+
+
+# ───────── baseline phải ĐỦ ĐIỂM mới tin, không chỉ khác 0 (06/08)
+
+
+def test_baseline_it_diem_thi_khong_bao_lech_baseline():
+    """Trung gặp báo nhầm lúc khởi động lạnh; Đức đo ra nguyên nhân.
+
+    Prometheus không có volume nên `docker compose down` là mất sạch lịch sử.
+    Lúc mới chạy 2 phút, `quantile_over_time(...[30m:1m])` VẪN trả về một con số
+    — tính trên 29 điểm / ~360. `p95_baseline > 0` chỉ nói "có số", không nói
+    "số đó đáng tin".
+    """
+    assert detect(**_normal(p95_now=0.5, p95_baseline=0.18, baseline_samples=3.0)) is None
+
+
+def test_baseline_du_diem_thi_bao_binh_thuong():
+    signal = detect(**_normal(p95_now=0.5, p95_baseline=0.18, baseline_samples=30.0))
+
+    assert signal is not None
+    assert signal.severity == Severity.P4
+
+
+def test_it_diem_khong_lam_mat_duong_nguong_cung():
+    """Chặn baseline KHÔNG được làm Agent mù với sự cố rõ ràng.
+
+    Khởi động lạnh vẫn phải bắt được p95 5.1s — đó là ngưỡng cứng, không cần
+    lịch sử để biết là bất thường.
+    """
+    signal = detect(**_normal(p95_now=5.1, p95_baseline=0.18, baseline_samples=2.0))
+
+    assert signal is not None
+    assert signal.severity == Severity.P2
