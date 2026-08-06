@@ -534,4 +534,47 @@ UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 8
 
 ---
 
+## 2026-08-06
+
+| Member | Task | Status | Output | Time |
+|--------|------|--------|--------|------|
+| Trương Công Thái Đức | Review + merge PR #20 (Trung) — telemetry UC-3 và đo lại UC-2 | ✅ Done | 261 test pass | - |
+| Trương Công Thái Đức | Chốt chống LLM **phủ định** nguyên nhân đã có bằng chứng | ✅ Done | UC-2 từ 3/8 lên **6/6** đo bằng LLM thật | - |
+| Trương Công Thái Đức | Đồng bộ `develop` và `main` sau khi PR #20 nhắm nhầm base | ✅ Done | cả hai ở `5542130` | - |
+
+**Tổng kết ngày:** Hoàn tất cặp chốt bảo vệ ranh giới giữa luật và LLM. Và phát hiện ra một điều đáng suy nghĩ hơn cả con số M3.
+
+**Trung làm hai việc đúng.** Telemetry UC-3 (số IP nguồn, số tài khoản bị thử, tỷ lệ nguồn lớn nhất, cửa sổ trượt 60s) thiết kế tốt — dùng `set_function` nên tính lúc scrape, có lock, và **không đưa IP/username thô vào label**, tránh cả nổ cardinality lẫn chuyện riêng tư. Agent chưa đọc ba metric đó, nhưng anh ấy tự ghi rõ trong báo cáo; phần nối là `prometheus.py`/`rules.py` của Việt.
+
+**Con số 3/8 của UC-2 sửa lại hiểu biết của tôi.** Hôm qua tôi chạy **một** lượt thấy đúng nên tưởng đã xong. Trung chạy **8** lượt và chỉ 3 lượt đúng. Một lượt không đại diện — đây đúng là lý do phần eval cần nhiều lượt, và là lần thứ hai trong tuần một phép đo của người khác sửa lại kết luận của tôi.
+
+**Kiểu hỏng lộ ra từ dữ liệu thô của Trung.** LLM nhìn *"đỉnh bộ nhớ 10 phút = 125,9 MB"* trên trần 128 MB — **98,4% trần** — rồi viết *"cả hai đều nằm dưới giới hạn 128 MB, không cho thấy áp lực bộ nhớ"*. Đúng về số học, vô lý về vận hành. Nó còn cãi lại cả quyết định phát hiện: *"restart = 1, dưới ngưỡng kích hoạt là 2.000"*.
+
+**Đây là mặt ngược của lỗi UC-3 hôm qua**, và hai cái cộng lại mới lộ ra khiếm khuyết thật:
+
+| | LLM làm gì | Cửa chặn |
+|---|---|---|
+| UC-3 | **Bịa** nguyên nhân không có trong bằng chứng | `_nguyen_nhan_khong_co_can_cu()` (05/08) |
+| UC-2 | **Xoá** nguyên nhân đã có bằng chứng | `_phu_dinh_ket_luan_cua_luat()` (06/08) |
+
+Cùng một khiếm khuyết: **pha 2 được phép ghi đè pha 1 theo cả hai chiều.** Hai cửa cộng lại nói được một câu gọn: *LLM chỉ được diễn đạt lại kết luận của luật, không được đổi nó.*
+
+Cửa mới cố ý **hẹp**: không bắt "không phải" trơn, vì câu ĐÚNG của luật cho UC-3 chứa *"không phải quá tải"* — đó là loại trừ một nguyên nhân **sai**, chính là thứ cần giữ. Chỉ bắt việc phủ định **mọi** nguyên nhân. Và không chặn khi chính luật cũng chịu: câu luật ở nhánh mặc định có cụm "chưa đủ bằng chứng để nêu nguyên nhân" thì LLM nói "chưa xác định được" là **đồng ý**, giữ nguyên — chặn cả trường hợp đó là ép Agent khẳng định một nguyên nhân nó không có bằng chứng, đúng thứ cửa kia sinh ra để ngăn.
+
+**Đo bằng LLM thật, 6 lượt liên tiếp trên đúng bộ số đã làm Trung ra 3/8: 6/6 đúng.**
+
+**Nhưng con số đó nói ít hơn nó nghe, và đây mới là phần đáng báo cáo mentor.** Log cho thấy cửa chặn kích hoạt ở **5/6 lượt** — tức LLM vẫn cố phủ định gần như mọi lần, và câu đúng cuối cùng **đến từ luật, không phải từ LLM**. Cộng với UC-3 hôm qua (câu đúng cũng của luật), tình hình thật là:
+
+| UC | Câu chẩn đoán đúng đến từ đâu |
+|---|---|
+| UC-1 | **LLM viết**, có bằng chứng chống lưng |
+| UC-2 | **LUẬT viết** — LLM cố phủ định ở 5/6 lượt |
+| UC-3 | **LUẬT viết** — LLM bịa nguyên nhân, bị bỏ |
+
+Nếu chỉ báo cáo "M3 gần 100%" thì **nói quá về phần AI**. Sự thật là ở hai trong ba use case, LLM đang làm chất lượng chẩn đoán **tệ hơn**, và giá trị thật của nó nằm ở UC-1 cộng với việc viết câu cho người đọc. Đây là số liệu làm cho câu hỏi gửi mentor có sức nặng: *LLM chỉ diễn giải còn luật ra quyết định — có đủ coi là "AI Agent" không?*
+
+**Chuyện quy trình:** PR #20 của Trung nhắm base `main` thay vì `develop`, và tôi merge mà không kiểm base. Không gây hậu quả vì nhánh anh ấy đã chứa toàn bộ `develop` nên `main` nhận đủ, nhưng `develop` bị bỏ lại 4 commit — đã fast-forward lại. Lần sau phải xem `base=` trước khi merge.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

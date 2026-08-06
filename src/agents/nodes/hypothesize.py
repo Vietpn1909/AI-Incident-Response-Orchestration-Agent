@@ -184,6 +184,15 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
         logger.warning("%s: không tách được giả thuyết từ câu trả lời LLM", signal.affected_service)
         return hypothesis
 
+    if _phu_dinh_ket_luan_cua_luat(statement, hypothesis.statement):
+        logger.warning(
+            "%s: BỎ câu của LLM vì nó PHỦ ĐỊNH một nguyên nhân mà luật đã chứng minh "
+            "bằng bằng chứng. Giữ câu do luật ghép. Câu bị bỏ: %s",
+            signal.affected_service,
+            statement,
+        )
+        return hypothesis
+
     thieu_can_cu = _nguyen_nhan_khong_co_can_cu(statement, signal, deploy)
     if thieu_can_cu:
         logger.warning(
@@ -198,6 +207,65 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
         return hypothesis
 
     return hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning})
+
+
+#: Cụm mà `rules._cau_giai_thuyet()` dùng ở nhánh cuối, tức "luật KHÔNG tìm ra
+#: nguyên nhân gốc". Câu luật chứa cụm này nghĩa là luật cũng chịu, nên LLM nói
+#: "chưa xác định được" là **đồng ý**, không phải mâu thuẫn.
+#:
+#: Chuỗi literal trong `rules.py`, canh bằng `test_cum_chua_du_bang_chung_con_khop`.
+_LUAT_CUNG_CHIU = "chưa đủ bằng chứng để nêu nguyên nhân"
+
+#: Cách LLM viết khi nó phủ định sạch nguyên nhân gốc.
+#:
+#: Lấy nguyên văn từ `eval/runs.csv` của Trung — 5/8 lượt UC-2 trả về đúng dạng
+#: "Không có nguyên nhân gốc từ quá tải bộ nhớ hoặc crash container."
+#:
+#: CỐ Ý hẹp. Không bắt "không phải" trơn, vì câu ĐÚNG của luật cho UC-3 chứa
+#: "không phải quá tải" — đó là loại trừ một nguyên nhân **sai**, chính là thứ
+#: mình muốn giữ. Chỉ bắt việc phủ định **mọi** nguyên nhân.
+_CUM_PHU_DINH = (
+    "không có nguyên nhân gốc",
+    "không xác định được nguyên nhân",
+    "chưa xác định được nguyên nhân",
+    "chưa đủ bằng chứng để nêu nguyên nhân",
+)
+
+
+def _phu_dinh_ket_luan_cua_luat(statement_llm: str, statement_luat: str) -> bool:
+    """LLM có đang phủ định một nguyên nhân mà luật đã chứng minh không?
+
+    ## Vì sao cần cửa này — đo được ngày 06/08 từ eval của Trung
+
+    UC-2 sau khi Việt thêm bằng chứng bộ nhớ: luật ghép câu **đúng**
+    ("OOM-kill: bộ nhớ leo tới 126 MB, chạm giới hạn 128 MB"), nhưng **5/8 lượt**
+    Qwen viết lại thành:
+
+        "Không có nguyên nhân gốc từ quá tải bộ nhớ hoặc crash container."
+
+    kèm lý giải:
+
+        "…đỉnh bộ nhớ 10 phút = 125.9 MB — cả hai đều nằm dưới giới hạn 128 MB,
+         không cho thấy áp lực bộ nhớ."
+
+    Nó nhìn 125,9 MB trên trần 128 MB — **98,4% trần** — rồi kết luận không có
+    áp lực bộ nhớ. Đúng về số học, vô lý về vận hành. Nó còn cãi lại cả quyết
+    định phát hiện: *"restart = 1, dưới ngưỡng kích hoạt là 2.000"*.
+
+    ## Đây là mặt ngược của `_nguyen_nhan_khong_co_can_cu()`
+
+    Cùng một khiếm khuyết thiết kế: pha 2 được phép ghi đè pha 1 **theo cả hai
+    chiều**. UC-3 thì LLM *bịa thêm* nguyên nhân không có bằng chứng; UC-2 thì
+    LLM *xoá đi* nguyên nhân đã có bằng chứng. Hai cửa cộng lại nói được một
+    câu: **LLM chỉ được diễn đạt lại kết luận của luật, không được đổi nó.**
+
+    Không chặn khi chính luật cũng chịu: nếu câu luật chứa
+    `_LUAT_CUNG_CHIU` thì LLM nói "chưa xác định được" là **đồng ý**, giữ nguyên.
+    """
+    if _LUAT_CUNG_CHIU in statement_luat.lower():
+        return False
+    cau = statement_llm.lower()
+    return any(cum in cau for cum in _CUM_PHU_DINH)
 
 
 #: Nguyên nhân LLM hay nêu → bằng chứng phải có mặt để nêu được nó.

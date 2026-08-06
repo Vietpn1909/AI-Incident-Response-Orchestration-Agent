@@ -267,3 +267,64 @@ def test_khoa_can_cu_con_khop_voi_rules():
     assert "db_pool" in ten_uc1
     if uc2 is not None:
         assert "bộ nhớ" in " ".join(e.name for e in uc2.evidence).lower()
+
+
+# ────────────────── cửa chống phủ định (thêm 06/08)
+
+
+def test_bo_cau_llm_khi_no_phu_dinh_nguyen_nhan_da_co_bang_chung(monkeypatch):
+    """UC-2: luật chứng minh OOM, LLM viết "không có nguyên nhân gốc".
+
+    Lấy nguyên văn từ `eval/runs.csv` — 5/8 lượt Qwen trả về đúng dạng này, kèm
+    lý giải "đỉnh bộ nhớ 125.9 MB… nằm dưới giới hạn 128 MB, không cho thấy áp
+    lực bộ nhớ". 98,4% trần mà kết luận không có áp lực.
+    """
+    signal = rules.detect_crashloop(
+        service_up=1.0, restarts=1.0, down_for_seconds=0.0, service="service-thanh-toan",
+        memory_ratio=0.4197, memory_peak_mb=125.9,
+    )
+    assert signal is not None, "bộ số này phải sinh được tín hiệu UC-2"
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Không có nguyên nhân gốc từ quá tải bộ nhớ hoặc crash container."),
+    )
+
+    assert "OOM-kill" in h.statement, "phải giữ câu của luật"
+    assert h.reasoning == ""
+
+
+def test_giu_cau_llm_phu_dinh_khi_chinh_luat_cung_chiu(monkeypatch):
+    """Luật không tìm ra nguyên nhân thì LLM nói "chưa xác định được" là ĐỒNG Ý.
+
+    Chặn cả trường hợp này là ép Agent khẳng định một nguyên nhân nó không có
+    bằng chứng — đúng thứ hai cửa kia sinh ra để ngăn.
+    """
+    signal = rules.detect(
+        p95_now=1.2, p95_baseline=0.5, error_rate=0.0, pool_saturation=0.1,
+        service="service-thanh-toan", breached_for_seconds=60.0,
+    )
+    assert signal is not None
+    cau_luat = rules.build_hypothesis(signal, None).statement
+    assert "chưa đủ bằng chứng" in cau_luat.lower(), "bộ số này phải rơi vào nhánh mặc định"
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(signal, llm=_LlmNoiSai("Chưa xác định được nguyên nhân gốc."))
+
+    assert "chưa xác định được" in h.statement.lower()
+
+
+def test_cum_chua_du_bang_chung_con_khop():
+    """Cụm nhận diện "luật cũng chịu" phải khớp thứ `rules.py` thật sự sinh ra.
+
+    Cùng loại canh với `test_khoa_can_cu_con_khop_voi_rules`: `rules.py` đổi câu
+    ở nhánh mặc định là cửa này lặng lẽ chặn oan mọi câu phủ định hợp lệ.
+    """
+    signal = rules.detect(
+        p95_now=1.2, p95_baseline=0.5, error_rate=0.0, pool_saturation=0.1,
+        service="s", breached_for_seconds=60.0,
+    )
+    cau_mac_dinh = rules.build_hypothesis(signal, None).statement.lower()
+
+    assert node._LUAT_CUNG_CHIU in cau_mac_dinh
