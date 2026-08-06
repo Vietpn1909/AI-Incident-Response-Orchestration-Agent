@@ -544,6 +544,7 @@ UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 8
 | Trương Công Thái Đức | Chạy thử trọn kịch bản demo trên Jira thật, tìm 4 chỗ sẽ vỡ | ✅ Done | KAN-12, `demo/README.md` | - |
 | Trương Công Thái Đức | Nhúng `IncidentSignal` vào description để war-room view đọc lại được | ✅ Done | `src/services/jira/real.py` | - |
 | Trương Công Thái Đức | Bảng dịch thuật ngữ cho UI — dịch THÊM, giữ nguyên tên metric + PromQL | ✅ Done | `ui/labels.py`, 10 test | - |
+| Trương Công Thái Đức | Viết lại phần diễn đạt của `war_room.py` và `status_page.py` (Đức nhận thay Long) | ✅ Done | 275 test pass, verify trên 9/9 incident thật | - |
 
 **Tổng kết ngày:** Hoàn tất cặp chốt bảo vệ ranh giới giữa luật và LLM. Và phát hiện ra một điều đáng suy nghĩ hơn cả con số M3.
 
@@ -618,6 +619,23 @@ Thời gian khách phải chờ: 4.42 giây (thường 0.58 giây — lệch 7.6
 Hai test canh chuỗi, cùng họ với `test_runbooks.py`: bảng dịch so khớp theo chuỗi con của tên `MetricEvidence`, nên `rules.py` đổi một chữ là bảng lặng lẽ rơi về tên thô — không sai, nhưng mất hết công dịch và không có gì đỏ lên. `test_moi_ten_metric_deu_dich_duoc` gọi thẳng `rules.detect*()` cả ba UC rồi đối chiếu.
 
 Một chi tiết thứ tự có ý nghĩa: `"đỉnh bộ nhớ"` phải đứng **trước** `"bộ nhớ đang dùng"` trong bảng, không thì hai metric bộ nhớ của Việt dịch thành cùng một câu. Có test riêng cho chỗ đó.
+
+**Làm luôn phần layout UI thay Long, theo yêu cầu của Đức.** Ghi rõ ở đây vì `ui/` là của Long và hôm 02/08 tôi đã tự đặt luật "ai định đụng file của người khác thì nhắn một câu trước, kể cả t". Lần này Đức quyết, nhưng vẫn phải nói cho Long biết phần nào bị sửa và vì sao.
+
+Bốn thay đổi trong `war_room.py`:
+
+1. **Câu mở đầu trang** — ba câu nói AI làm gì và **không** tự sửa. Trước đó trang không nói nó là cái gì.
+2. **Tách danh sách thành "đang xảy ra" / "đã xử lý xong"**, gấp phần đã xong lại. Trước đó 9 incident đổ chung một chỗ mà 8 cái là sự cố cũ.
+3. **Đánh số ①②③** — người xem thấy đây là ba bước suy nghĩ, không phải ba khối rời.
+4. **Bằng chứng hai tầng**: câu tiếng Việt + dòng `↳` giữ nguyên văn tên metric, PromQL trong `st.code()` bấm copy được.
+
+`status_page.py`: tên dịch vụ thành "Thanh toán"/"Đặt hàng" nhưng vẫn giữ `↳ service-thanh-toan` bên dưới, và đổi tên khối JSON debug từ *"để tham khảo khi code"* thành *"Dữ liệu thô (dành cho người trực)"* — đây là trang công khai, câu cũ đọc ra như trang chưa làm xong.
+
+**Một lỗi bắt được nhờ không tin HTTP 200.** Cả hai trang trả 200 và log sạch, nhưng Streamlit chỉ chạy script khi có websocket — 200 chỉ là vỏ trang. Mô phỏng lại `sys.path` mà `streamlit run ui/war_room.py` thật sự dựng thì ra `ModuleNotFoundError: No module named 'ui'`: streamlit đặt **thư mục ui/** vào path, không đặt thư mục gốc repo. Pytest import được vì nó tự thêm rootdir.
+
+Tức là test xanh, trang trả 200, mà Long chạy thật sẽ vỡ ngay dòng import. Vá bằng `sys.path.insert` như `scripts/run_agent.py` đang làm. Cùng họ với vụ `.env` làm test đỏ theo máy hôm qua: **môi trường lúc test khác môi trường lúc chạy.**
+
+**Verify trên dữ liệu thật thay vì chỉ mở trang xem.** Chạy lại đúng các phép truy cập field của UI trên **cả 9 incident** trên board — kể cả 8 cái cũ thiếu `signal` và `hypotheses`, vì đó mới là chỗ dễ vỡ bằng `KeyError`. Kết quả 9/9 render được, 0 lỗi.
 
 ---
 

@@ -61,6 +61,40 @@ SEVERITY: dict[str, tuple[str, str, str]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Tên dịch vụ
+# ---------------------------------------------------------------------------
+
+#: Tên dịch vụ trong metric → tên người ngoài hiểu.
+#:
+#: `service-thanh-toan` là tên kỹ thuật, khớp label `service` trong Prometheus
+#: (contract ①) nên KHÔNG được đổi ở phía backend. Chỉ đổi cách hiển thị.
+SERVICE: dict[str, str] = {
+    "service-thanh-toan": "Thanh toán",
+    "service-dat-hang": "Đặt hàng",
+}
+
+#: Trạng thái sức khoẻ trong `ServiceStatus.health` → (icon, câu tiếng Việt).
+#:
+#: Bốn giá trị này là contract ④, sẽ không đổi.
+HEALTH: dict[str, tuple[str, str]] = {
+    "operational": ("🟢", "Hoạt động bình thường"),
+    "degraded": ("🟡", "Chậm hơn bình thường"),
+    "down": ("🔴", "Đang gặp sự cố"),
+    "maintenance": ("🔧", "Đang bảo trì"),
+}
+
+
+def service(ten_goc: str) -> str:
+    """`"service-thanh-toan"` → `"Thanh toán"`. Không nhận ra thì trả tên gốc."""
+    return SERVICE.get(ten_goc, ten_goc)
+
+
+def health(trang_thai: str) -> tuple[str, str]:
+    """`"down"` → `("🔴", "Đang gặp sự cố")`."""
+    return HEALTH.get(trang_thai, ("⚪", trang_thai))
+
+
+# ---------------------------------------------------------------------------
 # Trạng thái vòng đời incident
 # ---------------------------------------------------------------------------
 

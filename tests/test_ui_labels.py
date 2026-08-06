@@ -109,3 +109,15 @@ def test_dinh_bo_nho_khong_bi_nham_voi_bo_nho_dang_dung():
 
     assert dinh != dang_dung
     assert "nhiều nhất" in dinh
+
+
+def test_ten_dich_vu_va_suc_khoe_deu_dich_duoc():
+    """Khớp tên service trong contract ① và 4 giá trị health của contract ④."""
+    assert labels.service("service-thanh-toan") == "Thanh toán"
+    assert labels.service("service-dat-hang") == "Đặt hàng"
+    # Service lạ hiện tên gốc, không được nuốt mất.
+    assert labels.service("service-moi-nao-do") == "service-moi-nao-do"
+
+    for tinh_trang in ("operational", "degraded", "down", "maintenance"):
+        icon, cau = labels.health(tinh_trang)
+        assert icon and cau and cau != tinh_trang
