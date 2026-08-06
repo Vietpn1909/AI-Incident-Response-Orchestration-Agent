@@ -221,7 +221,12 @@ def test_bo_cau_llm_khi_neu_nguyen_nhan_khong_co_bang_chung(monkeypatch):
     h = node.hypothesize(signal, llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."))
 
     assert "pool" not in h.statement.lower(), "phải bỏ câu của LLM, giữ câu của luật"
-    assert "credential-stuffing" in h.statement
+    # Mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật" ngày
+    # 06/08: cụm đầu giờ chỉ xuất hiện khi CÓ bằng chứng hình dạng nguồn (số
+    # tài khoản bị thử, tỷ lệ IP nguồn lớn nhất). Tín hiệu trong test này chỉ
+    # có tỷ lệ thất bại, nên khẳng định "credential-stuffing" sẽ là đoán — đúng
+    # cái mình đang cấm LLM làm, nên luật cũng không được phép.
+    assert "vấn đề bảo mật" in h.statement
     # `reasoning` của LLM cũng phải bỏ: nó diễn giải cho một kết luận vừa bị bỏ.
     assert h.reasoning == ""
 
@@ -229,8 +234,12 @@ def test_bo_cau_llm_khi_neu_nguyen_nhan_khong_co_bang_chung(monkeypatch):
 def test_giu_cau_llm_khi_nguyen_nhan_co_bang_chung(monkeypatch):
     """Không được chặn oan: có bằng chứng pool thì nói pool là hợp lệ."""
     signal = rules.detect(
-        p95_now=3.3, p95_baseline=0.7, error_rate=0.0, pool_saturation=1.0,
-        service="service-thanh-toan", breached_for_seconds=60.0,
+        p95_now=3.3,
+        p95_baseline=0.7,
+        error_rate=0.0,
+        pool_saturation=1.0,
+        service="service-thanh-toan",
+        breached_for_seconds=60.0,
     )
     monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
 
@@ -256,12 +265,20 @@ def test_khoa_can_cu_con_khop_voi_rules():
     `MetricEvidence` là cửa này lặng lẽ chặn oan hoặc bỏ lọt.
     """
     uc1 = rules.detect(
-        p95_now=3.3, p95_baseline=0.7, error_rate=0.0, pool_saturation=1.0,
-        service="s", breached_for_seconds=60.0,
+        p95_now=3.3,
+        p95_baseline=0.7,
+        error_rate=0.0,
+        pool_saturation=1.0,
+        service="s",
+        breached_for_seconds=60.0,
     )
     uc2 = rules.detect_crashloop(
-        service_up=1.0, restarts=4.0, down_for_seconds=0.0, service="s",
-        memory_ratio=0.89, memory_peak_mb=113.0,
+        service_up=1.0,
+        restarts=4.0,
+        down_for_seconds=0.0,
+        service="s",
+        memory_ratio=0.89,
+        memory_peak_mb=113.0,
     )
     ten_uc1 = " ".join(e.name for e in uc1.evidence).lower()
     assert "db_pool" in ten_uc1
@@ -280,8 +297,12 @@ def test_bo_cau_llm_khi_no_phu_dinh_nguyen_nhan_da_co_bang_chung(monkeypatch):
     lực bộ nhớ". 98,4% trần mà kết luận không có áp lực.
     """
     signal = rules.detect_crashloop(
-        service_up=1.0, restarts=1.0, down_for_seconds=0.0, service="service-thanh-toan",
-        memory_ratio=0.4197, memory_peak_mb=125.9,
+        service_up=1.0,
+        restarts=1.0,
+        down_for_seconds=0.0,
+        service="service-thanh-toan",
+        memory_ratio=0.4197,
+        memory_peak_mb=125.9,
     )
     assert signal is not None, "bộ số này phải sinh được tín hiệu UC-2"
     monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
@@ -302,8 +323,12 @@ def test_giu_cau_llm_phu_dinh_khi_chinh_luat_cung_chiu(monkeypatch):
     bằng chứng — đúng thứ hai cửa kia sinh ra để ngăn.
     """
     signal = rules.detect(
-        p95_now=1.2, p95_baseline=0.5, error_rate=0.0, pool_saturation=0.1,
-        service="service-thanh-toan", breached_for_seconds=60.0,
+        p95_now=1.2,
+        p95_baseline=0.5,
+        error_rate=0.0,
+        pool_saturation=0.1,
+        service="service-thanh-toan",
+        breached_for_seconds=60.0,
     )
     assert signal is not None
     cau_luat = rules.build_hypothesis(signal, None).statement
@@ -322,8 +347,12 @@ def test_cum_chua_du_bang_chung_con_khop():
     ở nhánh mặc định là cửa này lặng lẽ chặn oan mọi câu phủ định hợp lệ.
     """
     signal = rules.detect(
-        p95_now=1.2, p95_baseline=0.5, error_rate=0.0, pool_saturation=0.1,
-        service="s", breached_for_seconds=60.0,
+        p95_now=1.2,
+        p95_baseline=0.5,
+        error_rate=0.0,
+        pool_saturation=0.1,
+        service="s",
+        breached_for_seconds=60.0,
     )
     cau_mac_dinh = rules.build_hypothesis(signal, None).statement.lower()
 

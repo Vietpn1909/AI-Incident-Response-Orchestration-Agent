@@ -144,6 +144,13 @@ _METRIC: tuple[tuple[str, str, str], ...] = (
     ("db_pool_connections_in_use / db_pool_size", "Chỗ kết nối cơ sở dữ liệu đã dùng", "%"),
     ("tỷ lệ lỗi 5xx", "Tỷ lệ giao dịch bị lỗi", "%"),
     ("số request /login thất bại mỗi giây", "Số lần đăng nhập sai mỗi giây", "lần/giây"),
+    # Ba bằng chứng "hình dạng nguồn" của UC-3, Việt nối vào ngày 06/08. Chúng
+    # là thứ phân biệt TẤN CÔNG với QUÁ TẢI: một nguồn thử rất nhiều tài khoản
+    # là credential-stuffing, còn nhiều người dùng thật quên mật khẩu thì rải
+    # đều trên nhiều nguồn. Câu dịch nói ra ý đó, không chỉ dịch chữ.
+    ("số IP nguồn khác nhau", "Số máy khác nhau đang thử đăng nhập", "máy"),
+    ("số tài khoản bị thử", "Số tài khoản bị thử mật khẩu", "tài khoản"),
+    ("tỷ lệ từ IP nguồn lớn nhất", "Phần trăm đến từ một máy duy nhất", "%"),
     ("đỉnh bộ nhớ", "Bộ nhớ dùng nhiều nhất trong 10 phút", "MB"),
     ("bộ nhớ đang dùng / giới hạn container", "Bộ nhớ đang dùng so với giới hạn", "%"),
     ("số lần restart", "Số lần dịch vụ tự khởi động lại", "lần"),

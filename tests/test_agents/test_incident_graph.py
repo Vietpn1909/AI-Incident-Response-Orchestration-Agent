@@ -122,3 +122,31 @@ def test_khong_co_node_nao_thuc_thi_khac_phuc():
 
     ten = set(graph.get_graph().nodes)
     assert not {"execute_remediation", "remediate", "approve"} & ten
+
+
+# ───────────────────────────────────── nhánh rẽ lan truyền (06/08)
+
+
+@pytest.mark.parametrize(
+    ("state", "mong_doi"),
+    [
+        ({"spreading": True}, "link_incidents"),
+        ({"spreading": False}, "propose_remediation"),
+        # Chưa chạy classify_severity thì coi như không lan truyền.
+        ({}, "propose_remediation"),
+    ],
+)
+def test_duong_re_lan_truyen(state, mong_doi):
+    from src.agents.incident_graph import _co_lan_truyen
+
+    assert _co_lan_truyen(state) == mong_doi
+
+
+def test_graph_co_node_link_incidents():
+    """Đổi tên node là đổi thứ hiện trên trace LangSmith — deliverable #4."""
+    jira = FakeJiraClient(verbose=False)
+
+    with _prometheus() as client:
+        graph = build_incident_graph(client, jira)
+
+    assert "link_incidents" in set(graph.get_graph().nodes)
