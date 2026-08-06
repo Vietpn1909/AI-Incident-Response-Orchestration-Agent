@@ -541,6 +541,8 @@ UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 8
 | Trương Công Thái Đức | Review + merge PR #20 (Trung) — telemetry UC-3 và đo lại UC-2 | ✅ Done | 261 test pass | - |
 | Trương Công Thái Đức | Chốt chống LLM **phủ định** nguyên nhân đã có bằng chứng | ✅ Done | UC-2 từ 3/8 lên **6/6** đo bằng LLM thật | - |
 | Trương Công Thái Đức | Đồng bộ `develop` và `main` sau khi PR #20 nhắm nhầm base | ✅ Done | cả hai ở `5542130` | - |
+| Trương Công Thái Đức | Chạy thử trọn kịch bản demo trên Jira thật, tìm 4 chỗ sẽ vỡ | ✅ Done | KAN-12, `demo/README.md` | - |
+| Trương Công Thái Đức | Nhúng `IncidentSignal` vào description để war-room view đọc lại được | ✅ Done | `src/services/jira/real.py` | - |
 
 **Tổng kết ngày:** Hoàn tất cặp chốt bảo vệ ranh giới giữa luật và LLM. Và phát hiện ra một điều đáng suy nghĩ hơn cả con số M3.
 
@@ -574,6 +576,24 @@ Cửa mới cố ý **hẹp**: không bắt "không phải" trơn, vì câu ĐÚ
 Nếu chỉ báo cáo "M3 gần 100%" thì **nói quá về phần AI**. Sự thật là ở hai trong ba use case, LLM đang làm chất lượng chẩn đoán **tệ hơn**, và giá trị thật của nó nằm ở UC-1 cộng với việc viết câu cho người đọc. Đây là số liệu làm cho câu hỏi gửi mentor có sức nặng: *LLM chỉ diễn giải còn luật ra quyết định — có đủ coi là "AI Agent" không?*
 
 **Chuyện quy trình:** PR #20 của Trung nhắm base `main` thay vì `develop`, và tôi merge mà không kiểm base. Không gây hậu quả vì nhánh anh ấy đã chứa toàn bộ `develop` nên `main` nhận đủ, nhưng `develop` bị bỏ lại 4 commit — đã fast-forward lại. Lần sau phải xem `base=` trước khi merge.
+
+**Chiều: chạy thử trọn kịch bản demo trên Jira thật.** Bốn chỗ sẽ vỡ nếu không chạy thử trước, không chỗ nào đọc code mà thấy được.
+
+**1. `Incident.signal` không bao giờ dựng lại được từ Jira.** `create_incident()` gọi `_adf(text)` **không kèm payload**, nên `IncidentSignal` chỉ tồn tại dưới dạng văn bản cho người đọc. Hệ quả: war-room view của Long luôn hiện *"Chưa có tín hiệu gốc"* — mất đúng mục trưng bằng chứng kèm **PromQL kiểm chứng được**, tức thứ chứng minh "chẩn đoán có bằng chứng". Kiểm cả 6 incident trên board: `signal=None` hết.
+
+Sửa: nhúng payload `signal` vào description lúc tạo, và `get_incident()` đọc thêm field `description` rồi gộp payload từ đó với payload từ comment. Đặt ở description chứ không thêm comment nữa — mỗi war room đã có comment bối cảnh của `open_war_room`, thêm nữa chỉ làm ồn.
+
+Verify bằng cách tạo KAN-12 qua chuỗi đầy đủ: `signal` ✅ 3 bằng chứng có PromQL · `hypotheses` 1 · `proposal` · `timeline` 3 mốc. Bốn mục của UI giờ có dữ liệu.
+
+**2. Tín hiệu tan trong khoảng 60–90 giây sau khi tải dứt.** Lần chạy đầu tôi bắn tải xong rồi mới chạy Agent, và nó báo **"bình thường"** — `rate(...[1m])` không còn mẫu mới nên p95 thành `nan`. Lúc demo phải chạy Agent **trong lúc** tải còn chạy, và nên dùng `run_agent.py` không có `--once` để nó tự poll mỗi 10 giây.
+
+**3. Dòng deploy trong seed HẾT HẠN sau ~11 phút.** `seed.py` cắm `v1.4.2` ở mốc "4 phút trước lúc seed", còn `correlate_deploy()` có cửa sổ `DEPLOY_WINDOW_MINUTES = 15`. Nên phải phát hiện sự cố **trước `seed_time + 11 phút`**. Tôi seed lúc 17:35, chạy lúc 17:49 — deploy đã 22,2 phút tuổi, ngoài cửa sổ. Kết quả: đề xuất tụt từ `rollback v1.4.1` xuống `increase_pool`, tin cậy từ 90% xuống **70%**, và mất luôn nghi phạm — tức mất phần hay nhất của UC-1.
+
+**Phải seed lại ngay trước khi demo.** Đây là loại lỗi không có exception nào, chỉ là một đề xuất kém hơn mà không ai biết vì sao.
+
+**4. Incident đang mở làm Agent KHÔNG mở issue mới.** Luật chống mở trùng chạy đúng, nhưng nó giết mất khoảnh khắc chính của buổi demo. Board có KAN-4 (P2, Open) và KAN-6 (P1, Awaiting Approval) → Agent đi nhánh cập nhật. Phải đóng hết incident đang mở trước khi demo.
+
+**Được thêm một xác nhận ngoài dự tính:** `escalate` chạy thật trên Jira lần đầu — KAN-6 treo chờ duyệt **2610 phút** nên Agent nâng **P2 → P1**, và `set_severity()` sửa đúng **cả hai chỗ** như contract đòi (label `severity-P1` và tiền tố `[P1]` trong tiêu đề). Trước đó tôi chỉ test cái này bằng `FakeJiraClient`.
 
 ---
 
