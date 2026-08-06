@@ -52,6 +52,18 @@ class IncidentAgentState(TypedDict, total=False):
     #: chẩn đoán lại mỗi vòng sẽ vừa spam war room vừa đốt quota LLM.
     war_rooms: dict[str, str]
 
+    #: `{tên service: jira key}` của **mọi** war room đang mở ở vòng này — cả
+    #: issue mới lẫn issue đã có từ trước.
+    #:
+    #: Khác `war_rooms` ở chỗ đó, và khác vì lý do cụ thể: `link_incidents` cần
+    #: nối hai service lại với nhau, mà sự cố thường lan **dần** — A hỏng trước,
+    #: B hỏng sau vài phút. Nếu chỉ nhìn issue mới thì mỗi vòng chỉ có đúng một
+    #: cái, và hai war room không bao giờ gặp nhau để nối.
+    all_war_rooms: dict[str, str]
+
+    #: Các cặp war room vừa được nối ở vòng này. Output của `link_incidents`.
+    linked: list[tuple[str, str]]
+
     #: Jira key của các war room **đã có sẵn**, chỉ được cập nhật thêm bối cảnh.
     #: Đây là đường đi bình thường khi Agent poll liên tục lúc sự cố còn kéo dài.
     updated: list[str]

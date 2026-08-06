@@ -227,3 +227,61 @@ def test_khong_du_bang_chung_thi_noi_thang_la_chua_biet():
     tron.evidence = [tron.evidence[0]]
 
     assert "chưa đủ bằng chứng" in build_hypothesis(tron, None).statement.lower()
+
+
+# ───────── UC-3: hình dạng nguồn phân biệt tấn công với quá tải (06/08)
+
+
+def _uc3_day_du(**kw) -> IncidentSignal:
+    from src.services.rules import detect_auth_burst
+
+    mac_dinh = {
+        "failures_per_second": 182.8,
+        "breached_for_seconds": 300.0,
+        "service": "service-thanh-toan",
+        "unique_source_ips": 1.0,
+        "unique_accounts": 100.0,
+        "top_source_ratio": 1.0,
+    }
+    return detect_auth_burst(**(mac_dinh | kw))
+
+
+def test_uc3_co_du_bon_bang_chung():
+    """Một con số duy nhất không phân biệt được tấn công với quá tải.
+
+    Đo thật 05/08: LLM nhìn đúng một bằng chứng rồi viết "connection pool cạn"
+    cho một vụ credential-stuffing.
+    """
+    ten = [item.name for item in _uc3_day_du().evidence]
+
+    assert "số IP nguồn khác nhau (1 phút)" in ten
+    assert "số tài khoản bị thử (1 phút)" in ten
+    assert "tỷ lệ từ IP nguồn lớn nhất" in ten
+    assert all(item.promql for item in _uc3_day_du().evidence)
+
+
+def test_neu_credential_stuffing_khi_hinh_dang_nguon_chi_ro():
+    """1 IP thử 100 tài khoản — một người quên mật khẩu không tạo ra hình này."""
+    cau = build_hypothesis(_uc3_day_du(), None).statement
+
+    assert "credential-stuffing" in cau
+    assert "100 tài khoản" in cau
+    assert "1 IP nguồn" in cau
+
+
+def test_khong_neu_credential_stuffing_khi_chua_co_hinh_dang_nguon():
+    """Chưa có số thì khẳng định "credential-stuffing" là đoán — đúng cái mình
+    đang cấm LLM làm, nên luật cũng không được phép."""
+    cau = build_hypothesis(_uc3_day_du(unique_accounts=0.0, top_source_ratio=0.0), None).statement
+
+    assert "vấn đề bảo mật" in cau
+    assert "credential-stuffing" not in cau
+
+
+def test_nhieu_nguon_moi_nguon_it_tai_khoan_thi_khong_ket_luan_tan_cong():
+    """Traffic thật trải ra nhiều IP — hình dạng đó không phải quét danh sách."""
+    cau = build_hypothesis(
+        _uc3_day_du(unique_source_ips=800.0, unique_accounts=900.0, top_source_ratio=0.02), None
+    ).statement
+
+    assert "credential-stuffing" not in cau

@@ -575,6 +575,64 @@ Nếu chỉ báo cáo "M3 gần 100%" thì **nói quá về phần AI**. Sự th
 
 **Chuyện quy trình:** PR #20 của Trung nhắm base `main` thay vì `develop`, và tôi merge mà không kiểm base. Không gây hậu quả vì nhánh anh ấy đã chứa toàn bộ `develop` nên `main` nhận đủ, nhưng `develop` bị bỏ lại 4 commit — đã fast-forward lại. Lần sau phải xem `base=` trước khi merge.
 
+## 2026-08-06 — Việt
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Nối 3 metric hình dạng nguồn UC-3 của Trung vào `IncidentSignal` | ✅ Done | 1 → 4 bằng chứng |
+| Việt | Câu giả thuyết UC-3 chỉ nói "credential-stuffing" khi CÓ số chống lưng | ✅ Done | có số thì nêu, không có thì chỉ "vấn đề bảo mật" |
+| Việt | Baseline phải **đủ điểm** mới tin, không chỉ khác 0 | ✅ Done | `BASELINE_SAMPLE_COUNT_30M`, ngưỡng 20/30 điểm |
+| Việt | 7 test hồi quy + dạy fake Prometheus câu `count_over_time` | ✅ Done | 271 test pass, ruff sạch |
+
+**UC-3 — bằng chứng từ 1 lên 4.** Trước đó tín hiệu chỉ có tỷ lệ thất bại, mà con số đó **không phân biệt được tấn công với quá tải** — cả hai đều làm nhiều lượt đăng nhập hỏng. Đó là lý do LLM viết "connection pool cạn" cho một vụ credential-stuffing hôm 05/08: nó không có gì để phân biệt. Ba metric của Trung cho đúng thứ thiếu — hình **dạng** nguồn:
+
+| | nguồn | tài khoản | nguồn lớn nhất |
+|---|---|---|---|
+| Credential-stuffing | ít | **nhiều** | gần 1.0 |
+| Người dùng gõ nhầm | nhiều | ít | thấp |
+| Service lỗi | nhiều | nhiều | thấp |
+
+Đo trên tấn công thật: 118 lượt/giây, **1 IP nguồn, 100 tài khoản, tỷ lệ 1.0**.
+
+Một quyết định đi kèm: câu luật **chỉ nói "credential-stuffing" khi có hai con số chống lưng** (số tài khoản ≥ 10 và một nguồn chiếm > 50%). Không có số thì chỉ nói "vấn đề bảo mật, không phải quá tải". Khẳng định hình thái tấn công mà không có hình dạng nguồn là đoán — đúng cái mình đang cấm LLM làm, nên luật cũng không được phép. Có sửa một assert trong test của Đức theo hướng này, mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật".
+
+**Baseline — "có" phải nghĩa là "đủ điểm để tin".** `p95_baseline > 0` chỉ nói *có số*, không nói *số đó tính trên đủ dữ liệu*. Prometheus không có volume nên `docker compose down` là mất sạch lịch sử, mà `quantile_over_time(...[30m:1m])` **vẫn trả về một con số** dù chỉ có vài điểm. Thêm `BASELINE_SAMPLE_COUNT_30M` đếm điểm thật, ngưỡng 20/30. Verify ngay trong lần chạy hôm nay: sau khi dựng lại stack, số điểm là **1** — đúng tình huống Trung gặp báo nhầm.
+
+Chặn theo cấu trúc chứ không theo quy trình: không phụ thuộc ai nhớ chạy warm-up. Và **không làm Agent mù** — ngưỡng cứng vẫn xét bình thường, chỉ đường lệch baseline bị tạm ngưng. Có test riêng cho điều đó.
+
+Phải kèm cùng điều kiện vào `breached_seconds_by_service()` nữa, nếu không hai chỗ nói khác nhau về cùng một sự việc: `rules.detect()` im lặng còn log lại báo "đã bất thường 300s".
+
+**Fake Prometheus dính bẫy cũ lần thứ tư.** `count_over_time(...)` bọc ngoài câu p95 nên chứa `histogram_quantile`, rơi xuống nhánh p95 và số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, mọi test đi qua đường lệch baseline hỏng im lặng. Đã thêm nhánh và assert canh. Bốn lần cùng một chỗ: nếu thêm hằng PromQL nữa thì nên đổi hẳn sang so nguyên văn.
+
+**Chạy thật, cả chuỗi:** 118 lượt/giây → `INC-1` → giả thuyết 60% nêu đủ hình dạng nguồn → đề xuất `rate_limit` → `Awaiting Approval`.
+
+### Việt (chiều 06/08) — nối war room khi sự cố lan truyền
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Node `link_incidents` — gọi `jira.link_issues()` khi phát hiện lan truyền | ✅ Done | `INC-1 ↔ INC-2` trên sự cố thật |
+| Việt | Chống nối trùng: đọc lại `related_incidents` trước khi gọi | ✅ Done | vòng 2 trở đi không nối lại |
+| Việt | Thêm `all_war_rooms` vào state — sự cố lan **dần** vẫn nối được | ✅ Done | `state.py` |
+| Việt | 11 test mới | ✅ Done | 282 test pass, ruff sạch |
+
+`is_spreading()` phát hiện lan truyền và `classify_severity` nâng cả hai lên P1 từ hôm 03/08. Nhưng nâng mức chỉ nói **"nặng hơn"**, không nói **"hai cái này là một vụ"** — `jira.link_issues()` chưa từng được gọi. Người trực mở Jira thấy hai issue P1 rời rạc và phải tự đoán chúng có liên quan, đúng thứ Agent lẽ ra làm hộ. War-room view của Long đã có sẵn chỗ hiển thị `related_incidents` và cho bấm chuyển qua lại — trước node này chỗ đó luôn rỗng.
+
+**Hai quyết định đáng ghi:**
+
+`all_war_rooms` tách riêng khỏi `war_rooms`. `war_rooms` chỉ chứa issue **mới mở** (dùng cho `hypothesize`, để không chẩn đoán lại mỗi vòng). Nhưng sự cố lan **dần** — A hỏng trước, B hỏng sau vài phút — nên mỗi vòng chỉ có đúng một issue mới, và hai war room không bao giờ gặp nhau để nối. Có test riêng cho kịch bản đó.
+
+Chống nối trùng bằng cách đọc lại `related_incidents` trước khi gọi. `RealJiraClient.link_issues()` POST thẳng lên Jira, gọi lại là tạo link thứ hai giữa đúng hai issue — mà Agent poll vài giây một lần trong lúc sự cố kéo dài hàng chục phút. Cùng loại rác mà `find_open_incident()` chặn ở `open_war_room`.
+
+**Chạy thật trên sự cố lan truyền** (bắn tải cả hai service, p95 9.69s và 4.85s):
+
+```
+Sự cố lan sang 2 service — tính lại severity theo contract ①
+Mở war room INC-1 cho service-thanh-toan (P1)
+Mở war room INC-2 cho service-dat-hang (P1)
+Nối INC-1 ↔ INC-2 — cùng một sự cố lan truyền
+```
+
+**Còn thiếu một phần của ground truth.** `use-cases.md` yêu cầu ba thứ cho lan truyền: nhận ra `service-dat-hang` suy giảm **do phụ thuộc**, link hai incident, và nâng P1. Giờ có (2) và (3); (1) chưa. Giả thuyết cho `INC-2` ra `confidence 10%` và câu *"Chưa đủ bằng chứng để nêu nguyên nhân gốc"* — trung thực, nhưng chưa phải điều `use-cases.md` chấm là đúng. Cần bàn với Đức vì nó là một khẳng định gần với nhân quả.
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

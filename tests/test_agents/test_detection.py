@@ -43,7 +43,14 @@ BINH_THUONG = {"p95": 0.095, "baseline": 0.181, "error": 0.0, "pool": 0.0}
 #: `up = 1` là quan trọng: thiếu nó thì mọi bộ số trên đều ngầm mô tả một
 #: service **đã chết** (fake trả 0 cho metric nó không nhận ra), và các test
 #: UC-1 xanh vì lý do khác với tên của chúng.
-MAC_DINH = {"up": 1.0, "restarts": 0.0, "auth": 0.0}
+MAC_DINH = {
+    "up": 1.0,
+    "restarts": 0.0,
+    "auth": 0.0,
+    # Đủ điểm để baseline đáng tin. Mặc định là "lịch sử đầy đủ" vì phần lớn
+    # test không nói về khởi động lạnh; test nào cần thì tự đặt thấp xuống.
+    "baseline_samples": 30.0,
+}
 
 
 def _classify(promql: str) -> str:
@@ -68,6 +75,12 @@ def _classify(promql: str) -> str:
     """
     if "db_pool" in promql:
         return "pool"
+    # Phải xét TRƯỚC mọi nhánh histogram_quantile: câu đếm điểm baseline BỌC
+    # NGOÀI câu p95, nên nếu để rơi xuống dưới thì nó bị nhận thành câu p95 và
+    # số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, và mọi test đi
+    # qua đường lệch baseline im lặng hỏng.
+    if "count_over_time" in promql:
+        return "baseline_samples"
     # Phải xét TRƯỚC nhánh "error" ở cuối: câu này cũng dùng http_requests_total,
     # chỉ khác ở handler="/login" và status 4xx thay vì 5xx.
     if 'handler="/login"' in promql:
@@ -157,6 +170,11 @@ def test_fake_phan_loai_dung_tung_cau_promql():
     # câu 5xx KHÔNG bắt được nó (401 là 4xx).
     assert _classify(p.AUTH_FAILURE_RATE) == "auth"
     assert _classify(f"min_over_time(({p.AUTH_FAILURE_RATE})[30s:5s])") == "auth"
+
+    # Câu đếm điểm baseline BỌC NGOÀI câu p95, nên nó chứa `histogram_quantile`.
+    # Để rơi xuống nhánh p95 thì số điểm nhận giá trị p95 và cửa "đủ điểm để
+    # tin baseline" hỏng im lặng.
+    assert _classify(p.BASELINE_SAMPLE_COUNT_30M) == "baseline_samples"
 
 
 # ─────────────────────────────────────────────────────────── detect

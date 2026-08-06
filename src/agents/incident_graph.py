@@ -38,6 +38,7 @@ from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
 from src.agents.nodes.escalate import escalate
 from src.agents.nodes.hypothesize import hypothesize
+from src.agents.nodes.link_incidents import link_incidents
 from src.agents.nodes.open_war_room import open_war_room
 from src.agents.nodes.propose_remediation import propose_remediation
 from src.agents.state import IncidentAgentState
@@ -102,14 +103,21 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         opened: list[str] = []
         updated: list[str] = []
         war_rooms: dict[str, str] = {}
+        all_war_rooms: dict[str, str] = {}
         for signal in state.get("signals") or []:
             outcome = open_war_room(jira, signal)
+            all_war_rooms[signal.affected_service] = outcome.jira_key
             if outcome.created:
                 opened.append(outcome.jira_key)
                 war_rooms[signal.affected_service] = outcome.jira_key
             else:
                 updated.append(outcome.jira_key)
-        return {"opened": opened, "updated": updated, "war_rooms": war_rooms}
+        return {
+            "opened": opened,
+            "updated": updated,
+            "war_rooms": war_rooms,
+            "all_war_rooms": all_war_rooms,
+        }
 
     def hypothesize_node(state: IncidentAgentState) -> dict:
         """Chẩn đoán nguyên nhân và post lên war room.
@@ -131,6 +139,22 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             if hypothesis is not None:
                 hypotheses[jira_key] = hypothesis
         return {"hypotheses": hypotheses}
+
+    def link_incidents_node(state: IncidentAgentState) -> dict:
+        """Nối các war room lại khi sự cố lan sang service khác.
+
+        Chỉ chạy khi `classify_severity` đã xác định có lan truyền — xem
+        `_co_lan_truyen()`. Nối bừa hai sự cố rời rạc trong ngày còn tệ hơn
+        không nối: người trực sẽ đi tìm quan hệ nhân quả không tồn tại.
+        """
+        try:
+            ket_qua = link_incidents(jira, state.get("all_war_rooms") or {})
+        except Exception as error:
+            # Nối là việc phụ. Mất nó không nghiêm trọng bằng mất cả vòng quét —
+            # cùng lý do với `_xet_nang_muc()`.
+            logger.error("Không nối được các war room (%s)", error)
+            return {"linked": []}
+        return {"linked": ket_qua.linked}
 
     def propose_remediation_node(state: IncidentAgentState) -> dict:
         """Đề xuất hành động rồi chuyển war room sang chờ người duyệt.
@@ -188,6 +212,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     graph.add_node("classify_severity", classify_severity)
     graph.add_node("open_war_room", open_war_rooms)
     graph.add_node("hypothesize", hypothesize_node)
+    graph.add_node("link_incidents", link_incidents_node)
     graph.add_node("propose_remediation", propose_remediation_node)
     graph.add_node("escalate", escalate_node)
 
@@ -199,7 +224,14 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         {"open_war_room": "open_war_room", END: END},
     )
     graph.add_edge("open_war_room", "hypothesize")
-    graph.add_edge("hypothesize", "propose_remediation")
+    # Nhánh rẽ theo đúng sơ đồ ở docs/architecture_diagram.md mục 2: chỉ đi qua
+    # `link_incidents` khi thật sự có lan truyền.
+    graph.add_conditional_edges(
+        "hypothesize",
+        _co_lan_truyen,
+        {"link_incidents": "link_incidents", "propose_remediation": "propose_remediation"},
+    )
+    graph.add_edge("link_incidents", "propose_remediation")
     graph.add_edge("propose_remediation", "escalate")
     # Kết thúc ở đây là CỐ Ý, không phải chuỗi làm dở. Bước tiếp theo do **người**
     # khởi động: họ chuyển issue sang `Remediating`, Jira gọi webhook, rồi
@@ -207,6 +239,18 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     graph.add_edge("escalate", END)
 
     return graph.compile()
+
+
+def _co_lan_truyen(state: IncidentAgentState) -> str:
+    """Có đáng nối các war room lại không.
+
+    Bỏ qua khi chỉ một service dính: `link_incidents` tự trả rỗng trong trường
+    hợp đó, nhưng đi thẳng thì tiết kiệm được vài lời gọi `get_incident()` mỗi
+    vòng quét — mà Agent poll vài giây một lần.
+    """
+    if not state.get("spreading"):
+        return "propose_remediation"
+    return "link_incidents"
 
 
 def _chan_doan_mot_issue(jira: JiraClient, jira_key: str, signal: IncidentSignal) -> Hypothesis | None:
