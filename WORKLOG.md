@@ -543,6 +543,7 @@ UC-2  → GIỮ câu LLM ("OOMKilled do bộ nhớ vượt ngưỡng 128 MB"), 8
 | Trương Công Thái Đức | Đồng bộ `develop` và `main` sau khi PR #20 nhắm nhầm base | ✅ Done | cả hai ở `5542130` | - |
 | Trương Công Thái Đức | Chạy thử trọn kịch bản demo trên Jira thật, tìm 4 chỗ sẽ vỡ | ✅ Done | KAN-12, `demo/README.md` | - |
 | Trương Công Thái Đức | Nhúng `IncidentSignal` vào description để war-room view đọc lại được | ✅ Done | `src/services/jira/real.py` | - |
+| Trương Công Thái Đức | Bảng dịch thuật ngữ cho UI — dịch THÊM, giữ nguyên tên metric + PromQL | ✅ Done | `ui/labels.py`, 10 test | - |
 
 **Tổng kết ngày:** Hoàn tất cặp chốt bảo vệ ranh giới giữa luật và LLM. Và phát hiện ra một điều đáng suy nghĩ hơn cả con số M3.
 
@@ -594,6 +595,29 @@ Verify bằng cách tạo KAN-12 qua chuỗi đầy đủ: `signal` ✅ 3 bằng
 **4. Incident đang mở làm Agent KHÔNG mở issue mới.** Luật chống mở trùng chạy đúng, nhưng nó giết mất khoảnh khắc chính của buổi demo. Board có KAN-4 (P2, Open) và KAN-6 (P1, Awaiting Approval) → Agent đi nhánh cập nhật. Phải đóng hết incident đang mở trước khi demo.
 
 **Được thêm một xác nhận ngoài dự tính:** `escalate` chạy thật trên Jira lần đầu — KAN-6 treo chờ duyệt **2610 phút** nên Agent nâng **P2 → P1**, và `set_severity()` sửa đúng **cả hai chỗ** như contract đòi (label `severity-P1` và tiền tố `[P1]` trong tiêu đề). Trước đó tôi chỉ test cái này bằng `FakeJiraClient`.
+
+**Tối: bảng dịch thuật ngữ cho UI.** Đức mở war room ra và không hiểu — mà Đức là người biết dự án rõ nhất. Ban giám khảo chỉ có 10 phút và không có bối cảnh gì, nên đó là vấn đề của UI chứ không của người xem.
+
+Ba lỗi cụ thể tìm ra khi đối chiếu với dữ liệu Jira thật:
+
+1. Trang danh sách là bức tường **9 dòng gần như giống hệt nhau**, 8 cái là rác test từ mấy ngày trước và 7 cái mở ra hiện "Chưa có tín hiệu gốc".
+2. **`(baseline None)` in ra thẳng trang**, hai lần — pool và tỷ lệ lỗi đều không có baseline. Trông như lỗi.
+3. Tiêu đề là tên metric thô: `http_request_duration_seconds p95 = 4.417 (ngưỡng 2.00)`.
+
+**Nguyên tắc chốt được sau khi Đức nhắc: dịch THÊM, không dịch THAY.** Trang này phục vụ **hai** người cùng lúc — người xem không biết tech cần biết chuyện gì đang xảy ra với khách hàng, còn **người trực cần tên metric gốc và câu PromQL nguyên văn** để copy vào Prometheus mà đào tiếp. Dịch mất thông tin thì tệ hơn không dịch: người trực mất đường đào, mà đó là người duy nhất thật sự sửa được sự cố.
+
+Nên mỗi bằng chứng trả về **hai tầng trên cùng một dòng**, không phải hai chế độ:
+
+```
+Thời gian khách phải chờ: 4.42 giây (thường 0.58 giây — lệch 7.6 lần)
+  ↳ http_request_duration_seconds p95 = 4.417s
+```
+
+`ui/labels.py` là **dữ liệu thuần, không đụng layout** — Long giữ phần thiết kế. Vì sao chia thế: `ui/` là của Long, và hôm 02/08 tôi đã đụng vào phần của Việt rồi tự nhắc "ai định đụng file của người khác thì nhắn một câu trước, kể cả t". Long không phải tự nghĩ ra 14 câu dịch, nhưng layout vẫn là quyết định của anh ấy.
+
+Hai test canh chuỗi, cùng họ với `test_runbooks.py`: bảng dịch so khớp theo chuỗi con của tên `MetricEvidence`, nên `rules.py` đổi một chữ là bảng lặng lẽ rơi về tên thô — không sai, nhưng mất hết công dịch và không có gì đỏ lên. `test_moi_ten_metric_deu_dich_duoc` gọi thẳng `rules.detect*()` cả ba UC rồi đối chiếu.
+
+Một chi tiết thứ tự có ý nghĩa: `"đỉnh bộ nhớ"` phải đứng **trước** `"bộ nhớ đang dùng"` trong bảng, không thì hai metric bộ nhớ của Việt dịch thành cùng một câu. Có test riêng cho chỗ đó.
 
 ---
 
