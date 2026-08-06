@@ -94,9 +94,14 @@ def breached_seconds_by_service(client: PrometheusClient) -> dict[str, float]:
     # Baseline 0 (chưa có lịch sử) làm phép chia trả rỗng, không phải chia cho 0
     # — Prometheus bỏ hẳn series thay vì sinh Inf. Khớp với nhánh
     # `p95_baseline > 0` trong `rules.detect()`.
+    # ⚠️ Kèm điều kiện đủ điểm, giống `rules.detect()`. Không kèm thì cửa "đủ
+    # lâu" vẫn đếm thời gian cho một baseline dựng trên vài điểm — Agent im lặng
+    # ở `rules.detect()` nhưng lại báo "đã bất thường 300s" trong log, hai chỗ
+    # nói khác nhau về cùng một sự việc.
     deviation = _sustained(
         client,
-        f"({prometheus.P95_LATENCY}) / ({prometheus.P95_BASELINE_30M})",
+        f"(({prometheus.P95_LATENCY}) / ({prometheus.P95_BASELINE_30M}))"
+        f" and on(service) (({prometheus.BASELINE_SAMPLE_COUNT_30M}) >= {rules.BASELINE_MIN_SAMPLES})",
         rules.BASELINE_DEVIATION_RATIO,
     )
 
@@ -199,21 +204,34 @@ def _detect_auth_bursts(client: PrometheusClient) -> dict[str, IncidentSignal]:
 
     sustained = _sustained(client, prometheus.AUTH_FAILURE_RATE, rules.AUTH_FAILURE_P3)
 
+    # Ba metric hình dạng nguồn — thứ phân biệt tấn công với quá tải. Thiếu
+    # chúng thì tín hiệu chỉ có một con số, và LLM không có gì để phân biệt.
+    nguon = _samples_by_service(client, prometheus.AUTH_UNIQUE_SOURCE_IPS)
+    tai_khoan = _samples_by_service(client, prometheus.AUTH_UNIQUE_ACCOUNTS)
+    ty_le_nguon = _samples_by_service(client, prometheus.AUTH_TOP_SOURCE_RATIO)
+
     found: dict[str, IncidentSignal] = {}
     for service, failures in rate.items():
         signal = rules.detect_auth_burst(
             failures_per_second=failures,
             breached_for_seconds=sustained.get(service, 0.0),
             service=service,
+            unique_source_ips=nguon.get(service, 0.0),
+            unique_accounts=tai_khoan.get(service, 0.0),
+            top_source_ratio=ty_le_nguon.get(service, 0.0),
         )
         if signal is None:
             continue
         found[service] = signal
         logger.warning(
-            "UC-3 trên %s: %.1f request /login thất bại mỗi giây, liên tục %.0fs",
+            "UC-3 trên %s: %.1f lượt /login thất bại mỗi giây, liên tục %.0fs "
+            "— %.0f tài khoản từ %.0f IP nguồn, nguồn lớn nhất chiếm %.0f%%",
             service,
             failures,
             sustained.get(service, 0.0),
+            tai_khoan.get(service, 0.0),
+            nguon.get(service, 0.0),
+            ty_le_nguon.get(service, 0.0) * 100,
         )
     return found
 
@@ -261,6 +279,10 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
         return _one_per_service(crashloop, auth_burst)
 
     baseline = _samples_by_service(client, prometheus.P95_BASELINE_30M)
+    # Đếm điểm dữ liệu thật trong cửa sổ baseline. Prometheus không có volume
+    # nên khởi động lạnh là mất sạch lịch sử, và `quantile_over_time` vẫn trả
+    # về một con số tính trên vài điểm — `rules.detect()` cần biết để không tin.
+    baseline_samples = _samples_by_service(client, prometheus.BASELINE_SAMPLE_COUNT_30M)
     error_rate = _samples_by_service(client, prometheus.ERROR_RATE)
     pool = _samples_by_service(client, prometheus.POOL_SATURATION_PEAK_5M)
     sustained = breached_seconds_by_service(client)
@@ -283,6 +305,7 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
             pool_saturation=pool.get(service, 0.0),
             service=service,
             breached_for_seconds=sustained.get(service, 0.0),
+            baseline_samples=baseline_samples.get(service, 0.0),
         )
         if signal is None:
             continue

@@ -575,6 +575,36 @@ Nếu chỉ báo cáo "M3 gần 100%" thì **nói quá về phần AI**. Sự th
 
 **Chuyện quy trình:** PR #20 của Trung nhắm base `main` thay vì `develop`, và tôi merge mà không kiểm base. Không gây hậu quả vì nhánh anh ấy đã chứa toàn bộ `develop` nên `main` nhận đủ, nhưng `develop` bị bỏ lại 4 commit — đã fast-forward lại. Lần sau phải xem `base=` trước khi merge.
 
+## 2026-08-06 — Việt
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Nối 3 metric hình dạng nguồn UC-3 của Trung vào `IncidentSignal` | ✅ Done | 1 → 4 bằng chứng |
+| Việt | Câu giả thuyết UC-3 chỉ nói "credential-stuffing" khi CÓ số chống lưng | ✅ Done | có số thì nêu, không có thì chỉ "vấn đề bảo mật" |
+| Việt | Baseline phải **đủ điểm** mới tin, không chỉ khác 0 | ✅ Done | `BASELINE_SAMPLE_COUNT_30M`, ngưỡng 20/30 điểm |
+| Việt | 7 test hồi quy + dạy fake Prometheus câu `count_over_time` | ✅ Done | 271 test pass, ruff sạch |
+
+**UC-3 — bằng chứng từ 1 lên 4.** Trước đó tín hiệu chỉ có tỷ lệ thất bại, mà con số đó **không phân biệt được tấn công với quá tải** — cả hai đều làm nhiều lượt đăng nhập hỏng. Đó là lý do LLM viết "connection pool cạn" cho một vụ credential-stuffing hôm 05/08: nó không có gì để phân biệt. Ba metric của Trung cho đúng thứ thiếu — hình **dạng** nguồn:
+
+| | nguồn | tài khoản | nguồn lớn nhất |
+|---|---|---|---|
+| Credential-stuffing | ít | **nhiều** | gần 1.0 |
+| Người dùng gõ nhầm | nhiều | ít | thấp |
+| Service lỗi | nhiều | nhiều | thấp |
+
+Đo trên tấn công thật: 118 lượt/giây, **1 IP nguồn, 100 tài khoản, tỷ lệ 1.0**.
+
+Một quyết định đi kèm: câu luật **chỉ nói "credential-stuffing" khi có hai con số chống lưng** (số tài khoản ≥ 10 và một nguồn chiếm > 50%). Không có số thì chỉ nói "vấn đề bảo mật, không phải quá tải". Khẳng định hình thái tấn công mà không có hình dạng nguồn là đoán — đúng cái mình đang cấm LLM làm, nên luật cũng không được phép. Có sửa một assert trong test của Đức theo hướng này, mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật".
+
+**Baseline — "có" phải nghĩa là "đủ điểm để tin".** `p95_baseline > 0` chỉ nói *có số*, không nói *số đó tính trên đủ dữ liệu*. Prometheus không có volume nên `docker compose down` là mất sạch lịch sử, mà `quantile_over_time(...[30m:1m])` **vẫn trả về một con số** dù chỉ có vài điểm. Thêm `BASELINE_SAMPLE_COUNT_30M` đếm điểm thật, ngưỡng 20/30. Verify ngay trong lần chạy hôm nay: sau khi dựng lại stack, số điểm là **1** — đúng tình huống Trung gặp báo nhầm.
+
+Chặn theo cấu trúc chứ không theo quy trình: không phụ thuộc ai nhớ chạy warm-up. Và **không làm Agent mù** — ngưỡng cứng vẫn xét bình thường, chỉ đường lệch baseline bị tạm ngưng. Có test riêng cho điều đó.
+
+Phải kèm cùng điều kiện vào `breached_seconds_by_service()` nữa, nếu không hai chỗ nói khác nhau về cùng một sự việc: `rules.detect()` im lặng còn log lại báo "đã bất thường 300s".
+
+**Fake Prometheus dính bẫy cũ lần thứ tư.** `count_over_time(...)` bọc ngoài câu p95 nên chứa `histogram_quantile`, rơi xuống nhánh p95 và số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, mọi test đi qua đường lệch baseline hỏng im lặng. Đã thêm nhánh và assert canh. Bốn lần cùng một chỗ: nếu thêm hằng PromQL nữa thì nên đổi hẳn sang so nguyên văn.
+
+**Chạy thật, cả chuỗi:** 118 lượt/giây → `INC-1` → giả thuyết 60% nêu đủ hình dạng nguồn → đề xuất `rate_limit` → `Awaiting Approval`.
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

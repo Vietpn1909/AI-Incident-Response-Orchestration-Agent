@@ -132,6 +132,18 @@ _BASELINE_QUANTILE = 0.1
 #: "mức thường ngày" nào để so, dù dùng phân vị hay trung bình.
 P95_BASELINE_30M = f"quantile_over_time({_BASELINE_QUANTILE}, ({P95_LATENCY})[30m:1m])"
 
+#: Số điểm dữ liệu thật sự có trong cửa sổ baseline 30 phút.
+#:
+#: Cửa sổ `[30m:1m]` **mong đợi** 30 điểm, nhưng số có thật ít hơn khi Prometheus
+#: mới chạy hoặc service mới có traffic. Không đếm thì "có baseline" bị hiểu là
+#: "khác 0", và một baseline tính trên 2 điểm cũng được tin như trên 30 điểm.
+#:
+#: Trung tìm ra báo nhầm lúc khởi động lạnh; Đức đo được nguyên nhân: Prometheus
+#: không có volume nên `docker compose down` là mất sạch lịch sử. Lúc mới chạy 2
+#: phút, baseline tính trên **29 điểm / ~360** — con số vô nghĩa, mà `detect()`
+#: vẫn đem ra chia.
+BASELINE_SAMPLE_COUNT_30M = f"count_over_time(({P95_LATENCY})[30m:1m])"
+
 #: Số request xác thực thất bại mỗi giây — tín hiệu của UC-3 (burst tấn công).
 #:
 #: ⚠️ `ERROR_RATE` KHÔNG bắt được UC-3 vì nó chỉ khớp `status=~"5.."`, còn 401
@@ -142,6 +154,33 @@ P95_BASELINE_30M = f"quantile_over_time({_BASELINE_QUANTILE}, ({P95_LATENCY})[30
 AUTH_FAILURE_RATE = """
 sum by (service) (rate(http_requests_total{handler="/login", status=~"4.."}[1m]))
 """
+
+# Ba metric hình thái truy cập, Trung expose ngày 06/08. Đây là thứ phân biệt
+# **tấn công** với **quá tải** — hai chuyện có cùng triệu chứng "nhiều lượt đăng
+# nhập hỏng" nhưng khác nhau về hình dạng nguồn:
+#
+#     credential-stuffing   ít nguồn, NHIỀU tài khoản, một nguồn chiếm gần hết
+#     người dùng gõ nhầm    nhiều nguồn, ít tài khoản mỗi nguồn
+#     service lỗi           nhiều nguồn, nhiều tài khoản, không nguồn nào trội
+#
+# Không có chúng, `detect_auth_burst()` chỉ sinh đúng một bằng chứng và LLM
+# không có gì để phân biệt — đo được ngày 05/08, nó viết "connection pool cạn"
+# cho một vụ credential-stuffing.
+
+#: Số IP nguồn khác nhau gây đăng nhập thất bại trong 1 phút.
+AUTH_UNIQUE_SOURCE_IPS = "auth_failure_unique_source_ips_1m"
+
+#: Số tài khoản khác nhau bị thử trong 1 phút.
+#:
+#: Nhiều tài khoản từ ít nguồn là dấu hiệu đặc trưng của credential-stuffing —
+#: kẻ tấn công quét danh sách tài khoản, không phải một người quên mật khẩu.
+AUTH_UNIQUE_ACCOUNTS = "auth_failure_unique_accounts_1m"
+
+#: Tỷ lệ request thất bại đến từ IP nguồn lớn nhất, 0–1.
+#:
+#: Bằng 1 nghĩa là **toàn bộ** đến từ một nguồn duy nhất. Đo thật trên tấn công
+#: giả lập: 1 IP, 100 tài khoản, tỷ lệ 1.0.
+AUTH_TOP_SOURCE_RATIO = "auth_failure_top_source_ratio_1m"
 
 # ---------------------------------------------------------------------------
 # UC-2 — service chết vì OOM rồi restart liên tục
