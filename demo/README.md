@@ -77,6 +77,28 @@ histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by 
 
 Thấy đường p95 tăng từ ~0.2s lên vài giây là **đúng**.
 
+## Warm-up Prometheus trước demo
+
+Prometheus cần khoảng **30 phút tải nhẹ** trước khi chạy UC-1. Baseline p95 chỉ
+được Agent tin khi có tối thiểu 20 điểm dữ liệu trong 30 phút; vừa khởi động đã
+demo có thể tạo báo động nhầm vì baseline còn non.
+
+Sau khi đã seed dữ liệu, chạy một terminal riêng:
+
+```bash
+python eval/run_measurements.py payment-load \
+  --seconds 1800 \
+  --concurrency 1 \
+  --pause 0.05
+```
+
+`concurrency=1` giữ tải ở mức bình thường, đủ tạo baseline nhưng không làm cạn
+pool. Chờ lệnh chạy xong rồi mới chạy `demo/loadtest.py` để tạo UC-1.
+
+Compose giờ có named volume `prometheus_data`, vì vậy `docker compose down`
+thông thường vẫn giữ lịch sử baseline. Chỉ dùng `docker compose down -v` khi cố
+ý muốn xoá sạch dữ liệu; sau đó phải warm-up lại từ đầu.
+
 ## Phần nào đã viết sẵn, phần nào Trung làm
 
 | Đã viết sẵn — ĐỪNG đổi | Vì sao |
@@ -85,7 +107,7 @@ Thấy đường p95 tăng từ ~0.2s lên vài giây là **đúng**.
 | Port 8001 / 8002 | Contract ① |
 | `Instrumentator().instrument(app).expose(app)` | Tạo `/metrics` tự động |
 | 2 gauge `db_pool_connections_in_use` / `db_pool_size` | Agent cần để chứng minh nguyên nhân gốc là pool cạn, không chỉ nói "chậm" |
-| `prometheus.yml`, `Dockerfile`, `docker-compose.demo.yml` | Cấu hình, sai là mất thời gian vô ích |
+| `prometheus.yml`, `Dockerfile` | Cấu hình, sai là mất thời gian vô ích |
 
 | Trung làm — có `TODO(Trung)` trong code |
 |---|
@@ -94,6 +116,7 @@ Thấy đường p95 tăng từ ~0.2s lên vài giây là **đúng**.
 | `service_dat_hang` gọi chéo sang service thanh toán |
 | `seed.py` — sinh dữ liệu Faker + bảng `deploy_history` |
 | `loadtest.py` — profile tải tăng dần |
+| Prometheus data volume + quy trình warm-up baseline |
 
 ## Xong là thế nào
 

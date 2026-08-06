@@ -90,8 +90,13 @@ services:
     image: prom/prometheus:latest
     volumes:
       - ./demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Giữ lịch sử baseline qua `docker compose down`; chỉ `down -v` mới xoá.
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
       - service-thanh-toan
       - service-dat-hang
+
+volumes:
+  prometheus_data:

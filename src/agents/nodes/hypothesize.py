@@ -36,6 +36,8 @@ không giải thích được nó từ đâu ra. `_diem_tin_cay()` cộng điể
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 from src.models.incident import DeployRecord, Hypothesis, IncidentSignal
 from src.services import deploys, rules
@@ -46,6 +48,22 @@ logger = logging.getLogger(__name__)
 #: war room cần một câu, không cần bài luận.
 _MAX_STATEMENT = 400
 _MAX_REASONING = 1200
+
+
+StatementOrigin = Literal["llm", "rule"]
+
+
+@dataclass(frozen=True)
+class HypothesisOutcome:
+    """Giả thuyết và nơi câu kết luận cuối cùng được viết.
+
+    Đây là metadata phục vụ đo M3. Không đưa vào ``Hypothesis`` hay Jira vì
+    nó mô tả *lần chạy* (LLM có bị chặn hay không), không phải bản chất của sự
+    cố. Nhờ vậy contract incident đang lưu vẫn tương thích với war room cũ.
+    """
+
+    hypothesis: Hypothesis
+    statement_origin: StatementOrigin
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +170,11 @@ def _parse(reply: str) -> tuple[str, str]:
 
 
 def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
+    """Dựng giả thuyết; giữ API cũ cho luồng Agent và Jira."""
+    return hypothesize_with_origin(signal, llm).hypothesis
+
+
+def hypothesize_with_origin(signal: IncidentSignal, llm=None) -> HypothesisOutcome:
     """Dựng giả thuyết nguyên nhân cho một tín hiệu sự cố.
 
     Args:
@@ -160,6 +183,7 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             vào để test không cần mạng.
 
     Returns:
+        `HypothesisOutcome` chứa `Hypothesis` và nguồn của câu kết luận cuối.
         `Hypothesis` luôn có `evidence` và `confidence` do rule engine sinh.
         `reasoning` rỗng nghĩa là LLM không viết được — giả thuyết vẫn dùng
         được, chỉ kém dễ đọc.
@@ -177,12 +201,12 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             "%s: LLM không trả lời — giữ câu do luật ghép, chẩn đoán vẫn có bằng chứng",
             signal.affected_service,
         )
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
     statement, reasoning = _parse(reply)
     if not statement:
         logger.warning("%s: không tách được giả thuyết từ câu trả lời LLM", signal.affected_service)
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
     if _phu_dinh_ket_luan_cua_luat(statement, hypothesis.statement):
         logger.warning(
@@ -191,7 +215,7 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             signal.affected_service,
             statement,
         )
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
     thieu_can_cu = _nguyen_nhan_khong_co_can_cu(statement, signal, deploy)
     if thieu_can_cu:
@@ -204,9 +228,12 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
         )
         # Giữ nguyên `statement` của luật, nhưng vẫn KHÔNG lấy `reasoning` của
         # LLM: nó diễn giải cho một kết luận vừa bị bỏ, giữ lại là tự mâu thuẫn.
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
-    return hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning})
+    return HypothesisOutcome(
+        hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning}),
+        "llm",
+    )
 
 
 #: Cụm mà `rules._cau_giai_thuyet()` dùng ở nhánh cuối, tức "luật KHÔNG tìm ra

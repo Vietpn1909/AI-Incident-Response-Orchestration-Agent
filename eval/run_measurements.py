@@ -25,10 +25,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.agents.detection_loop import run_cycle  # noqa: E402
-from src.agents.nodes.hypothesize import hypothesize  # noqa: E402
+from src.agents.nodes.hypothesize import hypothesize_with_origin  # noqa: E402
 from src.models.incident import IncidentSignal  # noqa: E402
 from src.services.jira import FakeJiraClient  # noqa: E402
 from src.services.prometheus import P95_LATENCY, PrometheusClient  # noqa: E402
+
+_GROUND_TRUTH: dict[str, tuple[str, str]] = {
+    "UC-1": ("P2", "Pool giới hạn 5 bị chiếm hết; truy vấn chậm giữ connection."),
+    "UC-2": ("P1", "OOM-kill do rò rỉ bộ nhớ vượt giới hạn 128 MB."),
+    "UC-3": ("P1 hoặc P2", "Credential-stuffing; là bất thường bảo mật, không phải quá tải."),
+}
 
 
 def utc_now() -> datetime:
@@ -256,6 +262,7 @@ def diagnosis_correct(uc: str, text: str) -> bool:
 
 def diagnose(input_path: pathlib.Path, uc: str, runs: int, output: pathlib.Path) -> None:
     """Lặp inference trên snapshot telemetry thật; không đổi ground truth."""
+    expected_severity, ground_truth = _GROUND_TRUTH[uc]
     payload = json.loads(input_path.read_text(encoding="utf-8"))
     incidents = payload.get("incidents") or []
     if not incidents:
@@ -265,7 +272,8 @@ def diagnose(input_path: pathlib.Path, uc: str, runs: int, output: pathlib.Path)
     rows: list[dict[str, object]] = []
     for index in range(1, runs + 1):
         started = utc_now()
-        hypothesis = hypothesize(signal)
+        outcome = hypothesize_with_origin(signal)
+        hypothesis = outcome.hypothesis
         elapsed = (utc_now() - started).total_seconds()
         combined = f"{hypothesis.statement} {hypothesis.reasoning}"
         correct = diagnosis_correct(uc, combined)
@@ -277,10 +285,13 @@ def diagnose(input_path: pathlib.Path, uc: str, runs: int, output: pathlib.Path)
                 "model": "qwen-plus",
                 "temperature": 0.2,
                 "service": signal.affected_service,
+                "expected_severity": expected_severity,
                 "actual_severity": signal.severity.value,
+                "ground_truth": ground_truth,
                 "diagnosis_correct": str(correct).lower(),
                 "confidence": hypothesis.confidence,
                 "llm_latency_seconds": round(elapsed, 3),
+                "statement_origin": outcome.statement_origin,
                 "statement": hypothesis.statement,
                 "reasoning": hypothesis.reasoning,
             }
