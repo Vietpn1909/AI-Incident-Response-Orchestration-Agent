@@ -113,9 +113,7 @@ def test_chuoi_phe_duyet_khep_kin_sau_khi_de_xuat(khong_goi_postgres):
 
     # 4. Đề xuất của Agent thi hành được, có ghi tên người duyệt.
     proposal = runbooks.choose(signal, _hypothesis(khong_goi_postgres[-1]), khong_goi_postgres)
-    result = remediation.execute(
-        proposal.action, proposal.target, approved_by=approved_by, params=proposal.params
-    )
+    result = remediation.execute(proposal.action, proposal.target, approved_by=approved_by, params=proposal.params)
     assert result.succeeded
     assert result.approved_by == jira.HUMAN_ACCOUNT_ID
     assert "v1.4.1" in result.detail

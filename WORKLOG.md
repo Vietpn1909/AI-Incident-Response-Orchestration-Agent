@@ -605,6 +605,34 @@ Phải kèm cùng điều kiện vào `breached_seconds_by_service()` nữa, n�
 **Fake Prometheus dính bẫy cũ lần thứ tư.** `count_over_time(...)` bọc ngoài câu p95 nên chứa `histogram_quantile`, rơi xuống nhánh p95 và số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, mọi test đi qua đường lệch baseline hỏng im lặng. Đã thêm nhánh và assert canh. Bốn lần cùng một chỗ: nếu thêm hằng PromQL nữa thì nên đổi hẳn sang so nguyên văn.
 
 **Chạy thật, cả chuỗi:** 118 lượt/giây → `INC-1` → giả thuyết 60% nêu đủ hình dạng nguồn → đề xuất `rate_limit` → `Awaiting Approval`.
+
+### Việt (chiều 06/08) — nối war room khi sự cố lan truyền
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Node `link_incidents` — gọi `jira.link_issues()` khi phát hiện lan truyền | ✅ Done | `INC-1 ↔ INC-2` trên sự cố thật |
+| Việt | Chống nối trùng: đọc lại `related_incidents` trước khi gọi | ✅ Done | vòng 2 trở đi không nối lại |
+| Việt | Thêm `all_war_rooms` vào state — sự cố lan **dần** vẫn nối được | ✅ Done | `state.py` |
+| Việt | 11 test mới | ✅ Done | 282 test pass, ruff sạch |
+
+`is_spreading()` phát hiện lan truyền và `classify_severity` nâng cả hai lên P1 từ hôm 03/08. Nhưng nâng mức chỉ nói **"nặng hơn"**, không nói **"hai cái này là một vụ"** — `jira.link_issues()` chưa từng được gọi. Người trực mở Jira thấy hai issue P1 rời rạc và phải tự đoán chúng có liên quan, đúng thứ Agent lẽ ra làm hộ. War-room view của Long đã có sẵn chỗ hiển thị `related_incidents` và cho bấm chuyển qua lại — trước node này chỗ đó luôn rỗng.
+
+**Hai quyết định đáng ghi:**
+
+`all_war_rooms` tách riêng khỏi `war_rooms`. `war_rooms` chỉ chứa issue **mới mở** (dùng cho `hypothesize`, để không chẩn đoán lại mỗi vòng). Nhưng sự cố lan **dần** — A hỏng trước, B hỏng sau vài phút — nên mỗi vòng chỉ có đúng một issue mới, và hai war room không bao giờ gặp nhau để nối. Có test riêng cho kịch bản đó.
+
+Chống nối trùng bằng cách đọc lại `related_incidents` trước khi gọi. `RealJiraClient.link_issues()` POST thẳng lên Jira, gọi lại là tạo link thứ hai giữa đúng hai issue — mà Agent poll vài giây một lần trong lúc sự cố kéo dài hàng chục phút. Cùng loại rác mà `find_open_incident()` chặn ở `open_war_room`.
+
+**Chạy thật trên sự cố lan truyền** (bắn tải cả hai service, p95 9.69s và 4.85s):
+
+```
+Sự cố lan sang 2 service — tính lại severity theo contract ①
+Mở war room INC-1 cho service-thanh-toan (P1)
+Mở war room INC-2 cho service-dat-hang (P1)
+Nối INC-1 ↔ INC-2 — cùng một sự cố lan truyền
+```
+
+**Còn thiếu một phần của ground truth.** `use-cases.md` yêu cầu ba thứ cho lan truyền: nhận ra `service-dat-hang` suy giảm **do phụ thuộc**, link hai incident, và nâng P1. Giờ có (2) và (3); (1) chưa. Giả thuyết cho `INC-2` ra `confidence 10%` và câu *"Chưa đủ bằng chứng để nêu nguyên nhân gốc"* — trung thực, nhưng chưa phải điều `use-cases.md` chấm là đúng. Cần bàn với Đức vì nó là một khẳng định gần với nhân quả.
 ---
 
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
