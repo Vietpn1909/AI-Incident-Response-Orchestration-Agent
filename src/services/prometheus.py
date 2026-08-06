@@ -181,6 +181,36 @@ SERVICE_DOWN = f"1 - ({SERVICE_UP})"
 #: chênh lệch càng lớn khi service chết càng nhanh.
 RESTART_COUNT_10M = "changes(process_start_time_seconds[10m])"
 
+#: Giới hạn bộ nhớ của container, tính bằng byte. Khớp `mem_limit: 128m` của
+#: `service-thanh-toan` trong [docker-compose.demo.yml](../../docker-compose.demo.yml).
+#:
+#: ⚠️ Phải cắm cứng vì Prometheus **không** biết giới hạn container — số đó là
+#: cấu hình của Docker, muốn đo phải thêm cAdvisor vào stack. Đổi `mem_limit`
+#: mà quên đổi đây thì tỷ lệ bên dưới sai âm thầm, không có gì báo. Đây là cái
+#: giá của việc không dựng cAdvisor, và ở quy mô này thì đáng.
+CONTAINER_MEMORY_LIMIT_BYTES = 128 * 1024 * 1024
+
+#: Bộ nhớ process đang dùng, tính theo **tỷ lệ trên giới hạn container** (0–1).
+#:
+#: Đây là bằng chứng biến UC-2 từ "container chết rồi sống lại" thành "chết **vì
+#: hết bộ nhớ**". Thiếu nó thì LLM chỉ thấy `up=0` và số lần restart — đủ để nói
+#: service đang crash loop, **không** đủ để nói vì sao, nên nó trả lời "chưa xác
+#: định được nguyên nhân gốc". Đo được ngày 05/08: eval M3 cho UC-2 là 0/8 đúng
+#: vì lý do này.
+MEMORY_USAGE_RATIO = f"process_resident_memory_bytes / {CONTAINER_MEMORY_LIMIT_BYTES}"
+
+#: Đỉnh bộ nhớ trong 10 phút, tính bằng MB.
+#:
+#: Chia sẵn trong PromQL chứ không đổi đơn vị trong Python: giá trị ghi vào
+#: `MetricEvidence` phải là **đúng thứ câu query trả về**, để người trực dán câu
+#: đó vào Prometheus là ra cùng con số. Đổi đơn vị ở tầng Python thì bằng chứng
+#: không truy ngược lại được nữa.
+#:
+#: Dùng `max_over_time` chứ không phải giá trị tức thời: process vừa restart thì
+#: bộ nhớ về lại mức thấp, nên đo tức thời sẽ **giấu mất** chính cái đỉnh đã gây
+#: ra OOM-kill. Đỉnh mới là bằng chứng rò rỉ.
+MEMORY_PEAK_10M_MB = "max_over_time(process_resident_memory_bytes[10m]) / 1024 / 1024"
+
 _AVG_LATENCY_RAW = """
 sum(rate(http_request_duration_seconds_sum{handler!="/metrics"}[1m])) by (service)
   / sum(rate(http_request_duration_seconds_count{handler!="/metrics"}[1m])) by (service)

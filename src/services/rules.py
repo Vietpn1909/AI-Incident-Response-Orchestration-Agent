@@ -90,6 +90,20 @@ POOL_EXHAUSTED_RATIO = 0.95
 #: nên nhạy, còn tính điểm tin cậy thì nên chặt.
 BASELINE_DEVIATION_STRONG = 3.0
 
+#: Đỉnh bộ nhớ đạt từ ngần này phần trần container thì coi là chạm giới hạn.
+#:
+#: Không đòi đúng 1.0: Docker OOM-kill process **trước** khi Prometheus kịp
+#: scrape đúng mốc đỉnh, nên số ghi lại **luôn thấp hơn** trần thật. Hai lần đo
+#: độc lập cho thấy sai số này không nhỏ và không ổn định:
+#:
+#:     máy Đức, 05/08   đỉnh 127 MB / 128 MB = 0.99
+#:     máy Việt, 05/08  đỉnh 114 MB / 128 MB = 0.89
+#:
+#: Cùng một container, cùng cách ép OOM. Chênh lệch đến từ việc bắt trúng hay
+#: trượt nhịp scrape 5s. Chốt 0.85 để chịu được cả hai; đặt 0.90 thì lần đo thứ
+#: hai đã trượt.
+MEMORY_NEAR_LIMIT_RATIO = 0.85
+
 
 def classify_severity(
     p95: float,
@@ -297,7 +311,12 @@ def detect_auth_burst(
     )
 
 
-def classify_crashloop(service_up: float, restarts: float, down_for_seconds: float) -> Severity | None:
+def classify_crashloop(
+    service_up: float,
+    restarts: float,
+    down_for_seconds: float,
+    memory_ratio: float = 0.0,
+) -> Severity | None:
     """Phân loại UC-2 — service chết vì OOM rồi restart. `None` nếu bình thường.
 
     Nhánh RIÊNG, không dùng `classify_severity()`, cùng lý do với
@@ -317,19 +336,46 @@ def classify_crashloop(service_up: float, restarts: float, down_for_seconds: flo
        bắt được cả khi service đang **sống** ở đúng lúc quét: crash loop theo
        định nghĩa là chết-sống xen kẽ, nên đòi "chết liên tục 30s" sẽ bỏ lọt.
 
+    3. **Restart kèm bộ nhớ chạm trần** — chỉ cần ≥ 1 lần restart, nếu đỉnh bộ
+       nhớ đã tới `MEMORY_NEAR_LIMIT_RATIO` phần trần container.
+
+    ⚠️ Đường 3 thêm ngày 05/08 sau khi đo thật: Docker báo `RestartCount` = **5**
+    nhưng `changes(process_start_time_seconds[10m])` chỉ thấy **1**, nên đường 2
+    trượt và **Agent báo "bình thường" trong khi container vừa bị OOM-kill 5
+    lần**. Process chết rồi sống lại nhanh hơn nhịp scrape 5s, nên phần lớn mốc
+    khởi động không ai ghi lại.
+
+    Vì sao không hạ `CRASHLOOP_RESTARTS` xuống 1 cho xong: một lần restart đơn
+    thuần là **deploy bình thường**, hạ ngưỡng thì mỗi lần đội deploy Agent lại
+    mở incident. Bộ nhớ chạm trần mới là thứ phân biệt được hai chuyện đó —
+    deploy không đẩy bộ nhớ tới sát giới hạn container, OOM-kill thì có.
+
+    Rủi ro còn lại: một service vốn chạy sát trần bộ nhớ, được deploy đúng lúc,
+    sẽ bị báo nhầm. Chấp nhận được — báo nhầm một sự cố P1 vẫn tốt hơn bỏ lọt
+    một container đang chết đi sống lại.
+
     Args:
         service_up: 1 nếu Prometheus scrape được, 0 nếu không.
         restarts: Số lần process khởi động lại trong 10 phút.
         down_for_seconds: Đã chết liên tục bao lâu. 0 nếu đang sống.
+        memory_ratio: Đỉnh bộ nhớ trên trần container, 0–1. Mặc định 0 để chỗ
+            gọi cũ không phải sửa; khi đó chỉ còn hai đường đầu.
 
     Raises:
         ValueError: khi có đầu vào là NaN — xem `classify_severity`.
     """
-    _reject_nan(service_up=service_up, restarts=restarts, down_for_seconds=down_for_seconds)
+    _reject_nan(
+        service_up=service_up,
+        restarts=restarts,
+        down_for_seconds=down_for_seconds,
+        memory_ratio=memory_ratio,
+    )
 
     if service_up < 1 and down_for_seconds >= SUSTAINED_SECONDS:
         return Severity.P1
     if restarts >= CRASHLOOP_RESTARTS:
+        return Severity.P1
+    if restarts >= 1 and memory_ratio >= MEMORY_NEAR_LIMIT_RATIO:
         return Severity.P1
     return None
 
@@ -339,17 +385,46 @@ def detect_crashloop(
     restarts: float,
     down_for_seconds: float,
     service: str,
+    memory_ratio: float = 0.0,
+    memory_peak_mb: float = 0.0,
 ) -> IncidentSignal | None:
     """Dựng tín hiệu UC-2 kèm bằng chứng. `None` nếu service bình thường.
 
     Đối xứng với `detect()` của UC-1: `classify_crashloop()` quyết định mức,
     hàm này gói lại thành `IncidentSignal` có bằng chứng số.
 
-    Bằng chứng luôn gồm **cả hai** tín hiệu, kể cả cái không kích hoạt. Chúng trả
-    lời hai câu khác nhau mà người trực cần cả hai: `up` nói *bây giờ có phục vụ
-    được không*, số lần restart nói *đây là chết hẳn hay đang chết đi sống lại*.
+    Bằng chứng gồm bốn thứ, mỗi thứ trả lời một câu khác nhau:
+
+    | Bằng chứng | Trả lời câu |
+    |---|---|
+    | `up` | Bây giờ có phục vụ được không? |
+    | Số lần restart | Chết hẳn, hay đang chết đi sống lại? |
+    | Bộ nhớ / giới hạn | **Chết vì cái gì?** |
+    | Đỉnh bộ nhớ 10 phút | Bộ nhớ có leo dần tới trần không — tức có rò rỉ không? |
+
+    ⚠️ Hai bằng chứng bộ nhớ thêm ngày 05/08 sau khi eval M3 cho UC-2 là **0/8**.
+    Qwen không đoán bừa, nó trả lời "chưa xác định được nguyên nhân gốc" — hành
+    vi đúng, vì hai bằng chứng đầu chỉ chứng minh *service đang chết đi sống
+    lại*, không chứng minh **vì sao**. Ground truth UC-2 là "OOM-kill do rò rỉ
+    bộ nhớ", mà không có số nào về bộ nhớ thì không cách nào nói ra được.
+
+    Args:
+        memory_ratio: Bộ nhớ đang dùng trên giới hạn container, 0–1.
+        memory_peak_mb: Đỉnh bộ nhớ 10 phút, tính bằng MB. Quan trọng hơn giá
+            trị tức thời: process vừa restart thì bộ nhớ về mức thấp, đo tức
+            thời sẽ giấu mất chính cái đỉnh đã gây ra OOM-kill.
     """
-    severity = classify_crashloop(service_up, restarts, down_for_seconds)
+    _reject_nan(memory_ratio=memory_ratio, memory_peak_mb=memory_peak_mb)
+
+    # ⚠️ Phân loại theo ĐỈNH, không theo giá trị tức thời. Process vừa restart
+    # thì bộ nhớ về mức thấp — đo tức thời sẽ giấu mất chính cái đỉnh đã gây ra
+    # OOM-kill. Đo thật 05/08: tức thời 0.80 (dưới ngưỡng), đỉnh 0.89 (trên).
+    # Truyền nhầm giá trị tức thời vào đây là Agent báo "bình thường" đúng lúc
+    # container vừa chết 5 lần.
+    tran_mb = prometheus.CONTAINER_MEMORY_LIMIT_BYTES / 1024 / 1024
+    dinh_ratio = memory_peak_mb / tran_mb if tran_mb else 0.0
+
+    severity = classify_crashloop(service_up, restarts, down_for_seconds, dinh_ratio)
     if severity is None:
         return None
 
@@ -380,6 +455,21 @@ def detect_crashloop(
                 name="số lần restart trong 10 phút",
                 value=restarts,
                 promql=prometheus.RESTART_COUNT_10M,
+            ),
+            MetricEvidence(
+                name="bộ nhớ đang dùng / giới hạn container",
+                value=memory_ratio,
+                promql=prometheus.MEMORY_USAGE_RATIO,
+            ),
+            MetricEvidence(
+                # Trần ghi thẳng vào tên, KHÔNG mượn `baseline` làm giới hạn.
+                # `baseline` nghĩa là "mức thường ngày", nên war room in ra
+                # "114 MB — lệch 0.9× baseline" — đọc thành thấp hơn bình
+                # thường, trong khi thật ra là 89% của trần. Số đúng, câu sai.
+                name=f"đỉnh bộ nhớ 10 phút (trần {tran_mb:.0f} MB)",
+                value=memory_peak_mb,
+                unit=" MB",
+                promql=prometheus.MEMORY_PEAK_10M_MB,
             ),
         ],
     )
@@ -412,6 +502,12 @@ def correlate_deploy(
     return min(truoc_do, key=lambda deploy: deploy.minutes_before(detected_at))
 
 
+def _phan_tram_tran(peak_mb: float) -> float:
+    """Đỉnh bộ nhớ (MB) chiếm bao nhiêu phần trần container, 0–1."""
+    tran_mb = prometheus.CONTAINER_MEMORY_LIMIT_BYTES / 1024 / 1024
+    return peak_mb / tran_mb if tran_mb else 0.0
+
+
 def _diem_tin_cay(
     evidence: list[MetricEvidence],
     related_deploy: DeployRecord | None,
@@ -426,23 +522,47 @@ def _diem_tin_cay(
 
     Bảng điểm, cộng dồn rồi chặn ở 1.0:
 
+    ⚠️ **Bảng phải phủ cả ba use case.** Bản đầu chỉ biết tên bằng chứng của
+    UC-1, nên mọi giả thuyết UC-2 và UC-3 ra `confidence = 0.0` — con số đó vô
+    nghĩa y như một hằng số cắm cứng, chỉ khác là sai theo hướng ngược lại. Phát
+    hiện ngày 05/08 khi truy vì sao eval M3 cho UC-2 và UC-3 đều 0.
+
     | Bằng chứng | Điểm | Vì sao ngần đó |
     |---|---|---|
-    | Pool cạn ≥ 95% | 0.40 | Bằng chứng **nguyên nhân gốc**, nặng nhất |
-    | p95 lệch baseline ≥ 3× | 0.30 | Xác nhận bất thường thật, không phải dao động |
+    | **UC-1** Pool cạn ≥ 95% | 0.40 | Bằng chứng **nguyên nhân gốc**, nặng nhất |
+    | **UC-1** p95 lệch baseline ≥ 3× | 0.30 | Xác nhận bất thường thật, không phải dao động |
+    | **UC-1** Tỷ lệ lỗi 5xx vượt ngưỡng | 0.10 | Triệu chứng kèm theo |
+    | **UC-2** Đỉnh bộ nhớ chạm ≥ 90% trần | 0.40 | Bằng chứng **nguyên nhân gốc** của OOM |
+    | **UC-2** Service đã chết (`up` = 0) | 0.30 | Sự cố có thật, không phải nhiễu |
+    | **UC-2** Restart ≥ ngưỡng crash loop | 0.20 | Xác nhận là loop, không phải tắt hẳn |
+    | **UC-3** Đăng nhập hỏng ≥ ngưỡng P1 | 0.40 | Hình thái tấn công rõ, không phải người gõ nhầm |
+    | **UC-3** Đăng nhập hỏng ≥ ngưỡng P2 | 0.25 | Bất thường nhưng chưa chắc là tấn công |
     | Có deploy ngay trước | 0.20 | Chỉ là trùng thời gian, nên nhẹ |
-    | Tỷ lệ lỗi 5xx vượt ngưỡng | 0.10 | Triệu chứng kèm theo |
 
     Một giả thuyết chỉ dựa trên "p95 cao" ra 0.30 — thấp, và **đáng thấp**.
     """
     diem = 0.0
     for item in evidence:
+        # UC-1 — nghẽn tài nguyên.
         if "db_pool" in item.name and item.value >= POOL_EXHAUSTED_RATIO:
             diem += 0.40
         elif "p95" in item.name and (item.deviation_ratio or 0) >= BASELINE_DEVIATION_STRONG:
             diem += 0.30
         elif "lỗi 5xx" in item.name and item.value > ERROR_RATE_P3:
             diem += 0.10
+        # UC-2 — chết vì hết bộ nhớ.
+        elif "đỉnh bộ nhớ" in item.name and _phan_tram_tran(item.value) >= MEMORY_NEAR_LIMIT_RATIO:
+            diem += 0.40
+        elif "up (" in item.name and item.value < 1:
+            diem += 0.30
+        elif "restart" in item.name and item.value >= CRASHLOOP_RESTARTS:
+            diem += 0.20
+        # UC-3 — hình thái truy cập bất thường.
+        elif "/login" in item.name:
+            if item.value >= AUTH_FAILURE_P1:
+                diem += 0.40
+            elif item.value >= AUTH_FAILURE_P2:
+                diem += 0.25
 
     if related_deploy is not None:
         diem += 0.20
@@ -467,17 +587,45 @@ def _cau_giai_thuyet(
     thuyết phục, và sai. `use-cases.md` UC-1 chấm chẩn đoán đúng khi nêu được
     **pool cạn / truy vấn giữ connection lâu**, không phải khi nêu deploy.
     """
-    pool_can = any("db_pool" in item.name and item.value >= POOL_EXHAUSTED_RATIO for item in evidence)
 
-    if pool_can:
+    def _tim(khoa: str) -> MetricEvidence | None:
+        return next((item for item in evidence if khoa in item.name), None)
+
+    pool = _tim("db_pool")
+    bo_nho = _tim("đỉnh bộ nhớ")
+    login = _tim("/login")
+
+    # Thứ tự xét = thứ tự "cụ thể dần". Mỗi nhánh nêu NGUYÊN NHÂN GỐC của một
+    # hình thái sự cố; nhánh cuối chỉ mô tả triệu chứng và là đường lùi.
+    #
+    # ⚠️ Bản đầu chỉ có nhánh pool, nên UC-2 và UC-3 rơi hết xuống nhánh cuối và
+    # câu giả thuyết chỉ nhắc lại con số đã có trong tiêu đề. `use-cases.md`
+    # chấm "nêu chung chung" là KHÔNG đạt — đó là một nửa lý do eval M3 cho
+    # UC-2/UC-3 ra 0, nửa còn lại là thiếu bằng chứng bộ nhớ.
+    if pool is not None and pool.value >= POOL_EXHAUSTED_RATIO:
         cau = (
             f"Connection pool của {signal.affected_service} cạn kiệt — mỗi request giữ "
             "connection lâu hơn bình thường nên số chỗ trong pool hết sạch dưới tải."
         )
+    elif bo_nho is not None and _phan_tram_tran(bo_nho.value) >= MEMORY_NEAR_LIMIT_RATIO:
+        tran = prometheus.CONTAINER_MEMORY_LIMIT_BYTES / 1024 / 1024
+        cau = (
+            f"{signal.affected_service} bị OOM-kill: bộ nhớ leo tới {bo_nho.value:.0f} MB, "
+            f"chạm giới hạn {tran:.0f} MB của container, nên Docker giết process rồi "
+            "khởi động lại. Bộ nhớ leo dần chứ không nhảy vọt — hình thái của rò rỉ, "
+            "không phải của một request nặng bất thường."
+        )
+    elif login is not None and login.value >= AUTH_FAILURE_P2:
+        cau = (
+            f"{signal.affected_service} đang nhận {login.value:.0f} lượt đăng nhập thất bại "
+            "mỗi giây — hình thái phù hợp với credential-stuffing, không phải quá tải. "
+            "Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx."
+        )
     else:
         cau = (
             f"{signal.affected_service} bất thường ở {signal.metric_name} "
-            f"({signal.metric_value:.2f}, ngưỡng {signal.threshold:.2f})."
+            f"({signal.metric_value:.2f}, ngưỡng {signal.threshold:.2f}). "
+            "Chưa đủ bằng chứng để nêu nguyên nhân gốc."
         )
 
     if related_deploy is not None:

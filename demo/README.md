@@ -149,7 +149,7 @@ của Docker Desktop trên Windows:
 
 ```bash
 docker compose -f docker-compose.demo.yml exec -T service-dat-hang \
-  python attack.py --url http://service-thanh-toan:8001/login
+  python attack.py --url http://service-thanh-toan:8001/login --accounts 100
 ```
 
 Cũng có thể chạy từ host bằng `python demo/attack.py`, nhưng tốc độ thực trên
@@ -158,6 +158,18 @@ Windows có thể thấp hơn mục tiêu dù service vẫn xử lý nhanh.
 Đã verify ngày 31/07/2026: 12.000/12.000 response là `401` trong 60 giây
 (200,0 request/giây); Prometheus đo p95 `/login` khoảng 0,048 giây, pool 0%,
 không có lỗi 5xx. Như vậy đây là bất thường truy cập, không phải quá tải.
+
+Ba metric UC-3 không chứa IP/username thô:
+
+```promql
+auth_failure_unique_source_ips_1m
+auth_failure_unique_accounts_1m
+auth_failure_top_source_ratio_1m
+```
+
+Đã verify ngày 05/08/2026: 1 IP nguồn, 100 tài khoản và tỷ lệ nguồn lớn nhất
+bằng 1. Các số được tính trong cửa sổ trượt 1 phút; dữ liệu nguồn chỉ giữ trong
+RAM, không dùng làm label Prometheus và không ghi xuống database.
 
 ## ⚠️ Đo ngày 02/08/2026 — mức tải nào làm p95 vượt 2s?
 

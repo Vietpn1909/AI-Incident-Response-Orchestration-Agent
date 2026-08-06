@@ -18,10 +18,13 @@ Phần Trung làm: các chỗ có TODO(Trung).
 from __future__ import annotations
 
 import os
+import time
+from collections import Counter, deque
 from contextlib import asynccontextmanager
+from threading import Lock
 
 import asyncpg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from prometheus_client import Gauge
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
@@ -55,6 +58,47 @@ PAYMENT_QUERY_DELAY_SECONDS = float(os.getenv("PAYMENT_QUERY_DELAY_SECONDS", "0.
 # của app thành `exported_service` — Việt phát hiện, xem spike/README.md vấn đề 4.
 db_pool_in_use = Gauge("db_pool_connections_in_use", "Số connection đang được dùng")
 db_pool_size = Gauge("db_pool_size", "Kích thước pool tối đa")
+
+AUTH_FAILURE_WINDOW_SECONDS = 60.0
+auth_failure_events: deque[tuple[float, str, str]] = deque()
+auth_failure_lock = Lock()
+auth_failure_unique_sources = Gauge('auth_failure_unique_source_ips_1m', 'Unique source IPs in 1m')
+auth_failure_unique_accounts = Gauge('auth_failure_unique_accounts_1m', 'Unique accounts tried in 1m')
+auth_failure_top_source_ratio = Gauge('auth_failure_top_source_ratio_1m', 'Top source share in 1m')
+auth_failure_unique_sources.set_function(lambda: _auth_failure_snapshot()[0])
+auth_failure_unique_accounts.set_function(lambda: _auth_failure_snapshot()[1])
+auth_failure_top_source_ratio.set_function(lambda: _auth_failure_snapshot()[2])
+
+
+def _auth_failure_snapshot(now: float | None = None) -> tuple[int, int, float]:
+    current = time.monotonic() if now is None else now
+    cutoff = current - AUTH_FAILURE_WINDOW_SECONDS
+    with auth_failure_lock:
+        _prune_auth_failure_events(cutoff)
+        if not auth_failure_events:
+            return 0, 0, 0.0
+        return _summarize_auth_failures()
+
+
+def _prune_auth_failure_events(cutoff: float) -> None:
+    """Xoá sự kiện cũ; chỉ gọi khi đang giữ ``auth_failure_lock``."""
+    while auth_failure_events and auth_failure_events[0][0] < cutoff:
+        auth_failure_events.popleft()
+
+
+def _summarize_auth_failures() -> tuple[int, int, float]:
+    sources = Counter(source for _, source, _ in auth_failure_events)
+    accounts = {account for _, _, account in auth_failure_events}
+    top_source_ratio = max(sources.values()) / len(auth_failure_events)
+    return len(sources), len(accounts), top_source_ratio
+
+
+def _record_auth_failure(source_ip: str, account: str) -> None:
+    current = time.monotonic()
+    with auth_failure_lock:
+        _prune_auth_failure_events(current - AUTH_FAILURE_WINDOW_SECONDS)
+        auth_failure_events.append((current, source_ip, account))
+
 
 pool: asyncpg.Pool | None = None
 
@@ -191,7 +235,7 @@ async def pay_batch() -> dict:
 
 
 @app.post("/login")
-async def login(request: LoginRequest) -> dict:
+async def login(payload: LoginRequest, request: Request) -> dict:
     """Xác thực — endpoint cho UC-3 (burst tấn công).
 
     TODO(Trung):
@@ -209,7 +253,9 @@ async def login(request: LoginRequest) -> dict:
         curl -X POST localhost:8001/login -H "Content-Type: application/json" \
           -d '{"username":"demo","password":"sai"}'   → 401
     """
-    if request.username != DEMO_USERNAME or request.password != DEMO_PASSWORD:
+    if payload.username != DEMO_USERNAME or payload.password != DEMO_PASSWORD:
+        source_ip = request.client.host if request.client is not None else 'unknown'
+        _record_auth_failure(source_ip, payload.username)
         raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")
 
     return {"ok": True, "token": "fake-token"}

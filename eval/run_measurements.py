@@ -224,6 +224,19 @@ def diagnosis_correct(uc: str, text: str) -> bool:
         )
         return (pool and exhausted) or slow_query
     if uc == "UC-2":
+        denied = any(
+            phrase in normalized
+            for phrase in (
+                "không có nguyên nhân gốc",
+                "không phải do oom",
+                "không phải do bộ nhớ",
+                "không bị oom",
+                "không có oom",
+                "không cho thấy áp lực bộ nhớ",
+            )
+        )
+        if denied:
+            return False
         oom = "oom" in normalized or "out of memory" in normalized
         memory = any(word in normalized for word in ("bộ nhớ", "memory", "ram"))
         cause = any(word in normalized for word in ("128", "giới hạn", "rò rỉ", "leak"))
@@ -233,7 +246,10 @@ def diagnosis_correct(uc: str, text: str) -> bool:
             word in normalized
             for word in ("bảo mật", "tấn công", "credential", "brute", "đăng nhập", "xác thực")
         )
-        performance = any(word in normalized for word in ("quá tải", "pool cạn", "oom"))
+        performance_text = normalized
+        for negation in ("không phải quá tải", "không phải là quá tải"):
+            performance_text = performance_text.replace(negation, "")
+        performance = any(word in performance_text for word in ("quá tải", "pool cạn", "oom"))
         return security and not performance
     raise ValueError(f"UC không hỗ trợ: {uc}")
 

@@ -140,17 +140,23 @@ def _one_per_service(*sources: dict[str, IncidentSignal]) -> list[IncidentSignal
 def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
     """Quét UC-2 — service chết vì OOM rồi restart. Trả `{service: tín hiệu}`.
 
-    Ba câu hỏi Prometheus, không phụ thuộc service có nhận request hay không:
-    service còn sống không, đã chết liên tục bao lâu, và khởi động lại mấy lần
-    trong 10 phút.
+    Năm câu hỏi Prometheus, không phụ thuộc service có nhận request hay không:
+    service còn sống không, đã chết liên tục bao lâu, khởi động lại mấy lần
+    trong 10 phút, đang dùng bao nhiêu phần bộ nhớ, và đỉnh bộ nhớ là bao nhiêu.
 
     Phần "chết liên tục bao lâu" dùng lại `_sustained()` với biểu thức đảo
     `1 - up`: `min_over_time` của nó còn trên 0.5 nghĩa là suốt cửa sổ đó chưa
     lúc nào service sống lại.
+
+    ⚠️ Hai câu về bộ nhớ thêm ngày 05/08. Không có chúng thì Agent chứng minh
+    được service *đang chết đi sống lại* nhưng không nói được **vì sao** — và
+    eval M3 cho UC-2 ra 0/8 đúng vì lý do đó, chứ không phải vì LLM kém.
     """
     up = _samples_by_service(client, prometheus.SERVICE_UP)
     restarts = _samples_by_service(client, prometheus.RESTART_COUNT_10M)
     down_for = _sustained(client, prometheus.SERVICE_DOWN, 0.5)
+    memory_ratio = _samples_by_service(client, prometheus.MEMORY_USAGE_RATIO)
+    memory_peak = _samples_by_service(client, prometheus.MEMORY_PEAK_10M_MB)
 
     found: dict[str, IncidentSignal] = {}
     for service in set(up) | set(restarts):
@@ -159,6 +165,8 @@ def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
             restarts=restarts.get(service, 0.0),
             down_for_seconds=down_for.get(service, 0.0),
             service=service,
+            memory_ratio=memory_ratio.get(service, 0.0),
+            memory_peak_mb=memory_peak.get(service, 0.0),
         )
         if signal is None:
             continue
