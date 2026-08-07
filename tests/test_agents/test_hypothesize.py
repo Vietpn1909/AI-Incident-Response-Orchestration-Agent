@@ -392,3 +392,82 @@ def test_cum_chua_du_bang_chung_con_khop():
     cau_mac_dinh = rules.build_hypothesis(signal, None).statement.lower()
 
     assert node._LUAT_CUNG_CHIU in cau_mac_dinh
+
+
+# ────────── cửa chống khẳng định ngược (thêm 07/08)
+
+
+def _tin_hieu_uc3_day_du():
+    """UC-3 với đủ 4 bằng chứng hình dạng nguồn, như eval của Trung ngày 07/08."""
+    return rules.detect_auth_burst(
+        failures_per_second=182.8, breached_for_seconds=300.0, service="service-thanh-toan",
+        unique_source_ips=1.0, unique_accounts=100.0, top_source_ratio=1.0,
+    )
+
+
+def test_bo_cau_llm_khi_khang_dinh_thu_luat_da_loai_tru(monkeypatch):
+    """5/8 lượt UC-3 sai chỉ khác 3 lượt đúng đúng một mệnh đề đuôi.
+
+    Lấy nguyên văn từ `eval/runs.csv`:
+
+        ĐÚNG: "…100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
+        SAI:  "…100 lần thử đăng nhập khác nhau mỗi phút, gây quá tải request
+               thất bại."
+
+    Câu luật nói thẳng "vấn đề bảo mật, không phải quá tải", còn LLM khẳng định
+    đúng cái vừa bị phủ định. `use-cases.md` chấm kết luận "quá tải" cho một vụ
+    credential-stuffing là SAI, vì nó dẫn người trực đi sửa nhầm hướng.
+    """
+    signal = _tin_hieu_uc3_day_du()
+    assert signal is not None
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai(
+            "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau "
+            "mỗi phút, gây quá tải request thất bại."
+        ),
+    )
+
+    assert "credential-stuffing" in h.statement, "phải giữ câu của luật"
+    assert h.reasoning == ""
+
+
+def test_giu_cau_llm_dung_khong_khang_dinh_nguoc(monkeypatch):
+    """Không chặn oan: câu mô tả đúng hình dạng nguồn phải được giữ."""
+    signal = _tin_hieu_uc3_day_du()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai(
+            "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau "
+            "mỗi phút vào endpoint /login."
+        ),
+    )
+
+    assert "endpoint /login" in h.statement, "câu LLM đúng thì phải giữ"
+
+
+def test_llm_nhac_lai_chinh_phu_dinh_do_thi_khong_bi_chan(monkeypatch):
+    """"đây là tấn công, không phải quá tải" là ĐỒNG Ý với luật, không phải ngược."""
+    signal = _tin_hieu_uc3_day_du()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Một IP thử 100 tài khoản — đây là tấn công, không phải quá tải."),
+    )
+
+    assert "tấn công" in h.statement
+
+
+def test_doc_phu_dinh_thang_tu_cau_luat_khong_hardcode():
+    """Cửa này đọc "không phải X" ra từ câu luật, nên luật đổi chữ là nó tự theo."""
+    signal = _tin_hieu_uc3_day_du()
+    cau_luat = rules.build_hypothesis(signal, None).statement
+
+    assert node._thu_bi_luat_loai_tru(cau_luat) == ["quá tải"]
+    # Câu luật không loại trừ gì thì cửa không chặn bất cứ thứ gì.
+    assert node._thu_bi_luat_loai_tru("Pool cạn kiệt nên request xếp hàng.") == []

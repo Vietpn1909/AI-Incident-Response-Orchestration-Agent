@@ -208,6 +208,17 @@ def hypothesize_with_origin(signal: IncidentSignal, llm=None) -> HypothesisOutco
         logger.warning("%s: không tách được giả thuyết từ câu trả lời LLM", signal.affected_service)
         return HypothesisOutcome(hypothesis, "rule")
 
+    khang_dinh_nguoc = _khang_dinh_thu_luat_da_loai_tru(statement, hypothesis.statement)
+    if khang_dinh_nguoc:
+        logger.warning(
+            "%s: BỎ câu của LLM vì nó KHẲNG ĐỊNH '%s' — đúng thứ luật vừa loại trừ "
+            "bằng cụm 'không phải'. Giữ câu do luật ghép. Câu bị bỏ: %s",
+            signal.affected_service,
+            khang_dinh_nguoc,
+            statement,
+        )
+        return HypothesisOutcome(hypothesis, "rule")
+
     if _phu_dinh_ket_luan_cua_luat(statement, hypothesis.statement):
         logger.warning(
             "%s: BỎ câu của LLM vì nó PHỦ ĐỊNH một nguyên nhân mà luật đã chứng minh "
@@ -234,6 +245,89 @@ def hypothesize_with_origin(signal: IncidentSignal, llm=None) -> HypothesisOutco
         hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning}),
         "llm",
     )
+
+
+#: Cụm luật dùng để loại trừ một nguyên nhân SAI, vd. "không phải quá tải".
+#:
+#: Khác hẳn `_CUM_PHU_DINH` bên dưới: cụm kia là LLM phủ định **mọi** nguyên
+#: nhân, còn cụm này là luật loại trừ **một** nguyên nhân cụ thể.
+_CUM_LOAI_TRU = "không phải "
+
+#: Ký tự kết thúc mệnh đề — dùng để biết cụm bị loại trừ dừng ở đâu.
+_KET_MENH_DE = ".,;:—-\n"
+
+
+def _thu_bi_luat_loai_tru(statement_luat: str) -> list[str]:
+    """Những cụm mà câu luật nói thẳng là **không phải** nguyên nhân.
+
+    `"…vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ…"` → `["quá tải"]`
+
+    Đọc thẳng từ câu luật thay vì liệt kê từ khoá sẵn: luật đổi cách diễn đạt
+    thì cửa chặn tự theo, không cần ai nhớ cập nhật hai chỗ.
+    """
+    ket_qua: list[str] = []
+    thap = statement_luat.lower()
+    vi_tri = thap.find(_CUM_LOAI_TRU)
+    while vi_tri != -1:
+        bat_dau = vi_tri + len(_CUM_LOAI_TRU)
+        het = len(thap)
+        for i in range(bat_dau, len(thap)):
+            if thap[i] in _KET_MENH_DE:
+                het = i
+                break
+        cum = thap[bat_dau:het].strip()
+        if cum:
+            ket_qua.append(cum)
+        vi_tri = thap.find(_CUM_LOAI_TRU, het)
+    return ket_qua
+
+
+def _khang_dinh_thu_luat_da_loai_tru(statement_llm: str, statement_luat: str) -> str | None:
+    """LLM có khẳng định đúng thứ luật vừa loại trừ không?
+
+    Trả cụm vi phạm, `None` nếu không có.
+
+    ## Vì sao cần cửa này — đo được ngày 07/08 từ eval của Trung
+
+    UC-3 sau khi có đủ 4 bằng chứng hình dạng nguồn: **5/8 lượt sai, và cả 5 chỉ
+    khác 3 lượt đúng đúng một mệnh đề đuôi**:
+
+        ĐÚNG: "…100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
+        SAI:  "…100 lần thử đăng nhập khác nhau mỗi phút, GÂY QUÁ TẢI request
+               thất bại."
+
+    LLM mô tả **đúng** hình dạng nguồn rồi gắn thêm "gây quá tải" — đúng cái
+    `docs/use-cases.md` gọi là chẩn đoán SAI, vì kết luận "service quá tải" cho
+    một vụ credential-stuffing dẫn người trực đi sửa nhầm hướng.
+
+    ## Vì sao hai cửa kia không bắt được
+
+    `_nguyen_nhan_khong_co_can_cu()` chỉ chặn những nguyên nhân **cần bằng
+    chứng riêng** (pool, bộ nhớ, deploy). `"quá tải"` **cố ý** không nằm trong
+    danh sách đó — vì câu ĐÚNG của luật cho UC-3 có chứa "không phải quá tải",
+    chặn theo từ khoá là bỏ đúng câu muốn giữ.
+
+    Nhưng đó mới là một nửa. Nửa còn lại: câu luật **phủ định thẳng** "quá tải",
+    còn LLM thì **khẳng định** nó. Cửa này đọc phủ định ra từ chính câu luật rồi
+    cấm khẳng định ngược lại — không cần liệt kê từ khoá nào.
+
+    ## Lần thứ ba cùng một họ
+
+        05/08  LLM BỊA nguyên nhân không có bằng chứng
+        06/08  LLM XOÁ nguyên nhân đã có bằng chứng
+        07/08  LLM KHẲNG ĐỊNH thứ luật vừa phủ định
+
+    Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại giữ đúng một
+    ranh giới — **LLM diễn đạt lại kết luận của luật, không đổi nó**.
+    """
+    cau_llm = statement_llm.lower()
+    for cum in _thu_bi_luat_loai_tru(statement_luat):
+        # Bỏ những lần LLM nhắc lại chính phủ định đó ("không phải quá tải"),
+        # rồi mới xét cụm còn sót lại — chỉ khi đó mới là khẳng định ngược.
+        con_lai = cau_llm.replace(f"{_CUM_LOAI_TRU}{cum}", "")
+        if cum in con_lai:
+            return cum
+    return None
 
 
 #: Cụm mà `rules._cau_giai_thuyet()` dùng ở nhánh cuối, tức "luật KHÔNG tìm ra
