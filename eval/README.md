@@ -29,6 +29,7 @@ Mentor đã nhấn mạnh chính chỗ này: *"khi làm bài toán AI, vấn đ�
 | **Time to first hypothesis** | Từ lúc phát hiện → có giả thuyết đầu tiên | timestamp comment trên Jira |
 | **Độ chính xác severity** | % phân loại đúng / N lần chạy | so với nhãn đã biết trước |
 | **Độ chính xác nguyên nhân (top-1)** | % lần giả thuyết #1 đúng | ground truth: pool cạn / OOM / auth burst |
+| **Nguồn câu cuối** | Câu do LLM viết hay rule engine giữ lại | `statement_origin` trong `eval/runs.csv` |
 | **Tính đầy đủ bằng chứng** | % giả thuyết có ≥1 `MetricEvidence` kèm PromQL | đọc từ model, tự động được |
 | **Tỷ lệ báo động sai** | Số incident mở khi hệ thống bình thường | chạy tải thấp 30 phút, đếm |
 | **Tỷ lệ trùng** | Số issue mở cho 1 sự cố thật (phải = **1**) | đếm trên Jira |
@@ -45,6 +46,10 @@ Mentor đã nhấn mạnh chính chỗ này: *"khi làm bài toán AI, vấn đ�
 5. Tính bảng họ B, xuất `eval/results/report.md`
 
 Cần ≥10 lần/UC để tỷ lệ phần trăm có nghĩa. 2–3 lần thì con số không nói được gì.
+
+Khi đọc M3, không được đánh đồng câu Agent trả về với năng lực LLM: `rule` nghĩa
+là Agent đã chặn câu LLM lỗi và giữ kết luận tất định có bằng chứng. Báo cáo phải
+ghi cả số đúng/tổng và tỷ lệ `llm`/`rule` cho từng UC.
 
 ## Giới hạn phải ghi rõ trong báo cáo
 

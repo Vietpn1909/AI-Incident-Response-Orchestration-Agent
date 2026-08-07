@@ -1,46 +1,16 @@
 {
-  "started_at": "2026-08-05T08:35:45.733593+00:00",
-  "ended_at": "2026-08-05T08:37:45.730341+00:00",
-  "duration_seconds": 119.996748,
-  "poll_interval_seconds": 8.0,
+  "started_at": "2026-08-06T13:40:23.158367+00:00",
+  "ended_at": "2026-08-06T13:41:00.121424+00:00",
+  "duration_seconds": 36.963057,
+  "poll_interval_seconds": 2.0,
   "cycle_count": 15,
   "issue_count": 1,
   "cycles": [
     {
       "number": 1,
-      "started_at": "2026-08-05T08:35:45.733593+00:00",
-      "ended_at": "2026-08-05T08:35:45.759430+00:00",
-      "duration_seconds": 0.025837,
-      "detected": 0,
-      "opened": [],
-      "updated": [],
-      "error": null
-    },
-    {
-      "number": 2,
-      "started_at": "2026-08-05T08:35:53.760254+00:00",
-      "ended_at": "2026-08-05T08:35:53.801525+00:00",
-      "duration_seconds": 0.041271,
-      "detected": 0,
-      "opened": [],
-      "updated": [],
-      "error": null
-    },
-    {
-      "number": 3,
-      "started_at": "2026-08-05T08:36:01.803032+00:00",
-      "ended_at": "2026-08-05T08:36:01.875904+00:00",
-      "duration_seconds": 0.072872,
-      "detected": 0,
-      "opened": [],
-      "updated": [],
-      "error": null
-    },
-    {
-      "number": 4,
-      "started_at": "2026-08-05T08:36:09.877393+00:00",
-      "ended_at": "2026-08-05T08:36:14.098942+00:00",
-      "duration_seconds": 4.221549,
+      "started_at": "2026-08-06T13:40:23.158367+00:00",
+      "ended_at": "2026-08-06T13:40:30.663565+00:00",
+      "duration_seconds": 7.505198,
       "detected": 1,
       "opened": [
         "INC-1"
@@ -49,10 +19,46 @@
       "error": null
     },
     {
+      "number": 2,
+      "started_at": "2026-08-06T13:40:32.664186+00:00",
+      "ended_at": "2026-08-06T13:40:32.785906+00:00",
+      "duration_seconds": 0.12172,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 3,
+      "started_at": "2026-08-06T13:40:34.786850+00:00",
+      "ended_at": "2026-08-06T13:40:34.888397+00:00",
+      "duration_seconds": 0.101547,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
+      "number": 4,
+      "started_at": "2026-08-06T13:40:36.889552+00:00",
+      "ended_at": "2026-08-06T13:40:36.981402+00:00",
+      "duration_seconds": 0.09185,
+      "detected": 1,
+      "opened": [],
+      "updated": [
+        "INC-1"
+      ],
+      "error": null
+    },
+    {
       "number": 5,
-      "started_at": "2026-08-05T08:36:22.099226+00:00",
-      "ended_at": "2026-08-05T08:36:22.167717+00:00",
-      "duration_seconds": 0.068491,
+      "started_at": "2026-08-06T13:40:38.982549+00:00",
+      "ended_at": "2026-08-06T13:40:39.088648+00:00",
+      "duration_seconds": 0.106099,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -62,9 +68,9 @@
     },
     {
       "number": 6,
-      "started_at": "2026-08-05T08:36:30.168534+00:00",
-      "ended_at": "2026-08-05T08:36:30.227367+00:00",
-      "duration_seconds": 0.058833,
+      "started_at": "2026-08-06T13:40:41.089090+00:00",
+      "ended_at": "2026-08-06T13:40:41.189130+00:00",
+      "duration_seconds": 0.10004,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -74,9 +80,9 @@
     },
     {
       "number": 7,
-      "started_at": "2026-08-05T08:36:38.227979+00:00",
-      "ended_at": "2026-08-05T08:36:38.300101+00:00",
-      "duration_seconds": 0.072122,
+      "started_at": "2026-08-06T13:40:43.190071+00:00",
+      "ended_at": "2026-08-06T13:40:43.297254+00:00",
+      "duration_seconds": 0.107183,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -86,9 +92,9 @@
     },
     {
       "number": 8,
-      "started_at": "2026-08-05T08:36:46.301055+00:00",
-      "ended_at": "2026-08-05T08:36:46.374203+00:00",
-      "duration_seconds": 0.073148,
+      "started_at": "2026-08-06T13:40:45.298251+00:00",
+      "ended_at": "2026-08-06T13:40:45.392832+00:00",
+      "duration_seconds": 0.094581,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -98,9 +104,9 @@
     },
     {
       "number": 9,
-      "started_at": "2026-08-05T08:36:54.374626+00:00",
-      "ended_at": "2026-08-05T08:36:54.436348+00:00",
-      "duration_seconds": 0.061722,
+      "started_at": "2026-08-06T13:40:47.393891+00:00",
+      "ended_at": "2026-08-06T13:40:47.497449+00:00",
+      "duration_seconds": 0.103558,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -110,9 +116,9 @@
     },
     {
       "number": 10,
-      "started_at": "2026-08-05T08:37:02.436729+00:00",
-      "ended_at": "2026-08-05T08:37:02.505448+00:00",
-      "duration_seconds": 0.068719,
+      "started_at": "2026-08-06T13:40:49.498525+00:00",
+      "ended_at": "2026-08-06T13:40:49.597072+00:00",
+      "duration_seconds": 0.098547,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -122,9 +128,9 @@
     },
     {
       "number": 11,
-      "started_at": "2026-08-05T08:37:10.506301+00:00",
-      "ended_at": "2026-08-05T08:37:10.585224+00:00",
-      "duration_seconds": 0.078923,
+      "started_at": "2026-08-06T13:40:51.598079+00:00",
+      "ended_at": "2026-08-06T13:40:51.710558+00:00",
+      "duration_seconds": 0.112479,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -134,9 +140,9 @@
     },
     {
       "number": 12,
-      "started_at": "2026-08-05T08:37:18.585716+00:00",
-      "ended_at": "2026-08-05T08:37:18.657514+00:00",
-      "duration_seconds": 0.071798,
+      "started_at": "2026-08-06T13:40:53.710854+00:00",
+      "ended_at": "2026-08-06T13:40:53.813241+00:00",
+      "duration_seconds": 0.102387,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -146,9 +152,9 @@
     },
     {
       "number": 13,
-      "started_at": "2026-08-05T08:37:26.657644+00:00",
-      "ended_at": "2026-08-05T08:37:26.714214+00:00",
-      "duration_seconds": 0.05657,
+      "started_at": "2026-08-06T13:40:55.814024+00:00",
+      "ended_at": "2026-08-06T13:40:55.915128+00:00",
+      "duration_seconds": 0.101104,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -158,9 +164,9 @@
     },
     {
       "number": 14,
-      "started_at": "2026-08-05T08:37:34.715467+00:00",
-      "ended_at": "2026-08-05T08:37:34.769111+00:00",
-      "duration_seconds": 0.053644,
+      "started_at": "2026-08-06T13:40:57.916070+00:00",
+      "ended_at": "2026-08-06T13:40:58.020684+00:00",
+      "duration_seconds": 0.104614,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -170,9 +176,9 @@
     },
     {
       "number": 15,
-      "started_at": "2026-08-05T08:37:42.770376+00:00",
-      "ended_at": "2026-08-05T08:37:42.838293+00:00",
-      "duration_seconds": 0.067917,
+      "started_at": "2026-08-06T13:41:00.022121+00:00",
+      "ended_at": "2026-08-06T13:41:00.121424+00:00",
+      "duration_seconds": 0.099303,
       "detected": 1,
       "opened": [],
       "updated": [
@@ -182,53 +188,101 @@
     }
   ],
   "measurements": {
-    "issue_opened_at": "2026-08-05T08:36:09.932908+00:00",
-    "agent_processing_seconds": 0.032322
+    "issue_opened_at": "2026-08-06T13:40:23.275525+00:00",
+    "agent_processing_seconds": 0.037348
   },
   "incidents": [
     {
       "jira_key": "INC-1",
-      "title": "[P1] service-thanh-toan: số request /login thất bại mỗi giây = 55.88 (ngưỡng 50.00)",
+      "title": "[P1] service-thanh-toan: số request /login thất bại mỗi giây = 180.33 (ngưỡng 50.00)",
       "severity": "P1",
       "state": "Awaiting Approval",
       "affected_services": [
         "service-thanh-toan"
       ],
-      "detected_at": "2026-08-05T08:36:09.900586Z",
+      "detected_at": "2026-08-06T13:40:23.238177Z",
       "resolved_at": null,
       "signal": {
         "affected_service": "service-thanh-toan",
         "severity": "P1",
-        "detected_at": "2026-08-05T08:36:09.900586Z",
+        "detected_at": "2026-08-06T13:40:23.238177Z",
         "metric_name": "số request /login thất bại mỗi giây",
-        "metric_value": 55.87857880878579,
+        "metric_value": 180.3338303211026,
         "threshold": 50.0,
         "breached_for_seconds": 300.0,
         "evidence": [
           {
             "name": "số request /login thất bại mỗi giây",
-            "value": 55.87857880878579,
+            "value": 180.3338303211026,
             "baseline": null,
             "unit": "",
             "promql": "\nsum by (service) (rate(http_requests_total{handler=\"/login\", status=~\"4..\"}[1m]))\n"
+          },
+          {
+            "name": "số IP nguồn khác nhau (1 phút)",
+            "value": 1.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "auth_failure_unique_source_ips_1m"
+          },
+          {
+            "name": "số tài khoản bị thử (1 phút)",
+            "value": 100.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "auth_failure_unique_accounts_1m"
+          },
+          {
+            "name": "tỷ lệ từ IP nguồn lớn nhất",
+            "value": 1.0,
+            "baseline": null,
+            "unit": "",
+            "promql": "auth_failure_top_source_ratio_1m"
           }
         ]
       },
       "hypotheses": [
         {
-          "statement": "Chưa xác định được nguyên nhân gốc.",
-          "confidence": 0.0,
+          "statement": "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login.",
+          "confidence": 0.6000000000000001,
           "evidence": [
             {
               "name": "số request /login thất bại mỗi giây",
-              "value": 55.87857880878579,
+              "value": 180.3338303211026,
               "baseline": null,
               "unit": "",
               "promql": "\nsum by (service) (rate(http_requests_total{handler=\"/login\", status=~\"4..\"}[1m]))\n"
+            },
+            {
+              "name": "số IP nguồn khác nhau (1 phút)",
+              "value": 1.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "auth_failure_unique_source_ips_1m"
+            },
+            {
+              "name": "số tài khoản bị thử (1 phút)",
+              "value": 100.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "auth_failure_unique_accounts_1m"
+            },
+            {
+              "name": "tỷ lệ từ IP nguồn lớn nhất",
+              "value": 1.0,
+              "baseline": null,
+              "unit": "",
+              "promql": "auth_failure_top_source_ratio_1m"
             }
           ],
-          "related_deploy": null,
-          "reasoning": "Chỉ có một số đo khả dụng là số request /login thất bại mỗi giây = 55.88, vượt ngưỡng 50.000. Không có thêm số liệu nào về latency, connection pool, lỗi hệ thống hay tài nguyên để suy ra nguyên nhân. Không có deploy gần thời điểm sự cố để xem xét mối liên hệ."
+          "related_deploy": {
+            "service": "service-thanh-toan",
+            "version": "v1.4.2",
+            "deployed_at": "2026-08-06T13:35:01.148852Z",
+            "deployed_by": "ci-bot",
+            "commit_sha": "9f2c1ab"
+          },
+          "reasoning": "Số request /login thất bại mỗi giây là 180.3, trong khi số IP nguồn khác nhau trong 1 phút chỉ là 1. Số tài khoản bị thử trong 1 phút là 100, và tỷ lệ từ IP nguồn lớn nhất là 1 — cho thấy toàn bộ lưu lượng đến từ một IP duy nhất. Sự cố trùng thời gian với deploy phiên bản v1.4.2."
         }
       ],
       "proposal": {
@@ -244,100 +298,118 @@
       },
       "timeline": [
         {
-          "at": "2026-08-05T08:36:09.932908Z",
+          "at": "2026-08-06T13:40:23.275525Z",
           "actor": "agent",
           "action": "mở war room",
-          "detail": "[P1] service-thanh-toan: số request /login thất bại mỗi giây = 55.88 (ngưỡng 50.00)"
+          "detail": "[P1] service-thanh-toan: số request /login thất bại mỗi giây = 180.33 (ngưỡng 50.00)"
         },
         {
-          "at": "2026-08-05T08:36:09.932908Z",
+          "at": "2026-08-06T13:40:23.275525Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Bối cảnh thu thập được lúc phát hiện:\n\n- số request /login thất bại mỗi giây: 55.8786"
+          "detail": "Bối cảnh thu thập được lúc phát hiện:\n\n- số request /login thất bại mỗi giây: 180.334\n\n- số IP nguồn khác nhau (1 phút): 1\n\n- số tài khoản bị thử (1 phút): 100\n\n- tỷ lệ từ IP nguồn lớn nhất: 1"
         },
         {
-          "at": "2026-08-05T08:36:14.065134Z",
+          "at": "2026-08-06T13:40:30.605137Z",
           "actor": "agent",
           "action": "giả thuyết",
-          "detail": "Chưa xác định được nguyên nhân gốc."
+          "detail": "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
         },
         {
-          "at": "2026-08-05T08:36:14.097696Z",
+          "at": "2026-08-06T13:40:30.661520Z",
           "actor": "agent",
           "action": "đề xuất khắc phục",
           "detail": "rate_limit"
         },
         {
-          "at": "2026-08-05T08:36:14.097696Z",
+          "at": "2026-08-06T13:40:30.661520Z",
           "actor": "agent",
           "action": "chuyển trạng thái",
           "detail": "Awaiting Approval"
         },
         {
-          "at": "2026-08-05T08:36:22.167210Z",
+          "at": "2026-08-06T13:40:32.783890Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 96.663 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 143.977 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:36:30.226336Z",
+          "at": "2026-08-06T13:40:34.886398Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 123.527 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 143.977 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:36:38.299100Z",
+          "at": "2026-08-06T13:40:36.979362Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 150.447 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 125.791 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:36:46.373203Z",
+          "at": "2026-08-06T13:40:39.086930Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 177.357 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 125.791 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:36:54.434345Z",
+          "at": "2026-08-06T13:40:41.187148Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 200.007 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 125.791 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:02.504453Z",
+          "at": "2026-08-06T13:40:43.296236Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 171.903 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 107.608 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:10.584223Z",
+          "at": "2026-08-06T13:40:45.391317Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 153.717 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 107.608 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:18.656007Z",
+          "at": "2026-08-06T13:40:47.495368Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 117.350 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 89.423 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:26.713221Z",
+          "at": "2026-08-06T13:40:49.596072Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 80.986 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 89.423 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:34.769111Z",
+          "at": "2026-08-06T13:40:51.708085Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 62.803 (ngưỡng 50.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 71.238 (ngưỡng 50.000), đã vượt liên tục 300s."
         },
         {
-          "at": "2026-08-05T08:37:42.838293Z",
+          "at": "2026-08-06T13:40:53.810554Z",
           "actor": "agent",
           "action": "comment",
-          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 26.438 (ngưỡng 10.000), đã vượt liên tục 300s."
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 71.238 (ngưỡng 50.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-06T13:40:55.913127Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 71.238 (ngưỡng 50.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-06T13:40:58.019170Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 53.057 (ngưỡng 50.000), đã vượt liên tục 300s."
+        },
+        {
+          "at": "2026-08-06T13:41:00.119913Z",
+          "actor": "agent",
+          "action": "comment",
+          "detail": "Tín hiệu vẫn còn: số request /login thất bại mỗi giây = 53.057 (ngưỡng 50.000), đã vượt liên tục 300s."
         }
       ],
       "postmortem": null,

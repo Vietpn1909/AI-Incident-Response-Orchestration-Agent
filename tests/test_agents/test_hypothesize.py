@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 import pytest
 
 from src.agents.nodes import hypothesize as node
-from src.agents.nodes.hypothesize import _parse, hypothesize
+from src.agents.nodes.hypothesize import _parse, hypothesize, hypothesize_with_origin
 from src.models.incident import DeployRecord, IncidentSignal, MetricEvidence, Severity
 from src.services import rules
 
@@ -75,6 +75,15 @@ def test_llm_viet_statement_va_reasoning():
 
     assert hypothesis.statement == "Connection pool cạn kiệt khiến request phải xếp hàng chờ."
     assert "3.7 lần" in hypothesis.reasoning
+
+
+def test_danh_dau_nguon_cau_llm_va_luat():
+    tu_llm = hypothesize_with_origin(_signal(), llm=FakeLLM())
+    tu_luat = hypothesize_with_origin(_signal(), llm=FakeLLM(reply=None))
+
+    assert tu_llm.statement_origin == "llm"
+    assert tu_luat.statement_origin == "rule"
+    assert tu_luat.hypothesis.reasoning == ""
 
 
 def test_llm_khong_dung_toi_confidence_va_evidence():
@@ -218,9 +227,14 @@ def test_bo_cau_llm_khi_neu_nguyen_nhan_khong_co_bang_chung(monkeypatch):
     signal = _tin_hieu_uc3()
     monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
 
-    h = node.hypothesize(signal, llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."))
+    outcome = hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."),
+    )
+    h = outcome.hypothesis
 
     assert "pool" not in h.statement.lower(), "phải bỏ câu của LLM, giữ câu của luật"
+    assert outcome.statement_origin == "rule"
     # Mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật" ngày
     # 06/08: cụm đầu giờ chỉ xuất hiện khi CÓ bằng chứng hình dạng nguồn (số
     # tài khoản bị thử, tỷ lệ IP nguồn lớn nhất). Tín hiệu trong test này chỉ
@@ -314,6 +328,27 @@ def test_bo_cau_llm_khi_no_phu_dinh_nguyen_nhan_da_co_bang_chung(monkeypatch):
 
     assert "OOM-kill" in h.statement, "phải giữ câu của luật"
     assert h.reasoning == ""
+
+
+def test_danh_dau_luat_khi_chan_llm_phu_dinh_oom(monkeypatch):
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=1.0,
+        down_for_seconds=0.0,
+        service="service-thanh-toan",
+        memory_ratio=0.4197,
+        memory_peak_mb=125.9,
+    )
+    assert signal is not None
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    outcome = hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Không có nguyên nhân gốc từ quá tải bộ nhớ hoặc crash container."),
+    )
+
+    assert outcome.statement_origin == "rule"
+    assert "OOM-kill" in outcome.hypothesis.statement
 
 
 def test_giu_cau_llm_phu_dinh_khi_chinh_luat_cung_chiu(monkeypatch):
