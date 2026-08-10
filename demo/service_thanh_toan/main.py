@@ -17,6 +17,7 @@ Phần Trung làm: các chỗ có TODO(Trung).
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections import Counter, deque
@@ -30,6 +31,17 @@ from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-thanh-toan"
+
+# Structured logging cho Log Analysis Agent.
+# Chỉ ghi log ở những điểm sự cố quan trọng — Agent sẽ thu thập những dòng này
+# khi Rule Engine phát hiện bất thường, không phải lúc bình thường.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+    force=True,
+)
+logger = logging.getLogger(SERVICE_NAME)
 
 # Tài khoản cố định chỉ dùng cho UC-3 trong môi trường demo local. Đây không
 # phải cơ chế xác thực dùng cho production.
@@ -124,8 +136,9 @@ async def lifespan(app: FastAPI):
     try:
         pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
         db_pool_size.set(POOL_SIZE)
-        print(f"✅ {SERVICE_NAME} khởi động — pool tối đa {POOL_SIZE} connection")
+        logger.info("Khởi động thành công — pool tối đa %d connection", POOL_SIZE)
     except Exception as e:
+        logger.error("Không kết nối được Postgres tại %s: %s", DATABASE_URL, e)
         print(f"⚠️ Chưa kết nối được Postgres tại {DATABASE_URL}: {e}")
         print("💡 Vui lòng bật Postgres bằng Docker lệnh: docker compose -f docker-compose.demo.yml up -d postgres")
     yield
@@ -169,6 +182,13 @@ async def pay(request: PayRequest) -> dict:
         raise HTTPException(503, "Pool chưa khởi tạo")
 
     try:
+        in_use = pool.get_size() - pool.get_idle_size()
+        if in_use >= POOL_SIZE - 1:
+            logger.warning(
+                "POOL_NEAR_EXHAUSTION: %d/%d connection đang dùng — "
+                "request mới sẽ phải xếp hàng chờ",
+                in_use, POOL_SIZE,
+            )
         async with pool.acquire() as conn:
             # get_size() = số connection ĐÃ TẠO, không phải trần POOL_SIZE
             db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
@@ -190,6 +210,19 @@ async def pay(request: PayRequest) -> dict:
                 request.order_id,
             )
             return {"ok": True, "payment_id": str(row["id"])}
+    except asyncpg.exceptions.TooManyConnectionsError:
+        logger.error(
+            "POOL_EXHAUSTED: Không thể lấy connection từ pool — "
+            "tất cả %d connection đều đang bận",
+            POOL_SIZE,
+        )
+        raise HTTPException(503, "Connection pool cạn kiệt")
+    except Exception as exc:
+        logger.error(
+            "PAYMENT_ERROR: Lỗi khi xử lý thanh toán order_id=%s: %s",
+            request.order_id, exc,
+        )
+        raise
     finally:
         # finally NGOÀI async with → connection đã trả về pool mới đo
         db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
@@ -227,6 +260,14 @@ async def pay_batch() -> dict:
     retained_batch = [dict(row) for row in rows]
     memory_leak_store.append(retained_batch)
 
+    total_batches = len(memory_leak_store)
+    total_rows = sum(len(b) for b in memory_leak_store)
+    logger.warning(
+        "MEMORY_LEAK_GROWING: Đang giữ %d batch (%d row) trong RAM — "
+        "bộ nhớ sẽ tăng dần cho tới khi OOM-kill",
+        total_batches, total_rows,
+    )
+
     return {
         "ok": True,
         "retained_batches": len(memory_leak_store),
@@ -238,8 +279,8 @@ async def pay_batch() -> dict:
 async def login(payload: LoginRequest, request: Request) -> dict:
     """Xác thực — endpoint cho UC-3 (burst tấn công).
 
-    TODO(Trung):
-      1. So `username`/`password` với một cặp hardcode (vd. demo/demo)
+    DONE(Trung) — đã triển khai bên dưới:
+      1. So `username`/`password` với cặp hardcode DEMO_USERNAME/DEMO_PASSWORD
       2. Sai → `raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")`
       3. Đúng → trả {"ok": True, "token": "fake-token"}
 
@@ -256,6 +297,10 @@ async def login(payload: LoginRequest, request: Request) -> dict:
     if payload.username != DEMO_USERNAME or payload.password != DEMO_PASSWORD:
         source_ip = request.client.host if request.client is not None else 'unknown'
         _record_auth_failure(source_ip, payload.username)
+        logger.warning(
+            "AUTH_FAILURE: Đăng nhập thất bại từ IP=%s, username=%s",
+            source_ip, payload.username,
+        )
         raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")
 
     return {"ok": True, "token": "fake-token"}
@@ -264,3 +309,89 @@ async def login(payload: LoginRequest, request: Request) -> dict:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": SERVICE_NAME, "pool_size": POOL_SIZE}
+
+
+# ---------------------------------------------------------------------------
+# ⚠️ DEMO-ONLY DEBUG ENDPOINTS — KHÔNG DÙNG TRONG PRODUCTION
+#
+# Các endpoint dưới đây mô phỏng HẬU QUẢ của một cuộc tấn công, không phải
+# lỗ hổng thật. Mục đích: chứng minh cho AI Agent rằng khi log im lặng, Agent
+# cần dựa vào Prometheus metrics để phát hiện bất thường.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/debug/rce-sim")
+async def debug_rce_sim() -> dict:
+    """Mô phỏng Remote Code Execution — vô hiệu hoá toàn bộ Python logging.
+
+    Kịch bản: Kẻ tấn công khai thác lỗ hổng RCE (deserialization, command
+    injection) để chạy mã độc TRONG process ứng dụng. Bước đầu tiên của
+    mã độc luôn là tắt logging để che dấu hành vi tiếp theo.
+
+    Sau khi gọi endpoint này:
+    - Tất cả ``logger.error(...)`` / ``logger.warning(...)`` đều bị nuốt
+    - stderr bị redirect sang ``/dev/null`` ở tầng OS
+    - Docker log driver không bắt được gì từ Python logging
+
+    ⚠️ CHỈ DÙNG CHO DEMO. Container cần restart để phục hồi logging.
+    """
+    import os
+
+    # Bước 1: Vô hiệu hoá Python logging — xoá tất cả handlers
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    root_logger.addHandler(logging.NullHandler())
+
+    # Cũng xoá handlers của service logger riêng
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    logger.addHandler(logging.NullHandler())
+
+    # Bước 2: Redirect stderr sang /dev/null ở tầng OS
+    # Sau bước này, kể cả print() hay traceback cũng biến mất
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, 2)  # 2 = stderr
+        os.close(devnull_fd)
+    except OSError:
+        pass  # Windows hoặc môi trường không hỗ trợ
+
+    return {"compromised": True, "logging_disabled": True}
+
+
+@app.post("/debug/suppress-output")
+async def debug_suppress_output() -> dict:
+    """Mô phỏng OS-Level Log Tampering — redirect stdout/stderr sang /dev/null.
+
+    Kịch bản: Hacker đã có quyền truy cập OS (SSH, container escape). Họ
+    chạy ``exec > /dev/null 2>&1`` trên process, hoặc xoá log file, hoặc
+    stop rsyslog/journald. Docker log driver không bắt được output nào nữa.
+
+    Khác với RCE:
+    - RCE xoá Python logging handlers (application layer)
+    - Log tampering redirect file descriptors (OS layer)
+    - Python logging handlers vẫn còn, nhưng output đi vào /dev/null
+
+    ⚠️ CHỈ DÙNG CHO DEMO. Container cần restart để phục hồi output.
+    """
+    import os
+
+    stdout_suppressed = False
+    stderr_suppressed = False
+
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, 1)  # 1 = stdout
+        stdout_suppressed = True
+        os.dup2(devnull_fd, 2)  # 2 = stderr
+        stderr_suppressed = True
+        os.close(devnull_fd)
+    except OSError:
+        pass  # Windows hoặc môi trường không hỗ trợ
+
+    return {
+        "tampered": True,
+        "stdout_suppressed": stdout_suppressed,
+        "stderr_suppressed": stderr_suppressed,
+    }
