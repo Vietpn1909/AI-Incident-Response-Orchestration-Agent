@@ -32,6 +32,18 @@ DEFAULT_URL = "http://localhost:8001/login"
 DEFAULT_RATE = 200.0
 DEFAULT_DURATION = 60.0
 DEFAULT_ACCOUNTS = 100
+
+# Đọc .env trước khi lấy DATABASE_URL — cùng lý do và cùng cách như demo/seed.py.
+# Máy nào đã có Postgres khác giữ port 5432 thì stack demo chạy ở port lệch, và
+# nếu chỉ dựa vào `os.getenv` thì file này nối sang database LẠ rồi báo sai mật
+# khẩu, một thông báo trỏ hoàn toàn sai chỗ.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(os.path.dirname(__file__), os.pardir, ".env"), override=False)
+except ImportError:
+    pass
+
 DEFAULT_DB_URL = os.getenv("DATABASE_URL", "postgresql://demo:demo@localhost:5432/demo")
 
 

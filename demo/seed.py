@@ -19,6 +19,26 @@ from datetime import UTC, datetime, timedelta
 
 import asyncpg
 
+# Đọc .env TRƯỚC khi lấy DATABASE_URL.
+#
+# Trước đây file này chỉ gọi `os.getenv`, tức chỉ thấy biến của shell chứ không
+# thấy file `.env` — khác với phần còn lại của dự án (dùng pydantic-settings, có
+# đọc `.env`). Hậu quả đo được ngày 11/08: máy đã có container Postgres khác giữ
+# port 5432 nên stack demo phải chạy ở `DEMO_POSTGRES_PORT=55432` và `.env` ghi
+# đúng 55432, nhưng seed vẫn rơi về mặc định 5432, nối sang Postgres LẠ và chết
+# bằng `InvalidPasswordError: password authentication failed for user "demo"` —
+# một thông báo trỏ hoàn toàn sai chỗ, vì mật khẩu chưa bao giờ là vấn đề.
+#
+# `override=False`: biến đặt sẵn ở shell vẫn thắng file, để dòng lệnh một lần
+# `DATABASE_URL=... python demo/seed.py` còn dùng được.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(os.path.dirname(__file__), os.pardir, ".env"), override=False)
+except ImportError:
+    # demo/ chạy được độc lập, không bắt buộc có python-dotenv.
+    pass
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://demo:demo@localhost:5432/demo")
 
 ROWS_ORDERS = 3_000
@@ -68,6 +88,26 @@ async def main() -> None:
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute(SCHEMA)
     print("[OK] Da tao schema (orders, payments, deploy_history)")
+
+    # Xoá sạch trước khi nạp — seed phải LẶP LẠI ĐƯỢC.
+    #
+    # Trước bản vá này seed chỉ INSERT, nên chạy lần hai là dữ liệu cộng dồn. Đo
+    # ngày 11/08: lần một 3.000 orders / 5.002 payments / 4 deploy, lần hai thành
+    # 6.000 / 16.973 / 8 — và `deploy_history` có v1.4.2 lẫn v1.4.3 xuất hiện HAI
+    # lần ở hai mốc thời gian khác nhau.
+    #
+    # Hai hậu quả, cả hai đều đánh vào buổi demo:
+    #   1. Bảng payments không có index là chủ đích, nên càng nhiều dòng truy vấn
+    #      càng chậm — mức tải cần để p95 vượt ngưỡng đổi theo số lần đã seed.
+    #      Con số ghi trong demo/README.md thành sai.
+    #   2. Agent tìm "deploy ngay trước sự cố" trên bảng có phiên bản trùng. Lần
+    #      đo này đích rollback vẫn đúng nhờ mỗi lượt seed chèn theo cùng một thứ
+    #      tự tương đối, nhưng đó là may, không phải thiết kế.
+    #
+    # TRUNCATE ... RESTART IDENTITY để SERIAL cũng về 1, cho mọi lần chạy giống
+    # nhau tới cả id.
+    await conn.execute("TRUNCATE orders, payments, deploy_history RESTART IDENTITY")
+    print("[OK] Da xoa du lieu cu (seed lap lai duoc)")
 
     # 1. Sinh dữ liệu mẫu bằng Faker / Random
     try:

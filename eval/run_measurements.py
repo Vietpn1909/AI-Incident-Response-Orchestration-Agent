@@ -191,11 +191,31 @@ def observe(
 
 
 async def payment_request(client: httpx.AsyncClient, index: int) -> int:
-    try:
-        response = await client.post(
-            "http://localhost:8001/pay",
-            json={"order_id": f"eval-{index}", "amount": 100},
+    """Một request tải. Cứ 4 request thì 1 đi qua `/orders` của service-dat-hang.
+
+    Vì sao không chỉ bắn `/pay`: lệnh này còn dùng để warm-up baseline 30 phút
+    trước demo (xem demo/README.md). Chỉ bắn service-thanh-toan thì
+    service-dat-hang không có baseline nào, và bộ lọc `and on(service)` trong
+    truy vấn lệch baseline loại nó khỏi kết quả — đường phát hiện thứ ba im lặng
+    trên đúng service đóng vai "nạn nhân lan truyền" của demo.
+
+    `/orders` gọi chéo sang `/pay` nên mỗi request loại này warm-up cả hai
+    service. Tỷ lệ 1/4 khớp với `demo/loadtest.py` để baseline và lúc có sự cố
+    cùng một hình thái tải, chỉ khác cường độ — nếu khác hình thái thì tỷ lệ lệch
+    baseline đo được không còn nghĩa gì.
+    """
+    if index % 4 == 0:
+        url, payload = (
+            "http://localhost:8002/orders",
+            {"items": [f"sp-{index % 7}"], "amount": 100},
         )
+    else:
+        url, payload = (
+            "http://localhost:8001/pay",
+            {"order_id": f"eval-{index}", "amount": 100},
+        )
+    try:
+        response = await client.post(url, json=payload)
         return response.status_code
     except httpx.HTTPError:
         return 0

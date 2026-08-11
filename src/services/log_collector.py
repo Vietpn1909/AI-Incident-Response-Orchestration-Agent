@@ -160,8 +160,58 @@ def collect_logs_for_service(
         if evidence:
             return evidence
 
-    logger.info("Không tìm thấy log cho service %s (đã thử: %s)", service, candidates)
+    # Phân biệt hai chuyện KHÁC NHAU về bản chất, trước đây bị gộp thành một
+    # thông báo duy nhất:
+    #
+    #   (a) không tìm được container nào  → Agent đang mù, chưa biết gì
+    #   (b) container có thật, log có thật, nhưng KHÔNG có dòng nào đáng chú ý
+    #       → "log sạch", và đây là BẰNG CHỨNG, không phải thiếu bằng chứng.
+    #
+    # Đo ngày 11/08 trên service-dat-hang: log cũ báo "Không tìm thấy log cho
+    # service service-dat-hang (đã thử: [...])" kèm danh sách tên container,
+    # trong khi `p035-demo-service-dat-hang-1` NẰM NGAY trong danh sách đó và có
+    # 492 dòng log — chỉ là 0 dòng ERROR/WARNING. Thông báo quy oan cho việc đặt
+    # tên container và làm người đọc đi sửa đúng chỗ không hỏng.
+    #
+    # Khác biệt này còn quan trọng với chuỗi ba cửa chặn: log sạch là bằng chứng
+    # CHỐNG LẠI giả thuyết lỗi ứng dụng. Báo thành "không có log" là ném đi thông
+    # tin mà Agent đã trả tiền để lấy.
+    co_that = _container_dang_chay(candidates)
+    if co_that:
+        logger.info(
+            "Log của %s sạch — container %s có log nhưng không có dòng nào đáng chú ý "
+            "trong khoảng %s → %s",
+            service,
+            ", ".join(co_that),
+            start_time,
+            end_time,
+        )
+    else:
+        logger.info("Không tìm thấy container nào cho service %s (đã thử: %s)", service, candidates)
     return []
+
+
+def _container_dang_chay(candidates: list[str]) -> list[str]:
+    """Trong các tên đã thử, tên nào là container đang chạy thật.
+
+    Chỉ dùng để ghi log cho đúng, nên mọi lỗi đều nuốt: không biết được container
+    nào đang chạy thì tệ nhất là thông báo kém chính xác, không đáng làm sập việc
+    thu thập log.
+    """
+    try:
+        out = subprocess.run(  # noqa: S603
+            ["docker", "ps", "--format", "{{.Names}}"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception:
+        return []
+    if out.returncode != 0:
+        return []
+    dang_chay = set(out.stdout.split())
+    return [name for name in candidates if name in dang_chay]
 
 
 def _parse_and_filter(

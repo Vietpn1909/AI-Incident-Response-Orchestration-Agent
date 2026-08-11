@@ -193,6 +193,7 @@ Hãy truy vấn log từ khoảng 2 phút trước đến 2 phút sau thời đi
                 service, cau_moi,
             )
             thay_doi["statement"] = cau_moi[:400]
+            thay_doi["confidence"] = _tin_cay_sau_khi_log_nen_duoc(hypothesis.confidence)
 
     updated = hypothesis.model_copy(update=thay_doi)
 
@@ -204,6 +205,36 @@ Hãy truy vấn log từ khoảng 2 phút trước đến 2 phút sau thời đi
 
 #: Nhãn LLM phải dùng khi muốn nêu nguyên nhân dựa trên log.
 _NHAN_KET_LUAN_LOG = "KẾT LUẬN TỪ LOG:"
+
+#: Điểm tin cậy cộng thêm khi kết luận được một dòng log thật chống lưng.
+#:
+#: Đặt bằng 0.40 để khớp bảng điểm trong `rules._diem_tin_cay()`, nơi mọi bằng
+#: chứng **nguyên nhân gốc** đều đáng 0.40 ("pool cạn ≥ 95%", "đỉnh bộ nhớ chạm
+#: ≥ 90% trần", "đăng nhập hỏng ≥ ngưỡng P1"). Một dòng traceback nêu đúng tên
+#: cột thiếu là bằng chứng nguyên nhân gốc theo đúng nghĩa đó — nó không xác nhận
+#: "có bất thường", nó nói ra bất thường LÀ GÌ.
+#:
+#: Vì sao phải cộng: bảng điểm của `rules` chỉ biết `MetricEvidence`, nên UC-4
+#: (chỉ có mỗi tín hiệu 5xx, đáng 0.10) luôn ra tin cậy rất thấp. Đo ngày 11/08
+#: trên KAN-17/KAN-18: log nêu đúng `UndefinedColumnError` ở cột
+#: `idempotency_key` và đúng cơ chế lan truyền sang service-dat-hang, nhưng cả
+#: hai câu đều đeo nhãn "tin cậy 30%" và "10%" thừa hưởng từ giả thuyết cũ.
+#: Người trực đọc war room sẽ gạt đi đúng câu đáng tin nhất — nhãn sai còn hại
+#: hơn không có nhãn.
+#:
+#: Chỉ cộng khi câu mới đã qua `_ket_luan_tu_log_co_duoc_nhan()`, tức đã bắt buộc
+#: trích được một chuỗi có thật trong log. Không có cửa đó thì đây thành chỗ để
+#: LLM tự nâng điểm cho mình.
+DIEM_LOG_CHONG_LUNG = 0.40
+
+
+def _tin_cay_sau_khi_log_nen_duoc(cu: float) -> float:
+    """Tin cậy mới khi một dòng log thật đã chống lưng cho kết luận.
+
+    Cộng dồn rồi chặn ở 1.0, đúng cách `rules._diem_tin_cay()` làm — chứ không
+    gán cứng một con số, vì gán cứng là ném đi phần điểm mà metric đã đóng góp.
+    """
+    return min(1.0, cu + DIEM_LOG_CHONG_LUNG)
 
 
 def _tach_ket_luan_tu_log(reply: str) -> tuple[str, str]:

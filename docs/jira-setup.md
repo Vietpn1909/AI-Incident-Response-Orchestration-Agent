@@ -23,6 +23,40 @@ Cổng HITL hoạt động bằng cách so **accountId** của người đã chu
 - [ ] Jira → ⚙️ → **User management** → **Invite user** → mời email đó vào site
 - [ ] Cả hai account đăng nhập được
 
+### ⚠️ Đo ngày 11/08/2026 — việc này CHƯA làm, và nó chặn màn demo phê duyệt
+
+Không phải cảnh báo lý thuyết. `.env` lúc đó khai cùng một account cho cả hai vai:
+
+```
+JIRA_EMAIL             = thaiduc0201@gmail.com
+accountId của email đó = 712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7
+JIRA_AGENT_ACCOUNT_ID  = 712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7   ← TRÙNG
+```
+
+Chuyển KAN-17 sang `Remediating` bằng chính account đó — tức mô phỏng đúng việc
+người trực bấm nút trên Jira — rồi gọi cổng HITL:
+
+```
+TỪ CHỐI — KAN-17 được chuyển sang Remediating bởi chính account Agent
+(712020:1bf02a7a-…). Hành động production phải do người phê duyệt.
+Từ chối thực thi.
+```
+
+Cổng chạy **đúng thiết kế**, nhưng vì hai vai dùng một account nên nó từ chối cả
+người thật. Hệ quả: không demo được bước "người duyệt → hành động thi hành" —
+đúng cái bước làm nên ý nghĩa của HITL.
+
+Hai cách đi:
+
+| Cách | Chi phí | Đánh đổi |
+|---|---|---|
+| Mời account thứ hai cho Agent (đúng như Phần 0) | ~10 phút, phải bấm trên Jira | Cách đúng. Còn dọn luôn việc mail thông báo Jira dội về hộp thư của người trực, vì Agent tự thành watcher |
+| Để một thành viên khác bấm duyệt lúc demo | 0 phút | Phụ thuộc người đó online đúng lúc; và `.env` vẫn sai cho lần sau |
+
+Kể cả chưa kịp làm, vẫn demo được **nửa mạnh hơn** của cổng: Agent tự chuyển
+trạng thái thì bị từ chối, có log kèm accountId. Chứng minh Agent không tự duyệt
+cho mình được — chỉ là chưa chứng minh được chiều còn lại.
+
 ---
 
 ## Phần 1 — Project

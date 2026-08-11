@@ -33,14 +33,39 @@ PROFILE_DEMO = [(5, 10), (15, 15), (30, 20), (50, 20), (75, 25)]
 PROFILE_FULL = [(5, 30), (20, 30), (50, 60), (100, 60), (200, 90), (400, 120)]
 
 
+#: Mỗi request thứ mấy thì đi qua `/orders` thay vì gọi `/pay` trực tiếp.
+#:
+#: `ORDER_URL` đã được khai từ đầu nhưng KHÔNG hàm nào dùng, nên toàn bộ tải chỉ
+#: rơi vào service-thanh-toan. Hậu quả đo được ngày 11/08: service-dat-hang
+#: không có lưu lượng nào ngoài Prometheus scrape `/metrics`, mà `detect` lọc
+#: `handler!="/metrics"` — nên nó không bao giờ vào diện quan sát.
+#:
+#: Điều đó làm mất hẳn phần lan truyền của demo: không có war room thứ hai, nên
+#: `classify_severity` không nâng P2 → P1 theo contract ①, và `link_incidents`
+#: không có gì để nối. Ba node im lặng vì thiếu tải, không vì code sai — kiểu
+#: hỏng không test nào bắt được.
+#:
+#: 1 trong 4 là đủ: `/orders` gọi chéo sang `/pay` nên mỗi request loại này tạo
+#: tải cho CẢ HAI service. Đẩy tỷ lệ lên cao hơn thì phần lớn tải đi qua một lần
+#: nhảy HTTP nữa, và p95 đo được của service-thanh-toan không còn phản ánh mức
+#: concurrency đã khai trong PROFILE_DEMO — tức làm sai lệch chính con số mà
+#: bảng đo ở cuối README.md dựa vào.
+_MOI_N_REQUEST_QUA_ORDERS = 4
+
+
 async def one_request(client: httpx.AsyncClient, index: int) -> tuple[int, float]:
     """Gửi một request, trả (status_code, thời gian tính bằng giây)."""
+    qua_orders = index % _MOI_N_REQUEST_QUA_ORDERS == 0
+    url = ORDER_URL if qua_orders else PAYMENT_URL
+    payload = (
+        {"items": [f"sp-{index % 7}"], "amount": 100}
+        if qua_orders
+        else {"order_id": f"load-{index}", "amount": 100}
+    )
+
     start_t = time.perf_counter()
     try:
-        resp = await client.post(
-            PAYMENT_URL,
-            json={"order_id": f"load-{index}", "amount": 100},
-        )
+        resp = await client.post(url, json=payload)
         elapsed = time.perf_counter() - start_t
         return resp.status_code, elapsed
     except Exception:
