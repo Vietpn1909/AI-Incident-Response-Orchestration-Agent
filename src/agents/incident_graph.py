@@ -169,6 +169,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             try:
                 res = analyze_logs(signal, hypothesis)
                 updated_hypotheses[jira_key] = res.hypothesis
+                _post_lai_neu_log_doi_ket_luan(jira, jira_key, hypothesis, res.hypothesis)
             except Exception as error:
                 logger.error("%s: lỗi khi thu thập/phân tích log (%s)", jira_key, error)
 
@@ -323,6 +324,47 @@ def _chan_doan_mot_issue(jira: JiraClient, jira_key: str, signal: IncidentSignal
         logger.error("%s: không post được giả thuyết lên Jira (%s)", jira_key, error)
 
     return hypothesis
+
+
+def _post_lai_neu_log_doi_ket_luan(
+    jira: JiraClient,
+    jira_key: str,
+    truoc: Hypothesis,
+    sau: Hypothesis,
+) -> bool:
+    """Post lại giả thuyết lên Jira khi log đã đổi kết luận. Trả về có post hay không.
+
+    Vì sao cần: `hypothesize_node` post giả thuyết lên Jira NGAY, tức bản chưa
+    đọc log. `analyze_logs` chạy sau đó và có thể thay hẳn kết luận, nhưng trước
+    bản vá này nó chỉ cập nhật state trong bộ nhớ — kết luận từ log không bao giờ
+    lên tới war room.
+
+    Đo ngày 11/08 trên KAN-13: node đã tự nêu đúng cơ chế lan truyền
+    ("timeout HTTP khi service-dat-hang gọi service-thanh-toan") và ghi ra log
+    tiến trình, nhưng Jira chỉ có bản của bộ luật — "nguyên nhân gốc chưa xác
+    định", tin cậy 40%. Người trực đọc war room sẽ thấy Agent bó tay đúng ở
+    incident mà nó chẩn đoán được, và đó lại là năng lực đắt nhất của nó.
+
+    Chỉ post khi `statement` THỰC SỰ đổi. Log thường chỉ bổ sung bằng chứng cho
+    kết luận cũ; post lại mọi lần sẽ nhân đôi comment trên mọi war room và làm
+    người trực khó thấy đâu là kết luận cuối.
+    """
+    if sau.statement == truoc.statement:
+        return False
+
+    logger.info(
+        "%s: log đổi kết luận, post lại lên war room (tin cậy %.0f%% → %.0f%%)",
+        jira_key,
+        truoc.confidence * 100,
+        sau.confidence * 100,
+    )
+    try:
+        jira.post_hypothesis(jira_key, sau)
+    except Exception as error:
+        # Cùng lý do như `_chan_doan()`: mất một comment còn hơn mất cả vòng quét.
+        logger.error("%s: không post được kết luận từ log lên Jira (%s)", jira_key, error)
+        return False
+    return True
 
 
 def _xet_nang_muc(jira: JiraClient, jira_key: str) -> bool:

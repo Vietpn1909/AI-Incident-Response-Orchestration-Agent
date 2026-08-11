@@ -77,6 +77,48 @@ histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by 
 
 Thấy đường p95 tăng từ ~0.2s lên vài giây là **đúng**.
 
+## Hai cái bẫy đã mất thời gian thật, đọc trước khi debug
+
+### 1. Máy đã có Postgres khác → `up` chết ở port 5432
+
+```
+Error response from daemon: ports are not available:
+  exposing port TCP 0.0.0.0:5432 -> 127.0.0.1:0: bind: address already in use
+```
+
+Đo ngày 11/08 trên máy Đức: `lsof -nP -iTCP:5432 -sTCP:LISTEN` trả **rỗng**, nên
+rất dễ kết luận là port trống rồi đi tìm nguyên nhân khác. Trên macOS port của
+container nằm trong VM Docker chứ không phải trên host, nên `lsof` không thấy.
+Lệnh nhìn đúng chỗ là:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}' | grep 5432
+```
+
+Cách đi tiếp — nhớ dùng **cùng một port** cho cả compose và mọi script:
+
+```bash
+DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
+# rồi ghi vào .env để seed/attack/Agent đều thấy:
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo
+```
+
+Quên bước `.env` thì `seed.py` rơi về mặc định 5432, nối sang Postgres **lạ**, và
+báo `InvalidPasswordError: password authentication failed for user "demo"` — một
+thông báo trỏ hoàn toàn sai chỗ, vì mật khẩu chưa bao giờ là vấn đề. Cả `seed.py`
+và `attack.py` giờ đã tự đọc `.env`, nhưng chỉ khi `.env` ghi đúng port.
+
+### 2. UI mặc định đọc backend trên Render, không đọc máy local
+
+`ui/war_room.py` lấy dữ liệu qua HTTP API chứ không gọi Jira trực tiếp, và mặc
+định `API_URL` là bản deploy trên Render. Chạy UI để demo local thì phải bật
+backend rồi trỏ UI vào nó, nếu không màn hình sẽ hiện dữ liệu của môi trường khác:
+
+```bash
+python -m uvicorn src.main:app --port 8000                 # terminal 1
+API_URL=http://localhost:8000 streamlit run ui/war_room.py # terminal 2
+```
+
 ## Warm-up Prometheus trước demo
 
 Prometheus cần khoảng **30 phút tải nhẹ** trước khi chạy UC-1. Baseline p95 chỉ
@@ -94,6 +136,20 @@ python eval/run_measurements.py payment-load \
 
 `concurrency=1` giữ tải ở mức bình thường, đủ tạo baseline nhưng không làm cạn
 pool. Chờ lệnh chạy xong rồi mới chạy `demo/loadtest.py` để tạo UC-1.
+
+Lệnh này warm-up **cả hai** service: cứ 4 request thì 1 đi qua `/orders`, và
+`/orders` gọi chéo sang `/pay`. Trước 11/08 nó chỉ bắn `/pay`, nên
+service-dat-hang không có baseline nào và bộ lọc `and on(service)` loại nó khỏi
+truy vấn lệch baseline.
+
+**Warm-up là tuỳ chọn, không phải điều kiện bắt buộc.** Trong ba đường phát hiện
+của `detect`, chỉ đường "lệch baseline 30 phút" cần nó; hai đường còn lại (ngưỡng
+tuyệt đối, tỷ lệ lỗi) chạy ngay sau khi service lên. Đo ngày 11/08: chạy
+`loadtest.py` chỉ 2 phút sau khi `docker compose up`, Agent vẫn phát hiện đúng cả
+hai service (`p95 = 4.348s`, vượt liên tục 60s) và mở war room bình thường — chỉ
+mất dòng bằng chứng *"gấp N lần lúc bình thường"* trên war room, vốn là dòng dễ
+hiểu nhất với người không chuyên. Thiếu 30 phút thì demo vẫn chạy, chỉ kém thuyết
+phục hơn một dòng.
 
 Compose giờ có named volume `prometheus_data`, vì vậy `docker compose down`
 thông thường vẫn giữ lịch sử baseline. Chỉ dùng `docker compose down -v` khi cố

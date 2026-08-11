@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage, ToolCall
 
 from src.agents.nodes.analyze_logs import _prioritize_logs, analyze_logs
@@ -94,3 +95,25 @@ def test_analyze_logs_attaches_log_evidence(mock_collect):
     assert len(res.hypothesis.log_evidence) == 1
     assert res.hypothesis.log_evidence[0].pattern == "DB_EXCEPTION"
     assert "từ log DB_EXCEPTION" in res.hypothesis.reasoning
+
+
+def test_log_chong_lung_thi_tin_cay_phai_tang():
+    """Câu đúng không được đeo nhãn tin cậy của câu đoán mò.
+
+    Đo ngày 11/08 trên KAN-17/KAN-18: log nêu đúng `UndefinedColumnError` ở cột
+    `idempotency_key` và đúng cơ chế lan truyền, nhưng cả hai câu vẫn đeo nhãn
+    30% và 10% thừa hưởng từ giả thuyết cũ — vì bảng điểm của `rules` chỉ biết
+    `MetricEvidence`. Người trực đọc war room sẽ gạt đi đúng câu đáng tin nhất.
+    """
+    from src.agents.nodes.analyze_logs import DIEM_LOG_CHONG_LUNG, _tin_cay_sau_khi_log_nen_duoc
+
+    assert _tin_cay_sau_khi_log_nen_duoc(0.10) == pytest.approx(0.10 + DIEM_LOG_CHONG_LUNG)
+    assert _tin_cay_sau_khi_log_nen_duoc(0.30) == pytest.approx(0.30 + DIEM_LOG_CHONG_LUNG)
+
+
+def test_tin_cay_khong_bao_gio_vuot_100_phan_tram():
+    """Chặn ở 1.0 — cùng cách `rules._diem_tin_cay()` cộng dồn rồi chặn."""
+    from src.agents.nodes.analyze_logs import _tin_cay_sau_khi_log_nen_duoc
+
+    assert _tin_cay_sau_khi_log_nen_duoc(0.9) == 1.0
+    assert _tin_cay_sau_khi_log_nen_duoc(1.0) == 1.0
