@@ -246,3 +246,60 @@ Ba UC được chọn vì **ba hình thái khác nhau**, mỗi cái kiểm một
 UC-3 là phép thử khó nhất trong ba: hệ thống khoẻ mạnh về mọi chỉ số hiệu năng, nên Agent phải **không** kết luận "quá tải". Nếu nó kết luận sai thì lộ ra rule engine chỉ khớp mẫu chứ không thực sự chẩn đoán.
 
 **Đã cân nhắc và bỏ:** *mất dữ liệu* — không demo an toàn được, và Agent chẳng có hành động khắc phục tự động nào ngoài leo thang, nên giá trị chẩn đoán gần bằng 0.
+
+---
+
+## UC-4 — Deploy thiếu migration (log là nguồn duy nhất)
+
+**Thêm ngày 11/08.** Ba UC trên đều lộ ra qua metric, nên log chỉ nói lại thứ
+Prometheus đã nói. UC-4 là chỗ metric **mù thật**.
+
+### Cách tái hiện
+
+```bash
+DEMO_POSTGRES_PORT=55432 SIMULATE_MISSING_MIGRATION=1 \
+  docker compose -f docker-compose.demo.yml up -d
+DATABASE_URL=postgresql://demo:demo@localhost:55432/demo python demo/seed.py
+```
+
+`v1.4.3` ghi vào cột `payments.idempotency_key` mà schema chưa có cột đó.
+`asyncpg` ném `UndefinedColumnError`, FastAPI trả 500, uvicorn ghi traceback —
+**log do framework sinh, không phải mình viết**.
+
+### Dấu vân tay metric — ngược hẳn ba UC kia
+
+| Metric | Đo được 11/08 | Đọc ra |
+|---|---|---|
+| tỷ lệ lỗi 5xx | **100%** | "hỏng toàn bộ" |
+| p95 | **0,048s** (nền 0,049s) | ⚠️ **không cao hơn bình thường** |
+| pool | **0%** | không nghẽn |
+| bộ nhớ · restart · `up` | bình thường | service vẫn sống |
+
+Luật phân loại được **P1** (lỗi > 50%) nhưng rơi đúng nhánh mặc định *"Chưa đủ
+bằng chứng để nêu nguyên nhân gốc"* — và đó là **hành vi đúng**.
+
+### Ground truth
+
+| | |
+|---|---|
+| Nguyên nhân gốc | `v1.4.3` dùng cột `idempotency_key` chưa tồn tại trong `payments` vì migration chưa chạy |
+| Mức | P1 |
+| Hành động đúng | `rollback` về `v1.4.2` |
+| **Bắt buộc** | câu chẩn đoán phải **nêu được tên cột `idempotency_key`**. Tên đó chỉ có trong log, nên nêu đúng nghĩa là đã thật sự đọc log |
+| Chẩn đoán SAI | "quá tải", "database chậm", hoặc "pool cạn" — pool đang 0% và p95 không cao |
+
+### Bốn phép đo chứng minh log là thứ tạo ra khác biệt
+
+Đo ngày 11/08 với cùng một LLM, chỉ đổi đầu vào:
+
+| Đầu vào | Kết luận | |
+|---|---|---|
+| chỉ metric | *"pool cạn / quá tải"* | ❌ sai, và tự tin |
+| metric + ghi chú deploy **gợi ý sẵn** (*"cần chạy migration thêm cột idempotency_key"*) | *"migration chưa chạy"* | ⚠️ đúng nhưng ghi chú đã nói hộ |
+| metric + ghi chú **trung thực** (*"thêm chống trùng bằng khoá idempotency"*) | *"logic idempotency thất bại, **có thể do** một trong ba thứ"* | ⚠️ chỉ đoán |
+| metric + ghi chú trung thực + **log** | *"cột `idempotency_key` chưa được tạo — schema mismatch"* | ✅ đúng |
+
+Phép đo thứ hai là lý do `change_note` trong `seed.py` **tả tính năng, không tả
+thứ còn thiếu**: ghi chú gợi ý sẵn làm log thành thừa và phá phép đo.
+
+Chạy trọn chuỗi trên Agent thật, 3 lượt liên tiếp: **3/3 nêu đúng tên cột.**

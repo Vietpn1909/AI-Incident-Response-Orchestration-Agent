@@ -139,7 +139,16 @@ def _format_deploy(deploy: DeployRecord | None, signal: IncidentSignal) -> str:
     if deploy is None:
         return "LỊCH SỬ DEPLOY\n- Không có lần deploy nào gần thời điểm sự cố."
     phut = deploy.minutes_before(signal.detected_at)
-    return f"LỊCH SỬ DEPLOY\n- Phiên bản {deploy.version} được deploy {phut:.0f} phút TRƯỚC khi phát hiện sự cố."
+    dong = [
+        "LỊCH SỬ DEPLOY",
+        f"- Phiên bản {deploy.version} được deploy {phut:.0f} phút TRƯỚC khi phát hiện sự cố.",
+    ]
+    # Ghi chú thay đổi là dữ liệu PHI CẤU TRÚC duy nhất trong prompt — chỗ duy
+    # nhất LLM làm được việc luật không làm được. Đo ngày 11/08: thiếu nó thì
+    # UC-4 chỉ ra "có thể do một trong ba thứ".
+    if deploy.change_note:
+        dong.append(f"- Nội dung thay đổi: {deploy.change_note}")
+    return "\n".join(dong)
 
 
 def _parse(reply: str) -> tuple[str, str]:

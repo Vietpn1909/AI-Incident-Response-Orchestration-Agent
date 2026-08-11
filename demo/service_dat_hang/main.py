@@ -76,9 +76,8 @@ async def create_order(request: OrderRequest) -> dict:
     except httpx.TimeoutException:
         # Bắt TimeoutException -> Trả về 504 Gateway Timeout để Prometheus ghi nhận lỗi 5xx
         logger.error(
-            "UPSTREAM_TIMEOUT: Service thanh toán không phản hồi trong %ss — "
-            "lan truyền sự cố từ downstream",
-            PAYMENT_TIMEOUT_SECONDS,
+            "httpx.TimeoutException upstream=%s timeout_s=%s path=/orders",
+            PAYMENT_SERVICE_URL, PAYMENT_TIMEOUT_SECONDS,
         )
         raise HTTPException(
             status_code=504,
@@ -86,8 +85,8 @@ async def create_order(request: OrderRequest) -> dict:
         )
     except httpx.HTTPStatusError as e:
         logger.error(
-            "UPSTREAM_ERROR: Service thanh toán trả HTTP %d: %s",
-            e.response.status_code, e.response.text[:200],
+            "httpx.HTTPStatusError upstream=%s status=%d body=%s",
+            PAYMENT_SERVICE_URL, e.response.status_code, e.response.text[:200],
         )
         raise HTTPException(
             status_code=502,

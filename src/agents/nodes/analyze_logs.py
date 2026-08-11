@@ -15,7 +15,9 @@ from dataclasses import dataclass
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
+from src.agents.nodes.hypothesize import _LUAT_CUNG_CHIU
 from src.models.incident import Hypothesis, IncidentSignal, LogEvidence
+from src.services import rules
 from src.services.log_collector import collect_logs_for_service
 
 logger = logging.getLogger(__name__)
@@ -111,11 +113,20 @@ Bạn CÓ THỂ sử dụng LogSearchTool để tìm kiếm log của service tr
 NHIỆM VỤ CUỐI CÙNG (Sau khi đã có thông tin hoặc quyết định không cần log):
 Viết lại phần LÝ GIẢI, kết hợp cả bằng chứng metric VÀ log (nếu có).
 - CHỈ dùng thông tin đo được và thông tin có trong log, KHÔNG bịa thêm.
-- Giữ nguyên kết luận từ metric, log chỉ BỔ SUNG ngữ cảnh.
 - Nếu log xác nhận giả thuyết metric → nói rõ log xác nhận.
 - Nếu log cho thấy chi tiết mới (stack trace, error message) → bổ sung.
 - Nếu tool không tìm thấy log, hãy giữ nguyên lý giải từ metric.
-- Tối đa 4 câu. Viết tiếng Việt."""
+- Tối đa 4 câu. Viết tiếng Việt.
+
+QUY TẮC VỀ KẾT LUẬN:
+- Metric ĐÃ nêu được nguyên nhân → GIỮ NGUYÊN kết luận đó, log chỉ bổ sung ngữ cảnh.
+- Metric CHƯA nêu được nguyên nhân (ghi "chưa đủ bằng chứng") → nếu log chỉ ra
+  nguyên nhân thì được nêu, nhưng phải thêm một dòng riêng:
+
+  KẾT LUẬN TỪ LOG: <một câu, nêu nguyên nhân gốc, trích tên lỗi/cột/bảng có
+  thật trong log>
+
+  Không có dòng đó thì kết luận cũ được giữ."""
 
     user_prompt = f"""\
 SỰ CỐ
@@ -159,20 +170,108 @@ Hãy truy vấn log từ khoảng 2 phút trước đến 2 phút sau thời đi
     if messages and hasattr(messages[-1], "content") and not isinstance(messages[-1], ToolMessage):
         final_reasoning = messages[-1].content
 
+    thay_doi: dict = {"log_evidence": collected_logs}
     if final_reasoning:
-        updated = hypothesis.model_copy(
-            update={
-                "log_evidence": collected_logs,
-                "reasoning": final_reasoning[:1200]
-            }
+        cau_tu_log, ly_giai = _tach_ket_luan_tu_log(final_reasoning)
+        thay_doi["reasoning"] = ly_giai[:1200]
+
+        # ⚠️ Phải hỏi LUẬT có chịu hay không, KHÔNG đọc `hypothesis.statement`.
+        #
+        # Tới đây `statement` có thể đã là câu LLM viết ở node `hypothesize` — nó
+        # thay câu "chưa đủ bằng chứng" của luật rồi. Đo ngày 11/08: kiểm câu
+        # hiện tại thì cửa dưới luôn từ chối, và UC-4 không bao giờ chữa được.
+        #
+        # `build_hypothesis` tất định nên gọi lại rẻ. Truyền `deploy=None` vì cụm
+        # "chưa đủ bằng chứng" nằm ở nhánh mặc định, không phụ thuộc deploy.
+        cau_cua_luat = rules.build_hypothesis(signal, None).statement
+        cau_moi = _ket_luan_tu_log_co_duoc_nhan(
+            cau_tu_log, cau_cua_luat, signal, collected_logs
         )
-    else:
-        updated = hypothesis.model_copy(
-            update={"log_evidence": collected_logs}
-        )
+        if cau_moi:
+            logger.info(
+                "%s: log nêu được nguyên nhân mà metric không nêu được — nhận kết luận mới: %s",
+                service, cau_moi,
+            )
+            thay_doi["statement"] = cau_moi[:400]
+
+    updated = hypothesis.model_copy(update=thay_doi)
 
     return LogAnalysisResult(
         hypothesis=updated,
         logs_collected=total_logs_found,
         logs_relevant=len(collected_logs),
     )
+
+#: Nhãn LLM phải dùng khi muốn nêu nguyên nhân dựa trên log.
+_NHAN_KET_LUAN_LOG = "KẾT LUẬN TỪ LOG:"
+
+
+def _tach_ket_luan_tu_log(reply: str) -> tuple[str, str]:
+    """Tách `(câu kết luận từ log, phần lý giải)` khỏi câu trả lời của LLM.
+
+    Không có nhãn thì trả `("", toàn bộ)` — tức LLM không đề nghị đổi kết luận.
+    """
+    cau, dong_ly_giai = "", []
+    for dong in reply.splitlines():
+        sach = dong.strip()
+        if sach.upper().startswith(_NHAN_KET_LUAN_LOG):
+            cau = sach.split(":", 1)[1].strip()
+        elif sach:
+            dong_ly_giai.append(sach)
+    return cau, " ".join(dong_ly_giai)
+
+
+def _ket_luan_tu_log_co_duoc_nhan(
+    cau_tu_log: str,
+    cau_hien_tai: str,
+    signal: IncidentSignal,
+    logs: list[LogEvidence],
+) -> str | None:
+    """Câu kết luận dựa trên log có được phép ghi đè câu hiện tại không?
+
+    Trả câu mới nếu được, `None` nếu không.
+
+    ## Vì sao cần cửa này, và vì sao nó HẸP
+
+    Bản đầu của node (11/08) cố ý **không bao giờ** sửa `statement` — prompt ghi
+    rõ *"giữ nguyên kết luận từ metric, log chỉ BỔ SUNG ngữ cảnh"*. Ranh giới đó
+    đúng cho UC-1/2/3: metric đã nêu được nguyên nhân, log không nên lật lại.
+
+    Nhưng nó làm UC-4 bất khả thi. Đo ngày 11/08 trên sự cố thiếu migration:
+    metric chỉ thấy `lỗi 5xx = 100%`, `p95 = 0,049s` (THẤP hơn nền 0,089s),
+    `pool = 0%` — luật rơi đúng nhánh *"chưa đủ bằng chứng để nêu nguyên nhân
+    gốc"*, và log là nguồn DUY NHẤT nói được `UndefinedColumnError: column
+    "idempotency_key"`. Cấm sửa `statement` thì log không bao giờ chữa được một
+    chẩn đoán còn trống.
+
+    Nên cửa này chỉ mở đúng một trường hợp: **luật đã chịu**. Luật có kết luận
+    thì log vẫn không được lật — giữ nguyên ranh giới ban đầu.
+
+    Và câu mới phải **trích được một chuỗi có thật trong log**. Không có thì bỏ:
+    đó là cùng nguyên tắc với `hypothesize._nguyen_nhan_khong_co_can_cu()` —
+    nêu nguyên nhân nào thì phải có bằng chứng chống lưng cho nguyên nhân đó.
+    """
+    if not cau_tu_log:
+        return None
+
+    # Luật đã nêu được nguyên nhân → không cho log lật lại.
+    if _LUAT_CUNG_CHIU not in cau_hien_tai.lower():
+        logger.info(
+            "%s: bỏ kết luận từ log vì metric đã nêu được nguyên nhân. Câu bị bỏ: %s",
+            signal.affected_service, cau_tu_log,
+        )
+        return None
+
+    # Câu mới phải trích được một token có thật trong log — chống bịa.
+    noi_dung_log = " ".join(e.message for e in logs).lower()
+    tokens = [t.strip('\'"`.,;:()[]') for t in cau_tu_log.split()]
+    co_can_cu = any(len(t) >= 8 and t.lower() in noi_dung_log for t in tokens)
+    if not co_can_cu:
+        logger.warning(
+            "%s: BỎ kết luận từ log vì không trích được chuỗi nào có thật trong log. "
+            "Câu bị bỏ: %s",
+            signal.affected_service, cau_tu_log,
+        )
+        return None
+
+    return cau_tu_log

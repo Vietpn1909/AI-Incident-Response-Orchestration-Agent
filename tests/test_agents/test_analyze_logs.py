@@ -32,12 +32,12 @@ def _make_hypothesis() -> Hypothesis:
 def test_prioritize_logs():
     logs = [
         LogEvidence(source="s", level="WARNING", message="warn", pattern=""),
-        LogEvidence(source="s", level="ERROR", message="err with pattern", pattern="POOL_EXHAUSTED"),
+        LogEvidence(source="s", level="ERROR", message="err with pattern", pattern="DB_EXCEPTION"),
         LogEvidence(source="s", level="ERROR", message="err plain", pattern=""),
     ]
     sorted_logs = _prioritize_logs(logs)
     # Match pattern phải lên đầu tiên
-    assert sorted_logs[0].pattern == "POOL_EXHAUSTED"
+    assert sorted_logs[0].pattern == "DB_EXCEPTION"
     assert sorted_logs[1].level == "ERROR"
     assert sorted_logs[2].level == "WARNING"
 
@@ -72,8 +72,8 @@ def test_analyze_logs_attaches_log_evidence(mock_collect):
             source="service-thanh-toan",
             timestamp="2026-08-10T22:30:00",
             level="ERROR",
-            message="POOL_EXHAUSTED: pool connection full",
-            pattern="POOL_EXHAUSTED",
+            message="asyncpg.TooManyConnectionsError pool_size=5",
+            pattern="DB_EXCEPTION",
         )
     ]
     mock_collect.return_value = mock_logs
@@ -84,7 +84,7 @@ def test_analyze_logs_attaches_log_evidence(mock_collect):
     mock_llm = MagicMock()
     tool_call = ToolCall(name="LogSearchTool", args={"start_time": "2026-08-10T22:28:00Z", "end_time": "2026-08-10T22:32:00Z"}, id="call_1")
     reply_1 = AIMessage(content="", tool_calls=[tool_call])
-    reply_2 = AIMessage(content="Lý giải đã được bổ sung thêm chi tiết từ log POOL_EXHAUSTED.")
+    reply_2 = AIMessage(content="Lý giải đã được bổ sung thêm chi tiết từ log DB_EXCEPTION.")
 
     mock_llm.bind_tools.return_value.invoke.side_effect = [reply_1, reply_2]
 
@@ -92,5 +92,5 @@ def test_analyze_logs_attaches_log_evidence(mock_collect):
     assert res.logs_collected == 1
     assert res.logs_relevant == 1
     assert len(res.hypothesis.log_evidence) == 1
-    assert res.hypothesis.log_evidence[0].pattern == "POOL_EXHAUSTED"
-    assert "từ log POOL_EXHAUSTED" in res.hypothesis.reasoning
+    assert res.hypothesis.log_evidence[0].pattern == "DB_EXCEPTION"
+    assert "từ log DB_EXCEPTION" in res.hypothesis.reasoning

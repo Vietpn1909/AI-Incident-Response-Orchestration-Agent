@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 _LIMIT = 20
 
 _QUERY = """
-SELECT service, version, deployed_at, deployed_by, commit_sha
+SELECT service, version, deployed_at, deployed_by, commit_sha, change_note
 FROM deploy_history
 WHERE service = $1
 ORDER BY deployed_at DESC
@@ -57,6 +57,7 @@ async def _fetch(service: str, limit: int) -> list[DeployRecord]:
             deployed_at=row["deployed_at"],
             deployed_by=row["deployed_by"] or "",
             commit_sha=row["commit_sha"] or "",
+            change_note=row["change_note"] or "",
         )
         for row in rows
     ]

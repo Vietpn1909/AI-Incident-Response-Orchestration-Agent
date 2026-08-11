@@ -123,6 +123,13 @@ class DeployRecord(BaseModel):
     deployed_at: datetime
     deployed_by: str = ""
     commit_sha: str = ""
+    #: Ghi chú thay đổi, kiểu release note — dữ liệu **phi cấu trúc** duy nhất
+    #: Agent có. Luật không đọc được đoạn văn; chỉ LLM đọc được rồi nối với số.
+    #:
+    #: Đo ngày 11/08: cùng một sự cố UC-4, LLM chỉ nêu đúng nguyên nhân khi có
+    #: CẢ ghi chú này VÀ log. Có ghi chú mà không log thì nó chỉ đoán được
+    #: "logic idempotency thất bại, có thể do một trong ba thứ".
+    change_note: str = ""
 
     def minutes_before(self, moment: datetime) -> float:
         """Deploy này xảy ra trước `moment` bao nhiêu phút. Âm nghĩa là sau."""

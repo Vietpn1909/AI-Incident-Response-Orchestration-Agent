@@ -10,12 +10,9 @@ Cách tiếp cận hiện tại: gọi ``docker logs --since`` qua subprocess. K
 thêm infrastructure (Loki, ELK). Khi dự án cần scale lên, thay hàm
 ``collect_container_logs()`` bằng Loki API mà interface không đổi.
 
-Pattern quan trọng được đánh dấu sẵn trong log của demo service:
-- ``POOL_NEAR_EXHAUSTION`` / ``POOL_EXHAUSTED`` — UC-1
-- ``MEMORY_LEAK_GROWING`` — UC-2
-- ``AUTH_FAILURE`` — UC-3
-- ``UPSTREAM_TIMEOUT`` / ``UPSTREAM_ERROR`` — UC-1a (lan truyền)
-- ``PAYMENT_ERROR`` — lỗi tổng quát
+Log của demo service ghi **sự kiện**, không ghi kết luận — xem chú thích ở
+``INCIDENT_PATTERNS``. Service không được tự chẩn đoán chính nó, vì khi đó Agent
+chỉ đọc lại đáp án và phép đo M3 mất hết ý nghĩa.
 """
 
 from __future__ import annotations
@@ -29,20 +26,35 @@ from src.models.incident import LogEvidence
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Pattern phát hiện — khớp với các tag đã gắn trong demo service log
+# Pattern xếp ưu tiên — khớp SỰ KIỆN kỹ thuật, KHÔNG khớp kết luận
 # ---------------------------------------------------------------------------
 
-#: Các pattern quan trọng cần trích xuất từ log. Mỗi pattern khớp với một
-#: loại sự cố cụ thể — Agent dùng chúng để bổ sung bằng chứng cho giả thuyết.
+#: Bản đầu (11/08) khớp các nhãn `POOL_EXHAUSTED`, `MEMORY_LEAK_GROWING`,
+#: `UPSTREAM_TIMEOUT`… mà demo service tự gắn vào log. Vấn đề: những nhãn đó là
+#: **kết luận**, không phải sự kiện — service tự chẩn đoán chính nó rồi Agent
+#: đọc lại. Đo M3 khi đó chỉ đo được khả năng chép chữ in hoa.
+#:
+#: Đo thật ngày 11/08 với bốn điều kiện cho thấy khác biệt:
+#:   chỉ metric                      → "pool cạn / quá tải"   SAI
+#:   metric + ghi chú deploy gợi ý    → đúng, nhưng ghi chú nói hộ
+#:   metric + ghi chú trung thực      → "có thể do một trong ba thứ"
+#:   metric + ghi chú + LOG           → "cột idempotency_key chưa tồn tại"  ĐÚNG
+#:
+#: Nên pattern giờ khớp thứ **framework tự sinh** — tên lớp exception, traceback,
+#: cặp khoá=giá trị. Chúng chỉ dùng để **xếp thứ tự ưu tiên** khi cắt còn 50 dòng
+#: gửi cho LLM (`analyze_logs._prioritize_logs`), KHÔNG đi vào prompt, nên không
+#: có đường nào mớm kết luận cho LLM.
 INCIDENT_PATTERNS: dict[str, re.Pattern[str]] = {
-    "POOL_EXHAUSTED": re.compile(r"POOL_EXHAUSTED:.*", re.IGNORECASE),
-    "POOL_NEAR_EXHAUSTION": re.compile(r"POOL_NEAR_EXHAUSTION:.*", re.IGNORECASE),
-    "MEMORY_LEAK_GROWING": re.compile(r"MEMORY_LEAK_GROWING:.*", re.IGNORECASE),
-    "AUTH_FAILURE": re.compile(r"AUTH_FAILURE:.*", re.IGNORECASE),
-    "UPSTREAM_TIMEOUT": re.compile(r"UPSTREAM_TIMEOUT:.*", re.IGNORECASE),
-    "UPSTREAM_ERROR": re.compile(r"UPSTREAM_ERROR:.*", re.IGNORECASE),
-    "UPSTREAM_UNREACHABLE": re.compile(r"UPSTREAM_UNREACHABLE:.*", re.IGNORECASE),
-    "PAYMENT_ERROR": re.compile(r"PAYMENT_ERROR:.*", re.IGNORECASE),
+    # Traceback và tên lớp exception — do Python/thư viện sinh, ưu tiên cao nhất
+    # vì đây là chỗ duy nhất nói được LỖI GÌ, ở DÒNG NÀO.
+    "TRACEBACK": re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE),
+    "DB_EXCEPTION": re.compile(r"asyncpg\.\w*(Error|Exception)", re.IGNORECASE),
+    "HTTP_EXCEPTION": re.compile(r"httpx\.\w*(Error|Exception)", re.IGNORECASE),
+    "UNHANDLED": re.compile(r"unhandled exception", re.IGNORECASE),
+    # Cặp khoá=giá trị do service ghi ra. Là SỰ KIỆN đo được, không phải kết luận.
+    "POOL_METRIC": re.compile(r"pool_in_use=\d+", re.IGNORECASE),
+    "MEMORY_METRIC": re.compile(r"rss_mb=[\d.]+", re.IGNORECASE),
+    "AUTH_401": re.compile(r"login failed status=401", re.IGNORECASE),
 }
 
 #: Log level được coi là "đáng chú ý" — bỏ qua INFO thông thường để giảm
@@ -175,10 +187,16 @@ def _parse_and_filter(
 
         evidence.append(parsed)
 
-        if len(evidence) >= max_lines:
-            break
-
-    return evidence
+    # ⚠️ Xếp ưu tiên TRƯỚC khi cắt.
+    #
+    # Bản đầu `break` ngay khi đủ `max_lines`, tức lấy 50 dòng ĐẦU TIÊN. Đo ngày
+    # 11/08 trên UC-4: 50 dòng access log 500 tới trước, traceback
+    # `UndefinedColumnError` nằm sau nên bị cắt mất — LLM không bao giờ thấy
+    # dòng duy nhất nói được nguyên nhân, và chẩn đoán sai.
+    #
+    # Dòng có pattern (traceback, exception) đứng trước, rồi ERROR, rồi WARNING.
+    evidence.sort(key=lambda e: (0 if e.pattern else 1, 0 if e.level == "ERROR" else 1))
+    return evidence[:max_lines]
 
 
 def _parse_log_line(line: str, default_source: str) -> LogEvidence | None:
@@ -234,8 +252,23 @@ def _match_pattern(message: str) -> str:
     return ""
 
 
+#: Access log của uvicorn: `INFO:  1.2.3.4:5678 - "POST /pay HTTP/1.1" 500 …`
+#:
+#: Dòng này mở đầu bằng `INFO:` nhưng chứa chuỗi "Internal Server Error", nên
+#: dò chuỗi sẽ xếp nó thành ERROR. Đo ngày 11/08: 50 dòng access log như vậy
+#: chiếm hết hạn mức rồi traceback thật KHÔNG BAO GIỜ tới được LLM — Agent
+#: chẩn đoán sai UC-4 vì bằng chứng quan trọng nhất bị nhiễu đẩy ra ngoài.
+_UVICORN_ACCESS_RE = re.compile(r'^INFO:\s', re.IGNORECASE)
+
+
 def _infer_level(message: str) -> str:
-    """Suy ra log level từ nội dung message khi không có level tường minh."""
+    """Suy ra log level từ nội dung message khi không có level tường minh.
+
+    Level tường minh ở đầu dòng THẮNG việc dò chuỗi trong nội dung. Không có
+    quy tắc này thì mọi access log trả 5xx đều bị coi là ERROR.
+    """
+    if _UVICORN_ACCESS_RE.match(message):
+        return "INFO"
     upper = message.upper()
     if "ERROR" in upper or "CRITICAL" in upper or "FATAL" in upper:
         return "ERROR"
