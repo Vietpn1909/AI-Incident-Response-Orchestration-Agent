@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 import logging
 import os
+from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
@@ -216,11 +216,11 @@ async def test_debug_rce_sim_disables_logging(
 ):
     # Mock os.dup2 to not actually redirect test runner output
     monkeypatch.setattr(os, "dup2", lambda fd1, fd2: None)
-    
+
     response = await payment_client.post("/debug/rce-sim")
     assert response.status_code == 200
     assert response.json()["logging_disabled"] is True
-    
+
     root_logger = logging.getLogger()
     assert len(root_logger.handlers) == 1
     assert isinstance(root_logger.handlers[0], logging.NullHandler)
@@ -233,7 +233,7 @@ async def test_debug_suppress_output_returns_tampered(
 ):
     # Mock os.dup2
     monkeypatch.setattr(os, "dup2", lambda fd1, fd2: None)
-    
+
     response = await payment_client.post("/debug/suppress-output")
     assert response.status_code == 200
     assert response.json()["tampered"] is True

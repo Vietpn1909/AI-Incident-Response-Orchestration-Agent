@@ -147,7 +147,9 @@ async def run_direct_db_scrape(
         conn = await asyncpg.connect(db_url)
         try:
             while time.perf_counter() - started < duration:
-                rows = await conn.fetch("SELECT id, order_id, amount FROM payments ORDER BY id DESC LIMIT 100")
+                # Không giữ kết quả — mục đích là tạo tải đọc thật lên DB,
+                # không phải lấy dữ liệu. Gán vào biến rồi bỏ thì ruff báo F841.
+                await conn.fetch("SELECT id, order_id, amount FROM payments ORDER BY id DESC LIMIT 100")
                 query_count += 1
                 await asyncio.sleep(0.05)
         finally:
@@ -171,7 +173,7 @@ async def run_rce_inject(
             # 1. Gọi endpoint RCE để vô hiệu hoá logging
             await client.post(f"{target_url}/debug/rce-sim")
             print("Đã chiếm quyền (RCE) và vô hiệu hoá Python logging.")
-            
+
             # 2. Rút dữ liệu (hoặc chạy bình thường) mà không để lại log
             while time.perf_counter() - started < duration:
                 await client.get(f"{target_url}/health")
@@ -179,7 +181,7 @@ async def run_rce_inject(
                 await asyncio.sleep(0.1)
         except Exception as e:
             print(f"⚠️ Lỗi RCE Inject: {e}")
-            
+
     return request_count, time.perf_counter() - started
 
 
@@ -196,7 +198,7 @@ async def run_log_tampering(
             # 1. Gọi endpoint tamper để chặn stdout/stderr ở tầng OS
             await client.post(f"{target_url}/debug/suppress-output")
             print("Đã redirect stdout/stderr sang /dev/null ở tầng OS.")
-            
+
             # 2. Tạo lỗi (đăng nhập sai) nhưng log sẽ không xuất hiện
             while time.perf_counter() - started < duration:
                 await client.post(
@@ -207,7 +209,7 @@ async def run_log_tampering(
                 await asyncio.sleep(0.1)
         except Exception as e:
             print(f"⚠️ Lỗi Log Tampering: {e}")
-            
+
     return request_count, time.perf_counter() - started
 
 
@@ -231,7 +233,7 @@ async def run_oom_kill(
             except Exception as e:
                 print(f"💥 Lỗi (có thể đã chết): {e}")
                 break
-            
+
     return batch_count, time.perf_counter() - started
 
 
@@ -254,7 +256,7 @@ async def run_connection_starvation(
             except Exception:
                 break
         print(f"Đã chiếm dụng {len(connections)} DB connections.")
-        
+
         # 2. Gửi request tới /pay, request này sẽ treo vĩnh viễn (chờ lấy connection từ pool)
         async with httpx.AsyncClient(timeout=1.0) as client:
             while time.perf_counter() - started < duration:
@@ -268,7 +270,7 @@ async def run_connection_starvation(
                     pass # Timeout do treo chờ connection
                 except httpx.HTTPError:
                     pass
-                
+
                 request_count += 1
                 await asyncio.sleep(0.5)
     except Exception as e:
@@ -276,7 +278,7 @@ async def run_connection_starvation(
     finally:
         for conn in connections:
             await conn.close()
-            
+
     return request_count, time.perf_counter() - started
 
 

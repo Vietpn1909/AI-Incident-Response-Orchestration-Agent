@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-from src.models.incident import LogEvidence
 from src.services.log_collector import (
     _infer_level,
     _match_pattern,

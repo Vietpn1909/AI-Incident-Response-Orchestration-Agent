@@ -54,7 +54,7 @@ def test_analyze_logs_no_logs_returns_original_hypothesis(mock_collect):
     reply_1 = AIMessage(content="", tool_calls=[tool_call])
     # Lần 2: LLM trả về text sau khi tool trả rỗng
     reply_2 = AIMessage(content="Không có log, giữ nguyên.")
-    
+
     mock_llm.bind_tools.return_value.invoke.side_effect = [reply_1, reply_2]
 
     res = analyze_logs(signal, hyp, llm=mock_llm)
@@ -80,12 +80,12 @@ def test_analyze_logs_attaches_log_evidence(mock_collect):
 
     signal = _make_signal()
     hyp = _make_hypothesis()
-    
+
     mock_llm = MagicMock()
     tool_call = ToolCall(name="LogSearchTool", args={"start_time": "2026-08-10T22:28:00Z", "end_time": "2026-08-10T22:32:00Z"}, id="call_1")
     reply_1 = AIMessage(content="", tool_calls=[tool_call])
     reply_2 = AIMessage(content="Lý giải đã được bổ sung thêm chi tiết từ log POOL_EXHAUSTED.")
-    
+
     mock_llm.bind_tools.return_value.invoke.side_effect = [reply_1, reply_2]
 
     res = analyze_logs(signal, hyp, llm=mock_llm)

@@ -23,7 +23,6 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-from datetime import datetime, timedelta
 
 from src.models.incident import LogEvidence
 

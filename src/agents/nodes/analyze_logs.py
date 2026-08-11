@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -72,28 +71,31 @@ def analyze_logs(
     total_logs_found = 0
 
     @tool
-    def LogSearchTool(start_time: str, end_time: str) -> str:
+    # noqa N802: tên hàm này CHÍNH LÀ tên công cụ mà LLM nhìn thấy trong prompt
+    # (LangChain lấy `__name__` làm tool name). Đổi sang snake_case là đổi thứ
+    # LLM đọc — quyết định đó thuộc về Việt, không sửa kèm lúc dọn lint.
+    def LogSearchTool(start_time: str, end_time: str) -> str:  # noqa: N802
         """Truy vấn hệ thống Log để lấy log của service đang gặp sự cố.
-        
+
         Args:
             start_time: Thời gian bắt đầu (ISO 8601, ví dụ: 2026-08-10T10:03:00Z).
             end_time: Thời gian kết thúc (ISO 8601, ví dụ: 2026-08-10T10:07:00Z).
         """
         nonlocal collected_logs, total_logs_found
-        
+
         logger.info("Agent gọi LogSearchTool(%s, %s)", start_time, end_time)
         all_logs = collect_logs_for_service(service, start_time, end_time)
-        
+
         total_logs_found += len(all_logs)
         if not all_logs:
             return "Không có log nào được tìm thấy trong khoảng thời gian này."
-            
+
         prioritized = _prioritize_logs(all_logs)
         relevant = prioritized[:MAX_LOGS_FOR_LLM]
-        
+
         # Lưu vào scope bên ngoài để trả về trong Hypothesis
         collected_logs.extend(relevant)
-        
+
         log_lines = "\n".join(
             f"[{log.level}] {log.timestamp} {log.message}"
             for log in relevant
@@ -136,11 +138,11 @@ Hãy truy vấn log từ khoảng 2 phút trước đến 2 phút sau thời đi
         try:
             reply = llm_with_tools.invoke(messages)
             messages.append(reply)
-            
+
             # Thoát vòng lặp nếu LLM không gọi tool nào nữa
             if not getattr(reply, "tool_calls", None):
                 break
-                
+
             for tool_call in reply.tool_calls:
                 if tool_call["name"] == "LogSearchTool":
                     try:
@@ -154,9 +156,9 @@ Hãy truy vấn log từ khoảng 2 phút trước đến 2 phút sau thời đi
 
     # Trích xuất kết luận cuối cùng
     final_reasoning = ""
-    if messages and hasattr(messages[-1], "content") and type(messages[-1]) != ToolMessage:
+    if messages and hasattr(messages[-1], "content") and not isinstance(messages[-1], ToolMessage):
         final_reasoning = messages[-1].content
-    
+
     if final_reasoning:
         updated = hypothesis.model_copy(
             update={
