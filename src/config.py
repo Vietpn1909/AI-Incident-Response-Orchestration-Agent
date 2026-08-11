@@ -83,6 +83,18 @@ class Settings(BaseSettings):
     # cố tự duyệt, và hành động bị từ chối. Xem src/services/hitl.py.
     jira_agent_account_id: str = ""
 
+    # Email — gửi báo cáo Postmortem sau khi sự cố resolved
+    #
+    # Dùng Gmail SMTP + App Password. Tạo App Password tại:
+    #   https://myaccount.google.com/apppasswords
+    # Yêu cầu: tài khoản Google đã bật 2FA.
+    smtp_email: str = ""
+    smtp_app_password: str = ""
+
+    #: Danh sách email nhận Postmortem, phân cách bằng dấu phẩy.
+    #: Ví dụ: "leader@gmail.com,oncall@gmail.com"
+    postmortem_recipients: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
