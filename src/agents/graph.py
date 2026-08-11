@@ -1,7 +1,16 @@
 from langgraph.graph import END, StateGraph
 
-from src.agents.nodes.example_node import analyze_node, respond_node
 from src.agents.state import AgentState
+
+
+async def analyze_node(state: AgentState) -> dict:
+    query = state.get("query", "")
+    return {"analysis": f"Phân tích: {query}"}
+
+
+async def respond_node(state: AgentState) -> dict:
+    analysis = state.get("analysis", "")
+    return {"response": f"Kết quả: {analysis}"}
 
 
 def should_continue(state: AgentState) -> str:
