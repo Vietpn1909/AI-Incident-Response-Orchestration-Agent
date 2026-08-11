@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from src.models.incident import DeployRecord, Hypothesis, IncidentSignal
-from src.services import deploys, rules
+from src.services import deploys, prometheus, rules
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +233,18 @@ def hypothesize_with_origin(signal: IncidentSignal, llm=None) -> HypothesisOutco
             "%s: BỎ câu của LLM vì nó PHỦ ĐỊNH một nguyên nhân mà luật đã chứng minh "
             "bằng bằng chứng. Giữ câu do luật ghép. Câu bị bỏ: %s",
             signal.affected_service,
+            statement,
+        )
+        return HypothesisOutcome(hypothesis, "rule")
+
+    phan_bac = _bang_chung_phan_bac(statement, signal)
+    if phan_bac:
+        logger.warning(
+            "%s: BỎ câu của LLM vì nêu '%s' nhưng bằng chứng SỐ LIỆU PHẢN BÁC — "
+            "metric tồn tại nhưng giá trị ở mức bình thường. "
+            "Giữ câu do luật ghép. Câu bị bỏ: %s",
+            signal.affected_service,
+            phan_bac,
             statement,
         )
         return HypothesisOutcome(hypothesis, "rule")
@@ -463,6 +475,102 @@ def _nguyen_nhan_khong_co_can_cu(
 
     if deploy is None and any(tu in cau for tu in _TU_KHOA_DEPLOY):
         return next(tu for tu in _TU_KHOA_DEPLOY if tu in cau)
+
+    return None
+
+
+#: Nguyên nhân → `(chuỗi con trong tên MetricEvidence, hàm kiểm)`.
+#:
+#: Khác `_CAN_CU_BAT_BUOC` ở một điểm quan trọng: cái kia chỉ hỏi "bằng chứng
+#: **có mặt** không?", cái này hỏi "bằng chứng có **đủ** để chống lưng cho
+#: khẳng định không?".
+#:
+#: Mỗi hàm kiểm trả `True` khi giá trị đo được **đủ bất thường** để khẳng
+#: định đó hợp lệ. Dùng lại chính ngưỡng mà rule engine dùng trong
+#: `_diem_tin_cay()` và `_cau_giai_thuyet()` — không tạo ngưỡng mới, chỉ hỏi
+#: "rule engine có coi metric này là bất thường không?"
+#:
+#: ## Vì sao cần cửa này — bổ sung cho `_nguyen_nhan_khong_co_can_cu()`
+#:
+#: Kịch bản bị lọt: bằng chứng `db_pool = 0.0` (pool hoàn toàn rỗng). Cửa 1
+#: kiểm "có `db_pool` trong tên?" → Có → pass. Nhưng `0.0` PHẢN BÁC khẳng
+#: định "pool cạn" — pool trống thì không thể cạn.
+#:
+#: Cửa 1 phát hiện "LLM nêu nguyên nhân mà bằng chứng KHÔNG TỒN TẠI".
+#: Cửa 4 phát hiện "LLM nêu nguyên nhân mà bằng chứng TỒN TẠI NHƯNG PHẢN BÁC".
+#:
+#: ## Tại sao KHÔNG mớm đáp án
+#:
+#: Cửa này KHÔNG nói "pool=0% → nguyên nhân là X". Nó chỉ nói "pool=0% →
+#: LLM không được khẳng định pool là nguyên nhân". Câu giữ lại là câu của rule
+#: engine — chính rule engine đã chạy qua các nhánh `if pool.value >=
+#: POOL_EXHAUSTED_RATIO` rồi, nên nếu pool thấp thì câu luật ĐÚNG sẽ nói thứ
+#: khác, không nói pool.
+
+def _gia_tri_du_bat_thuong_pool(value: float) -> bool:
+    """Pool saturation đủ cao để nói 'pool cạn' không?"""
+    return value >= rules.POOL_EXHAUSTED_RATIO
+
+
+def _gia_tri_du_bat_thuong_bo_nho(value: float) -> bool:
+    """Đỉnh bộ nhớ đủ gần trần container để nói 'OOM' không?
+
+    `value` là MB — cùng đơn vị mà `_diem_tin_cay` nhận từ `MetricEvidence`.
+    """
+    tran_mb = prometheus.CONTAINER_MEMORY_LIMIT_BYTES / 1024 / 1024
+    if tran_mb <= 0:
+        return False
+    return value / tran_mb >= rules.MEMORY_NEAR_LIMIT_RATIO
+
+
+#: `(từ khoá trong câu LLM, chuỗi con trong tên MetricEvidence, hàm kiểm giá
+#: trị)`. Cùng cặp `(từ khoá, chuỗi con)` với `_CAN_CU_BAT_BUOC`, nhưng thêm
+#: hàm kiểm giá trị — mặt thứ hai của cùng một kiểm tra.
+_BANG_CHUNG_VA_NGUONG: list[
+    tuple[tuple[str, ...], str, object]
+] = [
+    (("pool", "connection"), "db_pool", _gia_tri_du_bat_thuong_pool),
+    (("bộ nhớ", "memory", "oom", "ram"), "đỉnh bộ nhớ", _gia_tri_du_bat_thuong_bo_nho),
+]
+
+
+def _bang_chung_phan_bac(
+    statement: str,
+    signal: IncidentSignal,
+) -> str | None:
+    """Bằng chứng có phản bác khẳng định của LLM không?
+
+    Trả từ khoá vi phạm đầu tiên, ``None`` nếu bằng chứng ủng hộ hoặc không
+    liên quan.
+
+    Khác ``_nguyen_nhan_khong_co_can_cu()`` ở chỗ: cửa đó chặn khi bằng chứng
+    **vắng mặt**, cửa này chặn khi bằng chứng **có mặt nhưng giá trị phản bác**.
+
+    Ví dụ: ``pool_in_use/pool_size = 0.0`` — bằng chứng pool CÓ mặt, nhưng giá
+    trị 0% nghĩa là pool rỗng, nên nói "pool cạn" là nói ngược bằng chứng.
+    """
+    cau = statement.lower()
+
+    for tu_khoa, chuoi_con, kiem_gia_tri in _BANG_CHUNG_VA_NGUONG:
+        # LLM có nhắc từ khoá này không?
+        tu_khop = next((tu for tu in tu_khoa if tu in cau), None)
+        if tu_khop is None:
+            continue
+
+        # Tìm bằng chứng khớp
+        bang_chung_khop = [
+            item for item in signal.evidence if chuoi_con in item.name.lower()
+        ]
+        if not bang_chung_khop:
+            # Không có bằng chứng → để `_nguyen_nhan_khong_co_can_cu` xử lý
+            continue
+
+        # Bằng chứng tồn tại — kiểm giá trị có đủ bất thường để chống lưng
+        # cho khẳng định không. Lấy giá trị CAO NHẤT (worst case) để không
+        # chặn oan: nếu một trong các metric pool đã chạm trần thì hợp lệ.
+        gia_tri_lon_nhat = max(item.value for item in bang_chung_khop)
+        if not kiem_gia_tri(gia_tri_lon_nhat):
+            return tu_khop
 
     return None
 
