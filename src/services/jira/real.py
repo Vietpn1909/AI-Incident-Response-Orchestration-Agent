@@ -177,9 +177,26 @@ class RealJiraClient:
         self._base = base_url.rstrip("/")
         self._project = project_key
         credentials = base64.b64encode(f"{email}:{api_token}".encode()).decode()
+        # Ép IPv4 khi gọi Jira.
+        #
+        # Đo ngày 11/08 trên mạng của máy demo: `jibinarybro.atlassian.net` phân
+        # giải ra cả A và AAAA, nhưng địa chỉ IPv6 là tiền tố NAT64 (`64:ff9b::`)
+        # và đường đó **hỏng** — TCP 443 bắt tay được nhưng TLS treo tới hết
+        # timeout. `httpx` thử IPv6 trước nên mọi lời gọi Jira treo 30 giây rồi
+        # chết, trong khi GitHub và Render vẫn bình thường.
+        #
+        #   curl -4 → HTTP 401 trong 0,68s     (đúng, chỉ thiếu auth header)
+        #   curl -6 → treo 15s rồi chết
+        #
+        # Đây là lỗi hạ tầng mạng, không phải Jira sập hay token sai — và nếu gặp
+        # giữa buổi demo thì cực khó đoán, vì mọi thứ khác vẫn xanh.
+        #
+        # `local_address="0.0.0.0"` buộc socket dùng IPv4. Máy nào có IPv6 lành
+        # cũng không bị ảnh hưởng: Jira Cloud luôn có bản ghi A.
         self._client = httpx.Client(
             base_url=self._base,
             timeout=timeout,
+            transport=httpx.HTTPTransport(local_address="0.0.0.0", retries=1),
             headers={
                 "Authorization": f"Basic {credentials}",
                 "Accept": "application/json",
