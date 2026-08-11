@@ -15,6 +15,7 @@ Phần Trung làm: các chỗ có TODO(Trung).
 
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx  # noqa: F401 — Trung dùng trong TODO ở create_order()
@@ -23,6 +24,14 @@ from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-dat-hang"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+    force=True,
+)
+logger = logging.getLogger(SERVICE_NAME)
 
 # Tên host này là tên service trong docker-compose.demo.yml.
 PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://service-thanh-toan:8001")
@@ -66,16 +75,28 @@ async def create_order(request: OrderRequest) -> dict:
             payment_result = resp.json()
     except httpx.TimeoutException:
         # Bắt TimeoutException -> Trả về 504 Gateway Timeout để Prometheus ghi nhận lỗi 5xx
+        logger.error(
+            "httpx.TimeoutException upstream=%s timeout_s=%s path=/orders",
+            PAYMENT_SERVICE_URL, PAYMENT_TIMEOUT_SECONDS,
+        )
         raise HTTPException(
             status_code=504,
             detail=f"Service thanh toán bị timeout sau {PAYMENT_TIMEOUT_SECONDS}s",
         )
     except httpx.HTTPStatusError as e:
+        logger.error(
+            "httpx.HTTPStatusError upstream=%s status=%d body=%s",
+            PAYMENT_SERVICE_URL, e.response.status_code, e.response.text[:200],
+        )
         raise HTTPException(
             status_code=502,
             detail=f"Lỗi từ service thanh toán: {e.response.text}",
         )
     except Exception as e:
+        logger.error(
+            "UPSTREAM_UNREACHABLE: Không thể kết nối tới service thanh toán tại %s: %s",
+            PAYMENT_SERVICE_URL, e,
+        )
         raise HTTPException(
             status_code=502,
             detail=f"Không thể kết nối tới service thanh toán: {str(e)}",

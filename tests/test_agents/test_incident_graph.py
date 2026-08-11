@@ -149,4 +149,7 @@ def test_graph_co_node_link_incidents():
     with _prometheus() as client:
         graph = build_incident_graph(client, jira)
 
-    assert "link_incidents" in set(graph.get_graph().nodes)
+    ten_node = set(graph.get_graph().nodes)
+    assert "link_incidents" in ten_node
+    assert "analyze_logs" in ten_node
+

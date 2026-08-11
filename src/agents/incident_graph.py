@@ -34,6 +34,7 @@ import logging
 
 from langgraph.graph import END, StateGraph
 
+from src.agents.nodes.analyze_logs import analyze_logs
 from src.agents.nodes.classify_severity import escalate_spreading
 from src.agents.nodes.detect import detect_incidents
 from src.agents.nodes.escalate import escalate
@@ -140,6 +141,39 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
                 hypotheses[jira_key] = hypothesis
         return {"hypotheses": hypotheses}
 
+    def analyze_logs_node(state: IncidentAgentState) -> dict:
+        """Thu thập và bổ sung bằng chứng log cho các giả thuyết vừa dựng."""
+        hypotheses = state.get("hypotheses") or {}
+        if not hypotheses:
+            return {}
+
+        signal_theo_service = {
+            signal.affected_service: signal
+            for signal in state.get("signals") or []
+        }
+
+        updated_hypotheses = dict(hypotheses)
+        for jira_key, hypothesis in hypotheses.items():
+            service = None
+            for s_name, k in (state.get("war_rooms") or {}).items():
+                if k == jira_key:
+                    service = s_name
+                    break
+            if not service:
+                continue
+
+            signal = signal_theo_service.get(service)
+            if not signal:
+                continue
+
+            try:
+                res = analyze_logs(signal, hypothesis)
+                updated_hypotheses[jira_key] = res.hypothesis
+            except Exception as error:
+                logger.error("%s: lỗi khi thu thập/phân tích log (%s)", jira_key, error)
+
+        return {"hypotheses": updated_hypotheses}
+
     def link_incidents_node(state: IncidentAgentState) -> dict:
         """Nối các war room lại khi sự cố lan sang service khác.
 
@@ -160,7 +194,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         """Đề xuất hành động rồi chuyển war room sang chờ người duyệt.
 
         Chỉ chạy cho war room **đã có giả thuyết** trong vòng này. Không có giả
-        thuyết thì không có `related_deploy`, mà thiếu nó thì mọi sự cố đều rơi
+        thuyết thì không có `related_deploy`, mà thiếu me thì mọi sự cố đều rơi
         vào nhánh mặc định `scale_up` — đề xuất sai còn tệ hơn không đề xuất.
 
         Đây là node cuối của chuỗi tự động. Sau nó graph **kết thúc** và quyền
@@ -212,6 +246,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     graph.add_node("classify_severity", classify_severity)
     graph.add_node("open_war_room", open_war_rooms)
     graph.add_node("hypothesize", hypothesize_node)
+    graph.add_node("analyze_logs", analyze_logs_node)
     graph.add_node("link_incidents", link_incidents_node)
     graph.add_node("propose_remediation", propose_remediation_node)
     graph.add_node("escalate", escalate_node)
@@ -224,10 +259,10 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         {"open_war_room": "open_war_room", END: END},
     )
     graph.add_edge("open_war_room", "hypothesize")
-    # Nhánh rẽ theo đúng sơ đồ ở docs/architecture_diagram.md mục 2: chỉ đi qua
-    # `link_incidents` khi thật sự có lan truyền.
+    graph.add_edge("hypothesize", "analyze_logs")
+    # Nhánh rẽ theo đúng sơ đồ ở docs/architecture_diagram.md mục 2: từ analyze_logs tới link_incidents hoặc propose_remediation
     graph.add_conditional_edges(
-        "hypothesize",
+        "analyze_logs",
         _co_lan_truyen,
         {"link_incidents": "link_incidents", "propose_remediation": "propose_remediation"},
     )
@@ -237,6 +272,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
     # khởi động: họ chuyển issue sang `Remediating`, Jira gọi webhook, rồi
     # `hitl.assert_human_approved()` mới cho `remediation.execute()` chạy.
     graph.add_edge("escalate", END)
+
 
     return graph.compile()
 

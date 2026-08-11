@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from collections.abc import AsyncIterator
 
 import pytest
@@ -205,3 +207,34 @@ async def test_pay_batch_nhac_chay_seed_khi_chua_co_du_lieu(
 
     assert response.status_code == 409
     assert "seed.py" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_debug_rce_sim_disables_logging(
+    payment_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # Mock os.dup2 to not actually redirect test runner output
+    monkeypatch.setattr(os, "dup2", lambda fd1, fd2: None)
+
+    response = await payment_client.post("/debug/rce-sim")
+    assert response.status_code == 200
+    assert response.json()["logging_disabled"] is True
+
+    root_logger = logging.getLogger()
+    assert len(root_logger.handlers) == 1
+    assert isinstance(root_logger.handlers[0], logging.NullHandler)
+
+
+@pytest.mark.asyncio
+async def test_debug_suppress_output_returns_tampered(
+    payment_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # Mock os.dup2
+    monkeypatch.setattr(os, "dup2", lambda fd1, fd2: None)
+
+    response = await payment_client.post("/debug/suppress-output")
+    assert response.status_code == 200
+    assert response.json()["tampered"] is True
+    assert response.json()["stdout_suppressed"] is True

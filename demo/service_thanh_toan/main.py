@@ -17,8 +17,10 @@ Phần Trung làm: các chỗ có TODO(Trung).
 
 from __future__ import annotations
 
+import logging
 import os
 import time
+import uuid
 from collections import Counter, deque
 from contextlib import asynccontextmanager
 from threading import Lock
@@ -30,6 +32,17 @@ from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from pydantic import BaseModel, Field
 
 SERVICE_NAME = "service-thanh-toan"
+
+# Structured logging cho Log Analysis Agent.
+# Chỉ ghi log ở những điểm sự cố quan trọng — Agent sẽ thu thập những dòng này
+# khi Rule Engine phát hiện bất thường, không phải lúc bình thường.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+    force=True,
+)
+logger = logging.getLogger(SERVICE_NAME)
 
 # Tài khoản cố định chỉ dùng cho UC-3 trong môi trường demo local. Đây không
 # phải cơ chế xác thực dùng cho production.
@@ -50,6 +63,24 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://demo:demo@localhost:5432/
 # pool 5 connection trở thành nút thắt trước uvicorn.
 PAYMENT_QUERY_DELAY_SECONDS = float(os.getenv("PAYMENT_QUERY_DELAY_SECONDS", "0.2"))
 
+# ⚠️ UC-4 — MÔ PHỎNG DEPLOY THIẾU MIGRATION. KHÔNG DÙNG TRONG PRODUCTION.
+#
+# Bật biến này = mô phỏng `v1.4.3` đã lên nhưng migration chưa chạy: code ghi
+# vào cột `payments.idempotency_key` mà cột đó chưa tồn tại trong schema
+# (`seed.py` chỉ tạo id, order_id, amount, created_at).
+#
+# `asyncpg` sẽ ném `UndefinedColumnError`, FastAPI trả 500, và uvicorn ghi
+# traceback — **log do framework sinh, không phải mình viết**. Đó là điều kiện
+# để phép đo có nghĩa.
+#
+# Vì sao UC này cần thiết: ba UC kia đều lộ ra qua metric, nên log chỉ nói lại
+# thứ Prometheus đã nói. UC-4 là chỗ metric MÙ THẬT — lỗi 5xx 100% nhưng p95
+# GIẢM (request chết trước khi kịp chạy pg_sleep), pool thấp, service vẫn sống.
+# Luật phân loại được P1 mà không thể nói vì sao. Chỉ log trả lời được.
+#
+#   SIMULATE_MISSING_MIGRATION=1 docker compose -f docker-compose.demo.yml up -d service-thanh-toan
+SIMULATE_MISSING_MIGRATION = os.getenv("SIMULATE_MISSING_MIGRATION", "0") == "1"
+
 # ⚠️ Contract ①: 2 metric này instrumentator KHÔNG tự tạo, nhưng Agent cần
 # chúng để chứng minh nguyên nhân gốc là "pool cạn" chứ không chỉ nói "chậm".
 #
@@ -68,6 +99,20 @@ auth_failure_top_source_ratio = Gauge('auth_failure_top_source_ratio_1m', 'Top s
 auth_failure_unique_sources.set_function(lambda: _auth_failure_snapshot()[0])
 auth_failure_unique_accounts.set_function(lambda: _auth_failure_snapshot()[1])
 auth_failure_top_source_ratio.set_function(lambda: _auth_failure_snapshot()[2])
+
+
+def _rss_mb() -> float:
+    """Bộ nhớ thật process đang dùng, MB. Đọc từ /proc, không cần thư viện ngoài.
+
+    Ghi con số này vào log là ghi **sự kiện**. Service KHÔNG được tự kết luận
+    "sắp bị OOM" — nối 118 MB với trần 128 MB là việc của Agent.
+    """
+    try:
+        with open("/proc/self/statm", encoding="ascii") as f:
+            pages = int(f.read().split()[1])
+        return pages * 4096 / 1024 / 1024
+    except (OSError, IndexError, ValueError):
+        return 0.0
 
 
 def _auth_failure_snapshot(now: float | None = None) -> tuple[int, int, float]:
@@ -124,8 +169,9 @@ async def lifespan(app: FastAPI):
     try:
         pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
         db_pool_size.set(POOL_SIZE)
-        print(f"✅ {SERVICE_NAME} khởi động — pool tối đa {POOL_SIZE} connection")
+        logger.info("Khởi động thành công — pool tối đa %d connection", POOL_SIZE)
     except Exception as e:
+        logger.error("Không kết nối được Postgres tại %s: %s", DATABASE_URL, e)
         print(f"⚠️ Chưa kết nối được Postgres tại {DATABASE_URL}: {e}")
         print("💡 Vui lòng bật Postgres bằng Docker lệnh: docker compose -f docker-compose.demo.yml up -d postgres")
     yield
@@ -169,9 +215,35 @@ async def pay(request: PayRequest) -> dict:
         raise HTTPException(503, "Pool chưa khởi tạo")
 
     try:
+        in_use = pool.get_size() - pool.get_idle_size()
+        if in_use >= POOL_SIZE - 1:
+            logger.warning(
+                "pool_in_use=%d pool_size=%d",
+                in_use, POOL_SIZE,
+            )
         async with pool.acquire() as conn:
             # get_size() = số connection ĐÃ TẠO, không phải trần POOL_SIZE
             db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
+
+            # UC-4 fail NGAY, trước cả pg_sleep.
+            #
+            # `pg_sleep` là thiết bị nhân tạo dành riêng cho UC-1 (làm pool cạn).
+            # Để nó chạy trước câu INSERT lỗi thì UC-4 vẫn phải xếp hàng chờ pool
+            # rồi mới chết, nên p95 vẫn cao — đo ngày 11/08: 4,35s. Mất đúng đặc
+            # điểm làm UC-4 đáng giá: metric thấy "hỏng" nhưng p95 GIẢM, khiến
+            # luật chỉ nhìn độ trễ tưởng hệ thống vừa nhanh lên.
+            #
+            # Trong code thật sẽ không có pg_sleep, và lỗi schema nổ ngay lần
+            # chạm database đầu tiên. Đặt trước là mô phỏng đúng hơn.
+            if SIMULATE_MISSING_MIGRATION:
+                row = await conn.fetchrow(
+                    "INSERT INTO payments (order_id, amount, idempotency_key) "
+                    "VALUES ($1, $2, $3) RETURNING id",
+                    request.order_id,
+                    request.amount,
+                    str(uuid.uuid4()),
+                )
+                return {"ok": True, "payment_id": str(row["id"])}
 
             # Truy vấn chậm có chủ đích: giữ connection trong Postgres để tải
             # đồng thời làm pool cạn và request xếp hàng ngay bên trong /pay.
@@ -190,6 +262,18 @@ async def pay(request: PayRequest) -> dict:
                 request.order_id,
             )
             return {"ok": True, "payment_id": str(row["id"])}
+    except asyncpg.exceptions.TooManyConnectionsError:
+        logger.error(
+            "asyncpg.TooManyConnectionsError pool_size=%d path=/pay",
+            POOL_SIZE,
+        )
+        raise HTTPException(503, "Connection pool cạn kiệt")
+    except Exception as exc:
+        logger.error(
+            "unhandled exception path=/pay order_id=%s %s: %s",
+            request.order_id, type(exc).__name__, exc,
+        )
+        raise
     finally:
         # finally NGOÀI async with → connection đã trả về pool mới đo
         db_pool_in_use.set(pool.get_size() - pool.get_idle_size())
@@ -227,6 +311,13 @@ async def pay_batch() -> dict:
     retained_batch = [dict(row) for row in rows]
     memory_leak_store.append(retained_batch)
 
+    total_batches = len(memory_leak_store)
+    total_rows = sum(len(b) for b in memory_leak_store)
+    logger.warning(
+        "batch_retained=%d rows_retained=%d rss_mb=%.1f",
+        total_batches, total_rows, _rss_mb(),
+    )
+
     return {
         "ok": True,
         "retained_batches": len(memory_leak_store),
@@ -238,8 +329,8 @@ async def pay_batch() -> dict:
 async def login(payload: LoginRequest, request: Request) -> dict:
     """Xác thực — endpoint cho UC-3 (burst tấn công).
 
-    TODO(Trung):
-      1. So `username`/`password` với một cặp hardcode (vd. demo/demo)
+    DONE(Trung) — đã triển khai bên dưới:
+      1. So `username`/`password` với cặp hardcode DEMO_USERNAME/DEMO_PASSWORD
       2. Sai → `raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")`
       3. Đúng → trả {"ok": True, "token": "fake-token"}
 
@@ -256,6 +347,10 @@ async def login(payload: LoginRequest, request: Request) -> dict:
     if payload.username != DEMO_USERNAME or payload.password != DEMO_PASSWORD:
         source_ip = request.client.host if request.client is not None else 'unknown'
         _record_auth_failure(source_ip, payload.username)
+        logger.warning(
+            "login failed status=401 source_ip=%s username=%s",
+            source_ip, payload.username,
+        )
         raise HTTPException(401, "Sai tài khoản hoặc mật khẩu")
 
     return {"ok": True, "token": "fake-token"}
@@ -264,3 +359,89 @@ async def login(payload: LoginRequest, request: Request) -> dict:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": SERVICE_NAME, "pool_size": POOL_SIZE}
+
+
+# ---------------------------------------------------------------------------
+# ⚠️ DEMO-ONLY DEBUG ENDPOINTS — KHÔNG DÙNG TRONG PRODUCTION
+#
+# Các endpoint dưới đây mô phỏng HẬU QUẢ của một cuộc tấn công, không phải
+# lỗ hổng thật. Mục đích: chứng minh cho AI Agent rằng khi log im lặng, Agent
+# cần dựa vào Prometheus metrics để phát hiện bất thường.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/debug/rce-sim")
+async def debug_rce_sim() -> dict:
+    """Mô phỏng Remote Code Execution — vô hiệu hoá toàn bộ Python logging.
+
+    Kịch bản: Kẻ tấn công khai thác lỗ hổng RCE (deserialization, command
+    injection) để chạy mã độc TRONG process ứng dụng. Bước đầu tiên của
+    mã độc luôn là tắt logging để che dấu hành vi tiếp theo.
+
+    Sau khi gọi endpoint này:
+    - Tất cả ``logger.error(...)`` / ``logger.warning(...)`` đều bị nuốt
+    - stderr bị redirect sang ``/dev/null`` ở tầng OS
+    - Docker log driver không bắt được gì từ Python logging
+
+    ⚠️ CHỈ DÙNG CHO DEMO. Container cần restart để phục hồi logging.
+    """
+    import os
+
+    # Bước 1: Vô hiệu hoá Python logging — xoá tất cả handlers
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    root_logger.addHandler(logging.NullHandler())
+
+    # Cũng xoá handlers của service logger riêng
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    logger.addHandler(logging.NullHandler())
+
+    # Bước 2: Redirect stderr sang /dev/null ở tầng OS
+    # Sau bước này, kể cả print() hay traceback cũng biến mất
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, 2)  # 2 = stderr
+        os.close(devnull_fd)
+    except OSError:
+        pass  # Windows hoặc môi trường không hỗ trợ
+
+    return {"compromised": True, "logging_disabled": True}
+
+
+@app.post("/debug/suppress-output")
+async def debug_suppress_output() -> dict:
+    """Mô phỏng OS-Level Log Tampering — redirect stdout/stderr sang /dev/null.
+
+    Kịch bản: Hacker đã có quyền truy cập OS (SSH, container escape). Họ
+    chạy ``exec > /dev/null 2>&1`` trên process, hoặc xoá log file, hoặc
+    stop rsyslog/journald. Docker log driver không bắt được output nào nữa.
+
+    Khác với RCE:
+    - RCE xoá Python logging handlers (application layer)
+    - Log tampering redirect file descriptors (OS layer)
+    - Python logging handlers vẫn còn, nhưng output đi vào /dev/null
+
+    ⚠️ CHỈ DÙNG CHO DEMO. Container cần restart để phục hồi output.
+    """
+    import os
+
+    stdout_suppressed = False
+    stderr_suppressed = False
+
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, 1)  # 1 = stdout
+        stdout_suppressed = True
+        os.dup2(devnull_fd, 2)  # 2 = stderr
+        stderr_suppressed = True
+        os.close(devnull_fd)
+    except OSError:
+        pass  # Windows hoặc môi trường không hỗ trợ
+
+    return {
+        "tampered": True,
+        "stdout_suppressed": stdout_suppressed,
+        "stderr_suppressed": stderr_suppressed,
+    }

@@ -68,6 +68,27 @@ class MetricEvidence(BaseModel):
         return self.value / self.baseline
 
 
+class LogEvidence(BaseModel):
+    """Một đoạn log làm bằng chứng bổ sung cho chẩn đoán.
+
+    Khác với MetricEvidence (số liệu truy vết được qua PromQL), LogEvidence
+    cung cấp ngữ cảnh **định tính** từ log thực tế của service — stack trace,
+    error message, warning pattern.
+
+    Agent chỉ thu thập log **khi Rule Engine đã phát hiện có incident** (Event-
+    Driven), không đọc log stream 24/7 → tối ưu token.
+    """
+
+    source: str = Field(..., description="Tên container hoặc service sinh ra log")
+    timestamp: str = Field(default="", description="Thời điểm dòng log, ISO format")
+    level: str = Field(default="ERROR", description="Log level: ERROR, WARNING, INFO")
+    message: str = Field(..., description="Nội dung dòng log")
+    pattern: str = Field(
+        default="",
+        description="Pattern đã match, vd. POOL_EXHAUSTED, UPSTREAM_TIMEOUT",
+    )
+
+
 class IncidentSignal(BaseModel):
     """Tín hiệu phát hiện sự cố — output của node `detect`.
 
@@ -102,6 +123,13 @@ class DeployRecord(BaseModel):
     deployed_at: datetime
     deployed_by: str = ""
     commit_sha: str = ""
+    #: Ghi chú thay đổi, kiểu release note — dữ liệu **phi cấu trúc** duy nhất
+    #: Agent có. Luật không đọc được đoạn văn; chỉ LLM đọc được rồi nối với số.
+    #:
+    #: Đo ngày 11/08: cùng một sự cố UC-4, LLM chỉ nêu đúng nguyên nhân khi có
+    #: CẢ ghi chú này VÀ log. Có ghi chú mà không log thì nó chỉ đoán được
+    #: "logic idempotency thất bại, có thể do một trong ba thứ".
+    change_note: str = ""
 
     def minutes_before(self, moment: datetime) -> float:
         """Deploy này xảy ra trước `moment` bao nhiêu phút. Âm nghĩa là sau."""
@@ -120,6 +148,10 @@ class Hypothesis(BaseModel):
     evidence: list[MetricEvidence] = Field(default_factory=list)
     related_deploy: DeployRecord | None = None
     reasoning: str = Field(default="", description="Diễn giải của LLM từ bằng chứng trên")
+    log_evidence: list[LogEvidence] = Field(
+        default_factory=list,
+        description="Bằng chứng từ log thực tế — bổ sung cho MetricEvidence",
+    )
 
 
 class RemediationProposal(BaseModel):

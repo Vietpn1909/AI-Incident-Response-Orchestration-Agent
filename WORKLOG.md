@@ -700,4 +700,58 @@ Nối INC-1 ↔ INC-2 — cùng một sự cố lan truyền
 **Còn thiếu một phần của ground truth.** `use-cases.md` yêu cầu ba thứ cho lan truyền: nhận ra `service-dat-hang` suy giảm **do phụ thuộc**, link hai incident, và nâng P1. Giờ có (2) và (3); (1) chưa. Giả thuyết cho `INC-2` ra `confidence 10%` và câu *"Chưa đủ bằng chứng để nêu nguyên nhân gốc"* — trung thực, nhưng chưa phải điều `use-cases.md` chấm là đúng. Cần bàn với Đức vì nó là một khẳng định gần với nhân quả.
 ---
 
+## 2026-08-07
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Review + merge PR #24 (Trung) — đo lại M3 kèm cột nguồn câu kết luận | ✅ Done | 296 test pass |
+| Trương Công Thái Đức | Cửa chặn thứ ba: LLM không được khẳng định thứ luật vừa loại trừ | ✅ Done | UC-3 từ 3/8 lên **8/8** đo bằng LLM thật |
+
+**Trung đo lại M3 kèm cột "câu cuối do LLM hay luật viết"** — đúng thứ tôi nhờ, và anh ấy **giữ nguyên 3/8 của UC-3 thay vì làm đẹp số liệu**, ghi thẳng trong PR *"kết quả này được giữ nguyên trong báo cáo, không làm đẹp số liệu"*.
+
+| Use case | M3 | Câu cuối do ai viết |
+|---|---:|---|
+| UC-1 | 10/10 | LLM 10 · luật 0 |
+| UC-2 | 8/8 | LLM 1 · **luật 7** |
+| UC-3 | 3/8 | LLM 8 · luật 0 |
+| **Tổng** | **21/26 (80,8%)** | LLM 19 · luật 7 |
+
+Thiết kế của anh ấy đúng chỗ: `hypothesize_with_origin()` trả kèm nguồn, `hypothesize()` giữ làm vỏ mỏng nên không phá API luồng Agent, và `origin` **không** nhét vào `Hypothesis`/Jira vì nó mô tả *lần chạy* chứ không phải bản chất sự cố.
+
+**Số liệu của Trung chỉ ra chỗ hở trong cửa chặn của tôi, và code review không tìm ra được.** 5 lượt sai của UC-3 chỉ khác 3 lượt đúng **đúng một mệnh đề đuôi**:
+
+```
+ĐÚNG: "…100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
+SAI:  "…100 lần thử đăng nhập khác nhau mỗi phút, GÂY QUÁ TẢI request thất bại."
+```
+
+LLM mô tả **đúng** hình dạng nguồn rồi gắn thêm "gây quá tải" — đúng cái `use-cases.md` gọi là chẩn đoán SAI, vì nó dẫn người trực đi sửa nhầm hướng.
+
+Cửa của tôi không bắt được vì `"quá tải"` **cố ý** không nằm trong danh sách cần bằng chứng — câu ĐÚNG của luật cho UC-3 có chứa "không phải quá tải", chặn theo từ khoá là bỏ đúng câu muốn giữ. Tôi thấy nửa đó, nhưng bỏ sót nửa còn lại: câu luật **phủ định thẳng** "quá tải", còn LLM thì **khẳng định** nó.
+
+**Cửa thứ ba đọc phủ định ra từ chính câu luật**, không liệt kê từ khoá: tìm cụm `"không phải X"` trong câu luật rồi cấm LLM khẳng định `X`. Luật đổi cách diễn đạt thì cửa tự theo, không cần ai nhớ cập nhật hai chỗ. Có xử lý trường hợp LLM **nhắc lại** chính phủ định đó ("đây là tấn công, không phải quá tải") — đó là đồng ý, không phải ngược.
+
+**Lần thứ ba cùng một họ, và giờ mới thấy đủ hình:**
+
+| Ngày | LLM làm gì | Cửa |
+|---|---|---|
+| 05/08 | **bịa** nguyên nhân không có bằng chứng | `_nguyen_nhan_khong_co_can_cu()` |
+| 06/08 | **xoá** nguyên nhân đã có bằng chứng | `_phu_dinh_ket_luan_cua_luat()` |
+| 07/08 | **khẳng định** thứ luật vừa phủ định | `_khang_dinh_thu_luat_da_loai_tru()` |
+
+Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại giữ đúng một ranh giới — **LLM diễn đạt lại kết luận của luật, không đổi nó.**
+
+**Đo bằng LLM thật, 8 lượt trên đúng bộ số Trung ra 3/8:**
+
+```
+→ 8/8 đúng · câu do LLM viết: 3/8 · do luật viết: 5/8
+   (trước: 3/8 đúng, LLM viết 8/8)
+```
+
+**Con số đẹp hơn nhưng phần LLM nhỏ đi — phải báo cáo đúng như thế.** M3 tổng dự kiến lên khoảng 96%, nhưng trong 26 lượt thì luật viết 12 câu. Ba lượt LLM viết được ở UC-3 lần này lại hay hơn câu luật (*"tấn công brute-force vào endpoint /login"*), nên giá trị của LLM là **có thật ở chỗ diễn đạt**, chỉ không đáng tin ở chỗ **kết luận**.
+
+Đó chính là câu trả lời cho câu hỏi gửi mentor, và giờ có số liệu chống lưng.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

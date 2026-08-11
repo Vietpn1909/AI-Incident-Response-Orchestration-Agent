@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 import pytest
 
 from src.agents.nodes import hypothesize as node
-from src.agents.nodes.hypothesize import _parse, hypothesize
+from src.agents.nodes.hypothesize import _parse, hypothesize, hypothesize_with_origin
 from src.models.incident import DeployRecord, IncidentSignal, MetricEvidence, Severity
 from src.services import rules
 
@@ -75,6 +75,15 @@ def test_llm_viet_statement_va_reasoning():
 
     assert hypothesis.statement == "Connection pool cạn kiệt khiến request phải xếp hàng chờ."
     assert "3.7 lần" in hypothesis.reasoning
+
+
+def test_danh_dau_nguon_cau_llm_va_luat():
+    tu_llm = hypothesize_with_origin(_signal(), llm=FakeLLM())
+    tu_luat = hypothesize_with_origin(_signal(), llm=FakeLLM(reply=None))
+
+    assert tu_llm.statement_origin == "llm"
+    assert tu_luat.statement_origin == "rule"
+    assert tu_luat.hypothesis.reasoning == ""
 
 
 def test_llm_khong_dung_toi_confidence_va_evidence():
@@ -218,9 +227,14 @@ def test_bo_cau_llm_khi_neu_nguyen_nhan_khong_co_bang_chung(monkeypatch):
     signal = _tin_hieu_uc3()
     monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
 
-    h = node.hypothesize(signal, llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."))
+    outcome = hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Connection pool của service cạn, gây thất bại /login."),
+    )
+    h = outcome.hypothesis
 
     assert "pool" not in h.statement.lower(), "phải bỏ câu của LLM, giữ câu của luật"
+    assert outcome.statement_origin == "rule"
     # Mốc nhận diện đổi từ "credential-stuffing" sang "vấn đề bảo mật" ngày
     # 06/08: cụm đầu giờ chỉ xuất hiện khi CÓ bằng chứng hình dạng nguồn (số
     # tài khoản bị thử, tỷ lệ IP nguồn lớn nhất). Tín hiệu trong test này chỉ
@@ -316,6 +330,27 @@ def test_bo_cau_llm_khi_no_phu_dinh_nguyen_nhan_da_co_bang_chung(monkeypatch):
     assert h.reasoning == ""
 
 
+def test_danh_dau_luat_khi_chan_llm_phu_dinh_oom(monkeypatch):
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=1.0,
+        down_for_seconds=0.0,
+        service="service-thanh-toan",
+        memory_ratio=0.4197,
+        memory_peak_mb=125.9,
+    )
+    assert signal is not None
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    outcome = hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Không có nguyên nhân gốc từ quá tải bộ nhớ hoặc crash container."),
+    )
+
+    assert outcome.statement_origin == "rule"
+    assert "OOM-kill" in outcome.hypothesis.statement
+
+
 def test_giu_cau_llm_phu_dinh_khi_chinh_luat_cung_chiu(monkeypatch):
     """Luật không tìm ra nguyên nhân thì LLM nói "chưa xác định được" là ĐỒNG Ý.
 
@@ -357,3 +392,82 @@ def test_cum_chua_du_bang_chung_con_khop():
     cau_mac_dinh = rules.build_hypothesis(signal, None).statement.lower()
 
     assert node._LUAT_CUNG_CHIU in cau_mac_dinh
+
+
+# ────────── cửa chống khẳng định ngược (thêm 07/08)
+
+
+def _tin_hieu_uc3_day_du():
+    """UC-3 với đủ 4 bằng chứng hình dạng nguồn, như eval của Trung ngày 07/08."""
+    return rules.detect_auth_burst(
+        failures_per_second=182.8, breached_for_seconds=300.0, service="service-thanh-toan",
+        unique_source_ips=1.0, unique_accounts=100.0, top_source_ratio=1.0,
+    )
+
+
+def test_bo_cau_llm_khi_khang_dinh_thu_luat_da_loai_tru(monkeypatch):
+    """5/8 lượt UC-3 sai chỉ khác 3 lượt đúng đúng một mệnh đề đuôi.
+
+    Lấy nguyên văn từ `eval/runs.csv`:
+
+        ĐÚNG: "…100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
+        SAI:  "…100 lần thử đăng nhập khác nhau mỗi phút, gây quá tải request
+               thất bại."
+
+    Câu luật nói thẳng "vấn đề bảo mật, không phải quá tải", còn LLM khẳng định
+    đúng cái vừa bị phủ định. `use-cases.md` chấm kết luận "quá tải" cho một vụ
+    credential-stuffing là SAI, vì nó dẫn người trực đi sửa nhầm hướng.
+    """
+    signal = _tin_hieu_uc3_day_du()
+    assert signal is not None
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai(
+            "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau "
+            "mỗi phút, gây quá tải request thất bại."
+        ),
+    )
+
+    assert "credential-stuffing" in h.statement, "phải giữ câu của luật"
+    assert h.reasoning == ""
+
+
+def test_giu_cau_llm_dung_khong_khang_dinh_nguoc(monkeypatch):
+    """Không chặn oan: câu mô tả đúng hình dạng nguồn phải được giữ."""
+    signal = _tin_hieu_uc3_day_du()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai(
+            "Một IP nguồn duy nhất đang thực hiện 100 lần thử đăng nhập khác nhau "
+            "mỗi phút vào endpoint /login."
+        ),
+    )
+
+    assert "endpoint /login" in h.statement, "câu LLM đúng thì phải giữ"
+
+
+def test_llm_nhac_lai_chinh_phu_dinh_do_thi_khong_bi_chan(monkeypatch):
+    """"đây là tấn công, không phải quá tải" là ĐỒNG Ý với luật, không phải ngược."""
+    signal = _tin_hieu_uc3_day_du()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Một IP thử 100 tài khoản — đây là tấn công, không phải quá tải."),
+    )
+
+    assert "tấn công" in h.statement
+
+
+def test_doc_phu_dinh_thang_tu_cau_luat_khong_hardcode():
+    """Cửa này đọc "không phải X" ra từ câu luật, nên luật đổi chữ là nó tự theo."""
+    signal = _tin_hieu_uc3_day_du()
+    cau_luat = rules.build_hypothesis(signal, None).statement
+
+    assert node._thu_bi_luat_loai_tru(cau_luat) == ["quá tải"]
+    # Câu luật không loại trừ gì thì cửa không chặn bất cứ thứ gì.
+    assert node._thu_bi_luat_loai_tru("Pool cạn kiệt nên request xếp hàng.") == []

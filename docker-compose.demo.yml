@@ -65,6 +65,15 @@ services:
     environment:
       DATABASE_URL: postgresql://demo:demo@postgres:5432/demo
       PORT: "8001"
+      # UC-4 — mô phỏng deploy v1.4.3 thiếu migration. Mặc định TẮT.
+      #
+      # Phải khai báo ở đây mới truyền được vào container: đặt biến ở shell
+      # trước `docker compose up` chỉ tới compose, KHÔNG tới process bên trong.
+      # Đo ngày 11/08: `printenv` trong container trả rỗng cho tới khi thêm dòng
+      # này — loại lỗi làm mất nửa buổi nếu không kiểm tận trong container.
+      #
+      #   SIMULATE_MISSING_MIGRATION=1 docker compose -f docker-compose.demo.yml up -d
+      SIMULATE_MISSING_MIGRATION: ${SIMULATE_MISSING_MIGRATION:-0}
     ports:
       - "8001:8001"
     depends_on:
@@ -90,8 +99,13 @@ services:
     image: prom/prometheus:latest
     volumes:
       - ./demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Giữ lịch sử baseline qua `docker compose down`; chỉ `down -v` mới xoá.
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
       - service-thanh-toan
       - service-dat-hang
+
+volumes:
+  prometheus_data:

@@ -36,6 +36,8 @@ không giải thích được nó từ đâu ra. `_diem_tin_cay()` cộng điể
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 from src.models.incident import DeployRecord, Hypothesis, IncidentSignal
 from src.services import deploys, rules
@@ -46,6 +48,22 @@ logger = logging.getLogger(__name__)
 #: war room cần một câu, không cần bài luận.
 _MAX_STATEMENT = 400
 _MAX_REASONING = 1200
+
+
+StatementOrigin = Literal["llm", "rule"]
+
+
+@dataclass(frozen=True)
+class HypothesisOutcome:
+    """Giả thuyết và nơi câu kết luận cuối cùng được viết.
+
+    Đây là metadata phục vụ đo M3. Không đưa vào ``Hypothesis`` hay Jira vì
+    nó mô tả *lần chạy* (LLM có bị chặn hay không), không phải bản chất của sự
+    cố. Nhờ vậy contract incident đang lưu vẫn tương thích với war room cũ.
+    """
+
+    hypothesis: Hypothesis
+    statement_origin: StatementOrigin
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +139,16 @@ def _format_deploy(deploy: DeployRecord | None, signal: IncidentSignal) -> str:
     if deploy is None:
         return "LỊCH SỬ DEPLOY\n- Không có lần deploy nào gần thời điểm sự cố."
     phut = deploy.minutes_before(signal.detected_at)
-    return f"LỊCH SỬ DEPLOY\n- Phiên bản {deploy.version} được deploy {phut:.0f} phút TRƯỚC khi phát hiện sự cố."
+    dong = [
+        "LỊCH SỬ DEPLOY",
+        f"- Phiên bản {deploy.version} được deploy {phut:.0f} phút TRƯỚC khi phát hiện sự cố.",
+    ]
+    # Ghi chú thay đổi là dữ liệu PHI CẤU TRÚC duy nhất trong prompt — chỗ duy
+    # nhất LLM làm được việc luật không làm được. Đo ngày 11/08: thiếu nó thì
+    # UC-4 chỉ ra "có thể do một trong ba thứ".
+    if deploy.change_note:
+        dong.append(f"- Nội dung thay đổi: {deploy.change_note}")
+    return "\n".join(dong)
 
 
 def _parse(reply: str) -> tuple[str, str]:
@@ -152,6 +179,11 @@ def _parse(reply: str) -> tuple[str, str]:
 
 
 def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
+    """Dựng giả thuyết; giữ API cũ cho luồng Agent và Jira."""
+    return hypothesize_with_origin(signal, llm).hypothesis
+
+
+def hypothesize_with_origin(signal: IncidentSignal, llm=None) -> HypothesisOutcome:
     """Dựng giả thuyết nguyên nhân cho một tín hiệu sự cố.
 
     Args:
@@ -160,6 +192,7 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             vào để test không cần mạng.
 
     Returns:
+        `HypothesisOutcome` chứa `Hypothesis` và nguồn của câu kết luận cuối.
         `Hypothesis` luôn có `evidence` và `confidence` do rule engine sinh.
         `reasoning` rỗng nghĩa là LLM không viết được — giả thuyết vẫn dùng
         được, chỉ kém dễ đọc.
@@ -177,12 +210,23 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             "%s: LLM không trả lời — giữ câu do luật ghép, chẩn đoán vẫn có bằng chứng",
             signal.affected_service,
         )
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
     statement, reasoning = _parse(reply)
     if not statement:
         logger.warning("%s: không tách được giả thuyết từ câu trả lời LLM", signal.affected_service)
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
+
+    khang_dinh_nguoc = _khang_dinh_thu_luat_da_loai_tru(statement, hypothesis.statement)
+    if khang_dinh_nguoc:
+        logger.warning(
+            "%s: BỎ câu của LLM vì nó KHẲNG ĐỊNH '%s' — đúng thứ luật vừa loại trừ "
+            "bằng cụm 'không phải'. Giữ câu do luật ghép. Câu bị bỏ: %s",
+            signal.affected_service,
+            khang_dinh_nguoc,
+            statement,
+        )
+        return HypothesisOutcome(hypothesis, "rule")
 
     if _phu_dinh_ket_luan_cua_luat(statement, hypothesis.statement):
         logger.warning(
@@ -191,7 +235,7 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
             signal.affected_service,
             statement,
         )
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
     thieu_can_cu = _nguyen_nhan_khong_co_can_cu(statement, signal, deploy)
     if thieu_can_cu:
@@ -204,9 +248,95 @@ def hypothesize(signal: IncidentSignal, llm=None) -> Hypothesis:
         )
         # Giữ nguyên `statement` của luật, nhưng vẫn KHÔNG lấy `reasoning` của
         # LLM: nó diễn giải cho một kết luận vừa bị bỏ, giữ lại là tự mâu thuẫn.
-        return hypothesis
+        return HypothesisOutcome(hypothesis, "rule")
 
-    return hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning})
+    return HypothesisOutcome(
+        hypothesis.model_copy(update={"statement": statement, "reasoning": reasoning}),
+        "llm",
+    )
+
+
+#: Cụm luật dùng để loại trừ một nguyên nhân SAI, vd. "không phải quá tải".
+#:
+#: Khác hẳn `_CUM_PHU_DINH` bên dưới: cụm kia là LLM phủ định **mọi** nguyên
+#: nhân, còn cụm này là luật loại trừ **một** nguyên nhân cụ thể.
+_CUM_LOAI_TRU = "không phải "
+
+#: Ký tự kết thúc mệnh đề — dùng để biết cụm bị loại trừ dừng ở đâu.
+_KET_MENH_DE = ".,;:—-\n"
+
+
+def _thu_bi_luat_loai_tru(statement_luat: str) -> list[str]:
+    """Những cụm mà câu luật nói thẳng là **không phải** nguyên nhân.
+
+    `"…vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ…"` → `["quá tải"]`
+
+    Đọc thẳng từ câu luật thay vì liệt kê từ khoá sẵn: luật đổi cách diễn đạt
+    thì cửa chặn tự theo, không cần ai nhớ cập nhật hai chỗ.
+    """
+    ket_qua: list[str] = []
+    thap = statement_luat.lower()
+    vi_tri = thap.find(_CUM_LOAI_TRU)
+    while vi_tri != -1:
+        bat_dau = vi_tri + len(_CUM_LOAI_TRU)
+        het = len(thap)
+        for i in range(bat_dau, len(thap)):
+            if thap[i] in _KET_MENH_DE:
+                het = i
+                break
+        cum = thap[bat_dau:het].strip()
+        if cum:
+            ket_qua.append(cum)
+        vi_tri = thap.find(_CUM_LOAI_TRU, het)
+    return ket_qua
+
+
+def _khang_dinh_thu_luat_da_loai_tru(statement_llm: str, statement_luat: str) -> str | None:
+    """LLM có khẳng định đúng thứ luật vừa loại trừ không?
+
+    Trả cụm vi phạm, `None` nếu không có.
+
+    ## Vì sao cần cửa này — đo được ngày 07/08 từ eval của Trung
+
+    UC-3 sau khi có đủ 4 bằng chứng hình dạng nguồn: **5/8 lượt sai, và cả 5 chỉ
+    khác 3 lượt đúng đúng một mệnh đề đuôi**:
+
+        ĐÚNG: "…100 lần thử đăng nhập khác nhau mỗi phút vào endpoint /login."
+        SAI:  "…100 lần thử đăng nhập khác nhau mỗi phút, GÂY QUÁ TẢI request
+               thất bại."
+
+    LLM mô tả **đúng** hình dạng nguồn rồi gắn thêm "gây quá tải" — đúng cái
+    `docs/use-cases.md` gọi là chẩn đoán SAI, vì kết luận "service quá tải" cho
+    một vụ credential-stuffing dẫn người trực đi sửa nhầm hướng.
+
+    ## Vì sao hai cửa kia không bắt được
+
+    `_nguyen_nhan_khong_co_can_cu()` chỉ chặn những nguyên nhân **cần bằng
+    chứng riêng** (pool, bộ nhớ, deploy). `"quá tải"` **cố ý** không nằm trong
+    danh sách đó — vì câu ĐÚNG của luật cho UC-3 có chứa "không phải quá tải",
+    chặn theo từ khoá là bỏ đúng câu muốn giữ.
+
+    Nhưng đó mới là một nửa. Nửa còn lại: câu luật **phủ định thẳng** "quá tải",
+    còn LLM thì **khẳng định** nó. Cửa này đọc phủ định ra từ chính câu luật rồi
+    cấm khẳng định ngược lại — không cần liệt kê từ khoá nào.
+
+    ## Lần thứ ba cùng một họ
+
+        05/08  LLM BỊA nguyên nhân không có bằng chứng
+        06/08  LLM XOÁ nguyên nhân đã có bằng chứng
+        07/08  LLM KHẲNG ĐỊNH thứ luật vừa phủ định
+
+    Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại giữ đúng một
+    ranh giới — **LLM diễn đạt lại kết luận của luật, không đổi nó**.
+    """
+    cau_llm = statement_llm.lower()
+    for cum in _thu_bi_luat_loai_tru(statement_luat):
+        # Bỏ những lần LLM nhắc lại chính phủ định đó ("không phải quá tải"),
+        # rồi mới xét cụm còn sót lại — chỉ khi đó mới là khẳng định ngược.
+        con_lai = cau_llm.replace(f"{_CUM_LOAI_TRU}{cum}", "")
+        if cum in con_lai:
+            return cum
+    return None
 
 
 #: Cụm mà `rules._cau_giai_thuyet()` dùng ở nhánh cuối, tức "luật KHÔNG tìm ra

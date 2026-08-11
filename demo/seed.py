@@ -51,7 +51,15 @@ CREATE TABLE IF NOT EXISTS deploy_history (
     version      TEXT NOT NULL,
     deployed_at  TIMESTAMPTZ NOT NULL,
     deployed_by  TEXT NOT NULL DEFAULT 'ci-bot',
-    commit_sha   TEXT NOT NULL DEFAULT ''
+    commit_sha   TEXT NOT NULL DEFAULT '',
+    -- Ghi chú thay đổi, kiểu release note. Đây là dữ liệu PHI CẤU TRÚC duy nhất
+    -- Agent có — luật không đọc được, chỉ LLM đọc được.
+    --
+    -- ⚠️ Viết như release note thật: tả TÍNH NĂNG, không tả thứ còn thiếu.
+    -- Bản nháp đầu ghi "cần chạy migration thêm cột idempotency_key" và đo thật
+    -- cho thấy LLM trả lời đúng MÀ KHÔNG CẦN LOG — tức ghi chú đã nói hộ đáp án,
+    -- đúng lỗi mà 5 dòng log nhãn chẩn đoán đang mắc.
+    change_note  TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -94,15 +102,27 @@ async def main() -> None:
         payments_data,
     )
 
-    # 2. Sinh dữ liệu deploy_history (Có 1 dòng deploy v1.4.2 cách đây 4 phút cho service-thanh-toan)
+    # 2. Sinh deploy_history. Hai nghi phạm cố ý:
+    #    - v1.4.2 cách đây 4 phút  → UC-1 (pool cạn)
+    #    - v1.4.3 cách đây 3 phút  → UC-4 (thiếu migration)
+    #
+    # ⚠️ `change_note` tả TÍNH NĂNG, không tả thứ còn thiếu. Xem chú thích ở
+    # schema — ghi chú gợi ý sẵn làm log thành thừa và phá phép đo.
     deploys = [
-        ("service-thanh-toan", "v1.4.1", now - timedelta(days=2), "ci-bot", "a1b2c3d"),
-        ("service-dat-hang", "v2.1.0", now - timedelta(days=1), "ci-bot", "e5f6g7h"),
-        ("service-thanh-toan", "v1.4.2", now - timedelta(minutes=4), "ci-bot", "9f2c1ab"),
+        ("service-thanh-toan", "v1.4.1", now - timedelta(days=2), "ci-bot", "a1b2c3d",
+         "Thêm chỉ mục cho bảng payments để tăng tốc truy vấn đối soát."),
+        ("service-dat-hang", "v2.1.0", now - timedelta(days=1), "ci-bot", "e5f6g7h",
+         "Chuyển gọi service thanh toán sang HTTP client có timeout."),
+        ("service-thanh-toan", "v1.4.2", now - timedelta(minutes=4), "ci-bot", "9f2c1ab",
+         "Gộp batch job đối soát vào chung connection pool với API để giảm số kết "
+         "nối tới Postgres. Batch chạy mỗi 5 phút."),
+        ("service-thanh-toan", "v1.4.3", now - timedelta(minutes=3), "ci-bot", "7d4e9f1",
+         "Thêm chống trùng giao dịch cho endpoint /pay bằng khoá idempotency."),
     ]
 
     await conn.executemany(
-        "INSERT INTO deploy_history (service, version, deployed_at, deployed_by, commit_sha) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO deploy_history (service, version, deployed_at, deployed_by, commit_sha, change_note) "
+        "VALUES ($1, $2, $3, $4, $5, $6)",
         deploys,
     )
 

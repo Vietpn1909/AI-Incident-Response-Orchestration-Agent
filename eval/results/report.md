@@ -18,6 +18,8 @@ Ground truth được lấy từ `docs/use-cases.md`, tài liệu đã chốt ng
 
 Mỗi UC được tái hiện bằng tải thật và telemetry thật một lần để chụp `IncidentSignal`. Sau đó giữ nguyên snapshot đó và gọi Qwen 10 lần cho UC-1, 8 lần cho UC-2 và 8 lần cho UC-3. Vì vậy đây là **26 lượt suy luận độc lập trên 3 snapshot telemetry**, không phải 26 lần dựng lại sự cố vật lý. Từng câu trả lời được chấm theo ground truth trên và lưu trong `eval/runs.csv`.
 
+Mỗi lượt còn ghi `statement_origin`: `llm` khi câu Qwen được Agent chấp nhận, `rule` khi Agent giữ câu do luật ghép vì Qwen lỗi, bịa nguyên nhân hoặc phủ định bằng chứng. Đây là metadata do `hypothesize_with_origin()` trả trực tiếp, **không** suy đoán bằng việc `reasoning` rỗng.
+
 ## 2. Kết quả chính
 
 ### Phát hiện sự cố
@@ -26,22 +28,22 @@ Mỗi UC được tái hiện bằng tải thật và telemetry thật một l�
 |---|---|---|---|
 | UC-1 | p95 = **4,529 giây**, ngưỡng 2 giây | P2 | Đúng |
 | UC-2 | Docker OOM-kill và restart; đỉnh bộ nhớ **125,9/128 MB** | P1 | Đúng |
-| UC-3 | 12.000 request đăng nhập sai trong 60 giây; đỉnh xấp xỉ 200 request/giây | P1 | Đúng |
+| UC-3 | 12.000 request đăng nhập sai trong 60 giây; lúc mở incident là **180,3 request/giây**, 1 IP thử 100 tài khoản | P1 | Đúng |
 
 Độ chính xác severity trên ba lần tái hiện là **3/3 (100%)**. Cả ba incident đều mang theo ít nhất một `MetricEvidence` và câu PromQL, nên độ đầy đủ bằng chứng ở mức incident là **3/3 (100%)**.
 
 ### Độ chính xác chẩn đoán nguyên nhân M3 (top-1)
 
-| UC | Đúng / số lượt | Độ chính xác | Confidence quan sát | Nhận xét |
+| UC | Đúng / số lượt | Độ chính xác | Câu cuối: LLM / luật | Nhận xét |
 |---|---:|---:|---:|---|
-| UC-1 | 10/10 | **100%** | 0,70 | Qwen nêu đúng connection pool cạn |
-| UC-2 | 3/8 | **37,5%** | 0,40 | Đã có đỉnh memory/OOM; Qwen vẫn phủ định nguyên nhân ở 5 lượt |
-| UC-3 | 0/8 | **0%** | 0,00 | Chỉ thấy tỷ lệ login thất bại; Agent không đủ bằng chứng để kết luận tấn công |
-| **Tổng** | **13/26** | **50%** | — | UC-2 cải thiện nhưng chưa ổn định |
+| UC-1 | 10/10 | **100%** | 10 / 0 | Qwen nêu đúng connection pool cạn |
+| UC-2 | 8/8 | **100%** | 1 / 7 | Chốt giữ kết luận OOM khi Qwen phủ định evidence |
+| UC-3 | 3/8 | **37,5%** | 8 / 0 | 5 lượt Qwen gọi đây là quá tải, trái ground truth bảo mật |
+| **Tổng** | **21/26** | **80,77%** | 19 / 7 | Không được diễn đạt thành “LLM đạt 80,77%” |
 
-UC-2 đã có đủ bằng chứng để bộ luật ghép đúng câu OOM-kill. Tuy nhiên, ở 5/8 lượt Qwen vẫn viết lại thành “không có nguyên nhân gốc từ quá tải bộ nhớ”, nên đầu ra top-1 bị chấm sai. Ba lượt còn lại giữ đúng kết luận OOM. UC-3 vẫn chưa có IP nguồn và số tài khoản trong snapshot Agent đã đo, nên 8/8 lượt đều chưa xác định được nguyên nhân gốc.
+Nguồn câu cho thấy con số Agent và năng lực LLM là hai việc khác nhau. Trong 19 câu Qwen được chấp nhận, 14 câu đúng (**73,68%**); 7 câu do luật giữ lại đều đúng. UC-2 đạt 8/8 nhờ chốt chống phủ định: Qwen chỉ viết được 1 câu đúng, 7 lần còn lại Agent bỏ câu “không có/chưa xác định nguyên nhân” và giữ câu OOM do luật. Ở UC-3, telemetry mới đã đủ (1 IP, 100 tài khoản, tỷ lệ nguồn lớn nhất 100%) nhưng 5/8 câu Qwen vẫn gọi tình huống là “quá tải”; chốt hiện tại chưa bắt dạng sai này, nên không thể báo cáo M3 gần 100%.
 
-Thời gian gọi LLM trung bình là **3,040 giây** (nhanh nhất 2,122 giây, chậm nhất 5,013 giây). Trung bình theo UC: UC-1 3,309 giây; UC-2 2,962 giây; UC-3 2,784 giây.
+Thời gian gọi LLM trung bình là **3,088 giây** (nhanh nhất 2,193 giây, chậm nhất 5,030 giây). Trung bình theo UC: UC-1 3,351 giây; UC-2 3,144 giây; UC-3 2,703 giây.
 
 ### Thời gian phát hiện, báo nhầm và chống mở trùng
 
@@ -55,15 +57,15 @@ Toàn bộ phép thử chống trùng kéo dài 300 giây có 36 vòng poll và 
 
 ## 3. Phát hiện ngoài dự kiến
 
-Lần chạy tải nhẹ đầu tiên khi Prometheus chưa có baseline ổn định đã mở **1 incident giả**: baseline p95 tạm thời là 0,095 giây trong khi p95 bình thường nằm ở bucket 0,475 giây. Sau khi làm ấm baseline, chạy lại đủ 10 phút cho kết quả 0 incident. Vì vậy kết quả chính thức là 0% sau warm-up, nhưng hệ thống hiện vẫn có rủi ro báo nhầm lúc khởi động lạnh.
+Lần chạy tải nhẹ đầu tiên khi Prometheus chưa có baseline ổn định đã mở **1 incident giả**: baseline p95 tạm thời là 0,095 giây trong khi p95 bình thường nằm ở bucket 0,475 giây. Sau khi làm ấm baseline, chạy lại đủ 10 phút cho kết quả 0 incident. Từ lần đo này, Agent chỉ dùng baseline khi có ít nhất 20 mẫu và Compose giữ lịch sử Prometheus trong named volume; lần dựng hoàn toàn mới vẫn cần warm-up khoảng 30 phút.
 
 ## 4. Kết luận và việc cần cải thiện
 
 - Luồng phát hiện, phân loại severity, tạo incident và chống mở trùng hoạt động với cả ba UC.
 - UC-1 đã có đủ telemetry để chẩn đoán đúng ổn định.
-- UC-2 đã có tỷ lệ memory/limit và đỉnh memory 10 phút. M3 tăng từ 0/8 lên 3/8; phần Agent cần thêm chốt không cho LLM phủ định một kết luận đã có bằng chứng rõ.
-- Sau phép đo UC-3, phần demo đã bổ sung IP nguồn, số tài khoản bị thử và tỷ lệ từ nguồn lớn nhất. Chưa đo lại M3 vì các metric này chưa được nối vào `IncidentSignal` của Agent.
-- Cần thêm cơ chế warm-up hoặc ngưỡng sàn cho baseline để tránh báo nhầm sau khi Prometheus khởi động lại.
+- UC-2 đạt 8/8 sau khi thêm chốt không cho LLM phủ định một kết luận đã có bằng chứng. Tuy nhiên 7/8 câu đúng đến từ luật, nên đây là cải thiện độ an toàn của **Agent**, không phải bằng chứng Qwen tự chẩn đoán OOM tốt hơn.
+- UC-3 đã có đủ telemetry nguồn nhưng chỉ đạt 3/8. Cần bổ sung chốt cho trường hợp Qwen gọi credential-stuffing là “quá tải”, hoặc siết prompt/contract để câu cuối phải phân loại rõ bảo mật so với hiệu năng.
+- Prometheus có named volume để giữ baseline qua `docker compose down`; cần chạy warm-up khoảng 30 phút sau lần xoá volume hoặc dựng mới hoàn toàn.
 - MTTD hiện dùng FakeJira nên chưa bao gồm độ trễ mạng/API Jira thật. Kết quả mới được kiểm chứng trên 2 service, chưa đại diện cho hệ thống hàng chục service.
 
 ## 5. Tệp bằng chứng
