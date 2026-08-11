@@ -284,42 +284,26 @@ class RealJiraClient:
         self._call("POST", f"/rest/api/3/issue/{jira_key}/comment", {"body": _adf(body)})
 
     def post_hypothesis(self, jira_key: str, hypothesis: Hypothesis) -> None:
-        lines = [f"Giả thuyết nguyên nhân ({hypothesis.confidence:.0%}): {hypothesis.statement}"]
-        if hypothesis.evidence:
-            lines.append("Bằng chứng:")
-            for item in hypothesis.evidence:
-                ratio = item.deviation_ratio
-                deviation = f", lệch {ratio:.1f}× baseline" if ratio else ""
-                lines.append(f"- {item.name} = {item.value:g}{item.unit}{deviation}")
-                if item.promql:
-                    lines.append(f"  PromQL: {item.promql}")
-        if hypothesis.related_deploy:
-            deploy = hypothesis.related_deploy
-            lines.append(f"Deploy liên quan: {deploy.service} {deploy.version} lúc {deploy.deployed_at:%H:%M:%S}")
-        if hypothesis.reasoning:
-            lines.append(hypothesis.reasoning)
+        from src.services.status_updater import status_diagnosed
+        # Lấy signal từ incident đã lưu để build comment format mới
+        incident = self.get_incident(jira_key)
+        signal = incident.signal if incident else None
+        if signal:
+            text = status_diagnosed(signal, hypothesis)
+        else:
+            text = f"🧠 CHẨN ĐOÁN NGUYÊN NHÂN\n\nNguyên nhân: {hypothesis.statement}\nĐộ tin cậy: {hypothesis.confidence:.0%}"
         self._comment_with_payload(
             jira_key,
-            "\n\n".join(lines),
+            text,
             {_PAYLOAD_KEY: "hypothesis", "data": hypothesis.model_dump(mode="json")},
         )
         self.transition(jira_key, IncidentState.INVESTIGATING)
 
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
-        lines = [f"Đề xuất khắc phục: {proposal.action} → {proposal.target}"]
-        if proposal.params:
-            lines.append(f"Tham số: {proposal.params}")
-        if proposal.runbook:
-            lines.append(f"Runbook: {proposal.runbook}")
-        if proposal.risk:
-            lines.append(f"Rủi ro: {proposal.risk}")
-        lines.append(
-            "CHỜ NGƯỜI DUYỆT — Agent không tự thực thi. Chuyển issue sang trạng thái "
-            f"'{jira_status_for(IncidentState.REMEDIATING)}' để phê duyệt."
-        )
+        from src.services.status_updater import status_proposed
         self._comment_with_payload(
             jira_key,
-            "\n\n".join(lines),
+            status_proposed(proposal),
             {_PAYLOAD_KEY: "proposal", "data": proposal.model_dump(mode="json")},
         )
         self.transition(jira_key, IncidentState.AWAITING_APPROVAL)

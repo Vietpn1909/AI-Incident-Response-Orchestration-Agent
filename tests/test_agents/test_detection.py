@@ -274,7 +274,8 @@ def test_mo_war_room_va_dinh_kem_bang_chung():
     assert result.created is True
     incident = jira.get_incident(result.jira_key)
     assert incident.severity is Severity.P2
-    assert any("Bối cảnh" in event.detail for event in incident.timeline)
+    # "Bối cảnh" comment cũ đã được thay bằng status_detected() ở incident_graph.
+    # Ở đây chỉ kiểm tra issue được tạo đúng.
 
 
 def test_khong_mo_trung_khi_su_co_van_con():

@@ -35,6 +35,17 @@ from src.models.incident import Incident, Postmortem
 
 
 # ---------------------------------------------------------------------------
+# Jira URL helper
+# ---------------------------------------------------------------------------
+
+
+def _jira_browse_url(jira_base_url: str, jira_key: str) -> str:
+    """Tạo URL browse issue trên Jira Cloud."""
+    base = jira_base_url.rstrip("/")
+    return f"{base}/browse/{jira_key}"
+
+
+# ---------------------------------------------------------------------------
 # Timezone helpers
 # ---------------------------------------------------------------------------
 _TZ_LOCAL = timezone(timedelta(hours=7))  # UTC+7
@@ -123,11 +134,14 @@ def _compute_approval_wait(incident: Incident) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_email_body(incident: Incident) -> str:
+def build_email_body(incident: Incident, *, jira_base_url: str = "") -> str:
     """Sinh email body HTML vắn tắt — cho manager và các bộ phận phi kỹ thuật.
 
     **Ngôn ngữ kinh doanh**: tránh thuật ngữ kỹ thuật, tập trung vào tác động
     lên khách hàng và dịch vụ.
+
+    Args:
+        jira_base_url: Nếu có, action items sẽ có hyperlink tới Jira thật.
     """
     postmortem = incident.postmortem
     severity = incident.severity.value
@@ -174,7 +188,13 @@ def build_email_body(incident: Incident) -> str:
     if postmortem and postmortem.action_items:
         items = ""
         for ai in postmortem.action_items:
-            jira_link = f' <a href="#" style="color:#2563eb">[{ai.jira_key}]</a>' if ai.jira_key else ""
+            if ai.jira_key and jira_base_url:
+                url = _jira_browse_url(jira_base_url, ai.jira_key)
+                jira_link = f' <a href="{url}" style="color:#2563eb">[{ai.jira_key}]</a>'
+            elif ai.jira_key:
+                jira_link = f' <span style="color:#2563eb">[{ai.jira_key}]</span>'
+            else:
+                jira_link = ""
             items += f"<li>{ai.title}{jira_link}</li>"
         action_items_html = f"""
         <tr>
@@ -281,10 +301,13 @@ def _copy_block(content: str, lang: str = "log") -> str:
 </div>"""
 
 
-def build_detailed_report(incident: Incident) -> str:
+def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str:
     """Sinh file HTML chi tiết — đính kèm email, cho đội IT đọc.
 
     Bao gồm 10 sections + MTTD/MTTR metrics + 5 Whys RCA + copy-to-clipboard.
+
+    Args:
+        jira_base_url: Nếu có, action items sẽ có hyperlink tới Jira thật.
     """
     postmortem = incident.postmortem
     severity = incident.severity.value
@@ -436,8 +459,11 @@ def build_detailed_report(incident: Incident) -> str:
         rows = ""
         for ai in postmortem.action_items:
             jira_cell = '—'
-            if ai.jira_key:
-                jira_cell = f'<a href="#" style="color:#2563eb;text-decoration:none;font-weight:600">{ai.jira_key}</a>'
+            if ai.jira_key and jira_base_url:
+                url = _jira_browse_url(jira_base_url, ai.jira_key)
+                jira_cell = f'<a href="{url}" style="color:#2563eb;text-decoration:none;font-weight:600">{ai.jira_key}</a>'
+            elif ai.jira_key:
+                jira_cell = f'<span style="color:#2563eb;font-weight:600">{ai.jira_key}</span>'
             rows += f"""
             <tr>
                 <td style="padding:6px 12px">{ai.title}</td>

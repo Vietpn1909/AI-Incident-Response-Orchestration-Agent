@@ -47,6 +47,10 @@ from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
 from src.services import rules
 from src.services.jira import JiraClient
 from src.services.prometheus import PrometheusClient, PrometheusError
+from src.services.status_updater import (
+    status_detected,
+    status_logs_collected,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +115,11 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             if outcome.created:
                 opened.append(outcome.jira_key)
                 war_rooms[signal.affected_service] = outcome.jira_key
+                # Agent auto-comment: status PHÁT HIỆN
+                try:
+                    jira.add_comment(outcome.jira_key, status_detected(signal))
+                except Exception as err:
+                    logger.warning("%s: không post được status detected (%s)", outcome.jira_key, err)
             else:
                 updated.append(outcome.jira_key)
         return {
@@ -170,6 +179,18 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
                 res = analyze_logs(signal, hypothesis)
                 updated_hypotheses[jira_key] = res.hypothesis
                 _post_lai_neu_log_doi_ket_luan(jira, jira_key, hypothesis, res.hypothesis)
+                # Agent auto-comment: status THU THẬP LOG
+                try:
+                    sample_logs = res.hypothesis.log_evidence[:5] if res.hypothesis.log_evidence else None
+                    jira.add_comment(
+                        jira_key,
+                        status_logs_collected(
+                            signal, res.logs_collected, res.logs_relevant,
+                            sample_logs=sample_logs,
+                        ),
+                    )
+                except Exception as err:
+                    logger.warning("%s: không post được status logs_collected (%s)", jira_key, err)
             except Exception as error:
                 logger.error("%s: lỗi khi thu thập/phân tích log (%s)", jira_key, error)
 
@@ -223,6 +244,7 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             proposals[jira_key] = outcome.proposal
             if outcome.awaiting_approval:
                 awaiting.append(jira_key)
+            # status_proposed() format đã được dùng bên trong post_proposal()
         return {"proposals": proposals, "awaiting_approval": awaiting}
 
     def escalate_node(state: IncidentAgentState) -> dict:
@@ -316,11 +338,11 @@ def _chan_doan_mot_issue(jira: JiraClient, jira_key: str, signal: IncidentSignal
         hypothesis.statement,
     )
 
+    # post_hypothesis chuyển state sang INVESTIGATING + lưu dữ liệu JSON.
+    # Comment text bên trong đã dùng status_diagnosed() format.
     try:
         jira.post_hypothesis(jira_key, hypothesis)
     except Exception as error:
-        # Giả thuyết vẫn dùng được cho bước sau, chỉ là người trực chưa đọc
-        # được nó trên Jira.
         logger.error("%s: không post được giả thuyết lên Jira (%s)", jira_key, error)
 
     return hypothesis

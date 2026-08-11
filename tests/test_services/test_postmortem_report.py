@@ -337,9 +337,10 @@ class TestDetailedReport:
         assert "copy-block" in html
 
     def test_action_items_jira_link(self):
-        html = build_detailed_report(_incident_day_du())
+        html = build_detailed_report(_incident_day_du(), jira_base_url="https://example.atlassian.net")
         assert "ENG-1042" in html
         assert "href" in html  # hyperlink
+        assert "example.atlassian.net/browse/ENG-1042" in html
 
     def test_toi_thieu_khong_crash(self):
         html = build_detailed_report(_incident_toi_thieu())

@@ -30,6 +30,7 @@ from src.config import get_settings
 from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
 from src.services.remediation import UnsupportedActionError, execute
+from src.services.status_updater import status_approved, status_executing
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,9 @@ async def jira_webhook(
             )
     else:
         action, target, params = proposal.action, proposal.target, proposal.params
+
+    # Agent auto-comment: PHÊ DUYỆT + ĐANG THỰC THI
+    _try_comment(client, jira_key, status_approved(approved_by))
 
     try:
         result = execute(action, target, approved_by=approved_by, params=params)
