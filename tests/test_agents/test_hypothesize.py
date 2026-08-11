@@ -471,3 +471,145 @@ def test_doc_phu_dinh_thang_tu_cau_luat_khong_hardcode():
     assert node._thu_bi_luat_loai_tru(cau_luat) == ["quá tải"]
     # Câu luật không loại trừ gì thì cửa không chặn bất cứ thứ gì.
     assert node._thu_bi_luat_loai_tru("Pool cạn kiệt nên request xếp hàng.") == []
+
+
+# ────────── cửa chống bằng chứng phản bác (thêm 11/08)
+
+
+def _tin_hieu_pool_thap():
+    """Pool saturation rất thấp (0%) — pool KHÔNG phải vấn đề."""
+    return rules.detect(
+        p95_now=1.2,
+        p95_baseline=0.5,
+        error_rate=0.0,
+        pool_saturation=0.0,
+        service="service-thanh-toan",
+        breached_for_seconds=60.0,
+    )
+
+
+def _tin_hieu_pool_cao():
+    """Pool saturation chạm trần (100%) — pool IS the problem."""
+    return rules.detect(
+        p95_now=3.3,
+        p95_baseline=0.7,
+        error_rate=0.0,
+        pool_saturation=1.0,
+        service="service-thanh-toan",
+        breached_for_seconds=60.0,
+    )
+
+
+def test_bo_cau_llm_khi_noi_pool_can_ma_pool_thap(monkeypatch):
+    """Bằng chứng có db_pool = 0.0 — pool trống. LLM nói 'pool cạn' là NGƯỢC.
+
+    Đây là trường hợp cửa 1 (`_nguyen_nhan_khong_co_can_cu`) bỏ lọt: nó chỉ
+    kiểm "bằng chứng db_pool có mặt không?" → Có → pass. Nhưng giá trị 0%
+    PHẢN BÁC khẳng định — pool trống thì không thể cạn.
+    """
+    signal = _tin_hieu_pool_thap()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+    # Kiểm tra trước: bằng chứng db_pool CÓ mặt
+    ten = " ".join(e.name for e in signal.evidence).lower()
+    assert "db_pool" in ten, "bộ số này phải có bằng chứng pool"
+
+    outcome = node.hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Connection pool cạn kiệt nên request phải xếp hàng."),
+    )
+    h = outcome.hypothesis
+
+    assert "pool" not in h.statement.lower() or "cạn" not in h.statement.lower(), (
+        "phải bỏ câu của LLM vì pool=0% phản bác 'pool cạn'"
+    )
+    assert outcome.statement_origin == "rule"
+
+
+def test_giu_cau_llm_khi_noi_pool_can_ma_pool_thuc_su_cao(monkeypatch):
+    """Pool = 100% — nói 'pool cạn' là ĐÚNG, KHÔNG ĐƯỢC chặn."""
+    signal = _tin_hieu_pool_cao()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Connection pool cạn kiệt nên request phải xếp hàng."),
+    )
+
+    assert "pool" in h.statement.lower()
+
+
+def test_bo_cau_llm_khi_noi_oom_ma_bo_nho_thap(monkeypatch):
+    """Bộ nhớ rất thấp (10 MB / 128 MB = 7.8%) — LLM nói 'OOM' là vô lý.
+
+    Tương tự trường hợp pool: bằng chứng đỉnh bộ nhớ CÓ mặt, nhưng giá trị
+    thấp nên PHẢN BÁC khẳng định OOM.
+    """
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=3.0,
+        down_for_seconds=0.0,
+        service="service-thanh-toan",
+        memory_ratio=0.08,    # cố ý rất thấp
+        memory_peak_mb=10.0,  # 10 MB / 128 MB = 7.8% ← không phải OOM
+    )
+    assert signal is not None, "bộ số này phải sinh được tín hiệu"
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    outcome = node.hypothesize_with_origin(
+        signal,
+        llm=_LlmNoiSai("Service bị OOM-kill do rò rỉ bộ nhớ."),
+    )
+
+    assert outcome.statement_origin == "rule"
+
+
+def test_giu_cau_llm_khi_noi_oom_ma_bo_nho_that_su_cao(monkeypatch):
+    """Đỉnh bộ nhớ 125.9 MB / 128 MB = 98.4% — nói 'OOM' là ĐÚNG."""
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=1.0,
+        down_for_seconds=0.0,
+        service="service-thanh-toan",
+        memory_ratio=0.4197,
+        memory_peak_mb=125.9,  # 125.9 / 128 = 98.4% ← đúng là chạm trần
+    )
+    assert signal is not None
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Service bị OOM-kill do rò rỉ bộ nhớ."),
+    )
+
+    # Hoặc LLM giữ, hoặc luật cũng nói OOM — dù theo đường nào thì OOM phải
+    # xuất hiện, vì bằng chứng thật sự chỉ về OOM.
+    assert "oom" in h.statement.lower() or "bộ nhớ" in h.statement.lower()
+
+
+def test_khong_chan_khi_llm_khong_nhac_tu_khoa_pool_hay_memory(monkeypatch):
+    """Cửa 4 chỉ kiểm khi LLM nhắc từ khoá. Không nhắc thì để qua."""
+    signal = _tin_hieu_pool_thap()
+    monkeypatch.setattr(node.deploys, "recent_deploys", lambda service, **kw: [])
+
+    # LLM không nhắc pool hay memory → cửa 4 không chặn
+    h = node.hypothesize(
+        signal,
+        llm=_LlmNoiSai("Latency tăng do tải request đột biến."),
+    )
+
+    assert "tải" in h.statement.lower() or "request" in h.statement.lower()
+
+
+def test_cua_phan_bac_unit_function_pool_0():
+    """Unit test trực tiếp _bang_chung_phan_bac: pool=0% bị chặn."""
+    signal = _tin_hieu_pool_thap()
+    result = node._bang_chung_phan_bac("Pool cạn kiệt", signal)
+    assert result is not None, "pool=0% phải bị phát hiện phản bác"
+
+
+def test_cua_phan_bac_unit_function_pool_100():
+    """Unit test trực tiếp _bang_chung_phan_bac: pool=100% không bị chặn."""
+    signal = _tin_hieu_pool_cao()
+    result = node._bang_chung_phan_bac("Pool cạn kiệt", signal)
+    assert result is None, "pool=100% không nên bị chặn"
+
