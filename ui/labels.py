@@ -60,6 +60,21 @@ SEVERITY: dict[str, tuple[str, str, str]] = {
     "P4": ("⚪", "Theo dõi", "lệch so với ngày thường"),
 }
 
+#: Màu của badge P1–P4. Tách khỏi `SEVERITY` để không đổi kiểu dữ liệu của dict
+#: đó (test đang đọc nó), nhưng luôn đi cùng nhau: badge phải lấy icon/tên từ
+#: `SEVERITY` và màu từ đây, KHÔNG hardcode màu theo chữ "P1" ở từng chỗ vẽ.
+SEVERITY_MAU: dict[str, str] = {
+    "P1": "#ef4444",
+    "P2": "#f97316",
+    "P3": "#eab308",
+    "P4": "#94a3b8",
+}
+
+
+def mau_severity(muc: str) -> str:
+    """`"P1"` → `"#ef4444"`. Mức lạ trả về màu xám trung tính."""
+    return SEVERITY_MAU.get(muc, "#94a3b8")
+
 # ---------------------------------------------------------------------------
 # Tên dịch vụ
 # ---------------------------------------------------------------------------
@@ -84,6 +99,15 @@ HEALTH: dict[str, tuple[str, str]] = {
 }
 
 
+#: Màu badge trạng thái dịch vụ — đi kèm `HEALTH`, cùng lý do với `SEVERITY_MAU`.
+HEALTH_MAU: dict[str, str] = {
+    "operational": "#22c55e",
+    "degraded": "#eab308",
+    "down": "#ef4444",
+    "maintenance": "#38bdf8",
+}
+
+
 def service(ten_goc: str) -> str:
     """`"service-thanh-toan"` → `"Thanh toán"`. Không nhận ra thì trả tên gốc."""
     return SERVICE.get(ten_goc, ten_goc)
@@ -92,6 +116,11 @@ def service(ten_goc: str) -> str:
 def health(trang_thai: str) -> tuple[str, str]:
     """`"down"` → `("🔴", "Đang gặp sự cố")`."""
     return HEALTH.get(trang_thai, ("⚪", trang_thai))
+
+
+def mau_health(trang_thai: str) -> str:
+    """`"down"` → `"#ef4444"`. Trạng thái lạ trả về màu xám trung tính."""
+    return HEALTH_MAU.get(trang_thai, "#94a3b8")
 
 
 # ---------------------------------------------------------------------------
@@ -260,3 +289,64 @@ def keo_dai(giay: float) -> str:
     else:
         do_dai = f"{giay / 3600:.1f} giờ"
     return f"{do_dai} liên tục — không phải nhấp nháy"
+
+
+# ---------------------------------------------------------------------------
+# Log level
+# ---------------------------------------------------------------------------
+
+#: `LogEvidence.level` → (icon, câu tiếng Việt).
+#:
+#: Khối log trong war room giữ **nguyên văn** chữ ERROR/WARNING/INFO vì đó là
+#: thứ người trực grep, còn câu tiếng Việt đi kèm ở chú thích bên trên khối —
+#: vẫn là "dịch thêm, không dịch thay".
+LOG_LEVEL: dict[str, tuple[str, str]] = {
+    "ERROR": ("🔴", "lỗi"),
+    "WARNING": ("🟡", "cảnh báo"),
+    "WARN": ("🟡", "cảnh báo"),
+    "INFO": ("🟢", "thông tin"),
+    "DEBUG": ("⚪", "chi tiết gỡ lỗi"),
+}
+
+#: Màu chữ của từng mức log trong khối terminal nền đen.
+LOG_MAU: dict[str, str] = {
+    "ERROR": "#f87171",
+    "WARNING": "#fbbf24",
+    "WARN": "#fbbf24",
+    "INFO": "#4ade80",
+    "DEBUG": "#94a3b8",
+}
+
+
+def log_level(muc: str) -> tuple[str, str]:
+    """`"ERROR"` → `("🔴", "lỗi")`. Mức lạ giữ nguyên tên, không đoán."""
+    return LOG_LEVEL.get(muc.upper(), ("⚪", muc))
+
+
+def mau_log(muc: str) -> str:
+    """`"ERROR"` → `"#f87171"`. Mức lạ trả về màu xám trung tính."""
+    return LOG_MAU.get(muc.upper(), "#94a3b8")
+
+
+# ---------------------------------------------------------------------------
+# Bảng màu chung
+# ---------------------------------------------------------------------------
+
+#: Màu nền / viền / chữ dùng chung cho hai trang.
+#:
+#: Để ở đây vì `ui/` chỉ được phép import `ui.labels` — không có module thứ ba
+#: để chứa theme. Đây là **dữ liệu màu**, không phải CSS: mỗi trang tự ghép
+#: chuỗi CSS của mình, vì war room cần hiệu ứng riêng (viền neon, khối log đen)
+#: mà status page công khai không dùng tới.
+MAU: dict[str, str] = {
+    "nen": "#090d16",
+    "the": "#111827",
+    "vien": "#1f2937",
+    "chu": "#e5e7eb",
+    "mo": "#94a3b8",
+    "nhan": "#38bdf8",
+    "do": "#ef4444",
+    "cam": "#f59e0b",
+    "xanh": "#22c55e",
+    "tim": "#a78bfa",
+}
