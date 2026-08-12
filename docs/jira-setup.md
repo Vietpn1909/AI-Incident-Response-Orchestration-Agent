@@ -215,6 +215,34 @@ JIRA_AGENT_ACCOUNT_ID=712020:1bf02a7a-3621-4611-b358-7e905dd2dcf7
 
 ---
 
+## Phần 6.2 — Duyệt một issue CÓ SẴN khi chưa bật Automation rule
+
+`verify_e2e.py` ở mục dưới tự **tạo issue mới** để kiểm cả chuỗi. Lúc demo thì
+ngược lại: issue đã có sẵn do Agent mở từ sự cố thật, và chỉ cần kích bước cuối.
+
+Chưa cấu hình Automation rule (Phần 5) thì Jira không tự gọi webhook, nên bước
+Jira→backend phải kích tay:
+
+```bash
+# Sau khi đã chuyển issue sang 'Remediating' bằng account NGƯỜI
+python scripts/duyet.py KAN-23
+```
+
+Script **không** đi vòng qua cổng phê duyệt — nó gọi đúng
+`POST /webhooks/jira` mà Automation rule sẽ gọi, cùng payload, nên cả ba lớp
+(secret → cổng HITL → thi hành) vẫn chạy nguyên vẹn. Nó thay cái *cầu nối*, không
+thay cái *cổng*.
+
+Đo ngày 12/08 trên hai issue cùng lúc:
+
+| Issue | Ai chuyển sang Remediating | Kết quả |
+|---|---|---|
+| KAN-23 | Duc Truong (account người) | ✅ qua cổng, `rollback`, có ghi accountId người duyệt |
+| KAN-24 | chưa ai | ⛔ từ chối ở lớp 2 — đúng thiết kế |
+
+Cấu hình Automation rule xong thì bỏ hẳn bước này: bấm `Remediating` trên Jira là
+chuỗi tự chạy tới cùng.
+
 ## Phần 6.5 — Verify cả chuỗi bằng một lệnh
 
 Có script chạy trọn chuỗi và in rõ tắc ở mảnh nào:
