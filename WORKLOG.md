@@ -754,4 +754,59 @@ Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại
 
 ---
 
+## 2026-08-10
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Pull code mới nhất từ `develop` về branch `viet`, scan và resolve conflicts | ✅ Done | Branch `viet` đồng bộ |
+| Việt | Implement `MeetingRoomClient` + `DailyMeetingRoom` — tạo phòng họp khẩn trên Daily.co khi sự cố ≥ P2 | ✅ Done | `src/services/meeting_room.py`, 20 test |
+| Việt | Implement `IncidentAlertService` — gửi email cảnh báo kèm link phòng họp khi phát hiện sự cố | ✅ Done | `src/services/incident_alert.py`, 15 test |
+| Việt | Tích hợp phòng họp + email cảnh báo vào `open_war_room` — Agent tự tạo phòng họp + gửi email khi mở incident P1/P2 | ✅ Done | `src/agents/nodes/open_war_room.py` |
+| Việt | Điểm thông minh: nếu 2 dịch vụ cùng bị lỗi → tạo **1 phòng họp dùng chung** thay vì 2 | ✅ Done | Logic `_get_or_create_shared_room()` |
+
+**Tổng kết ngày:** Tích hợp Daily.co meeting room + email cảnh báo vào pipeline. Agent giờ tự tạo phòng họp và gửi email cảnh báo khi phát hiện sự cố nghiêm trọng (P1/P2). Key Daily.co: `ec878...` đã cấu hình trong `.env`.
+
+---
+
+## 2026-08-11
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Implement `LogSearchTool` — Agent đọc log thật từ các dịch vụ | ✅ Done | `f6b58d2`, PR #25 merged |
+| Việt | Fix `_bang_chung_phan_bac()` — sửa logic phản bác bằng chứng trong chẩn đoán | ✅ Done | `0f893b7`, PR #27 merged |
+| Việt | Cấu hình Gmail SMTP (`vietpn04@gmail.com`) + App Password | ✅ Done | `8243cbf` |
+| Trương Công Thái Đức | Dọn 31 lỗi lint làm CI đỏ trên develop từ PR #25 | ✅ Done | `02ac999` |
+| Trương Công Thái Đức | Fix Jira IPv6 NAT64 — ép IPv4 vì IPv6 treo 30 giây | ✅ Done | `74e6e7a` |
+| Trương Công Thái Đức | UC-4: log là nguồn duy nhất — bỏ nhãn chẩn đoán khỏi log demo | ✅ Done | `b88c775` |
+| Trương Công Thái Đức | Vá 6 lỗi chỉ lộ ra khi chạy live trọn chuỗi | ✅ Done | `e7c4b33` |
+
+**Tổng kết ngày:** Hai PR của Việt merge vào develop (PR #25: log observability, PR #27: fix chẩn đoán). Đức fix hàng loạt lỗi phát hiện khi chạy live trọn chuỗi trước demo. Gmail SMTP đã cấu hình xong.
+
+---
+
+## 2026-08-12
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Implement `StatusUpdater` — Agent tự comment tiến trình lên Jira theo từng bước | ✅ Done | `src/services/status_updater.py` |
+| Việt | Implement `PostmortemGenerator` — Agent tự sinh báo cáo postmortem từ dữ liệu Jira thật | ✅ Done | `src/services/postmortem_generator.py` |
+| Việt | Implement `PostmortemReport` — render postmortem thành HTML (email body + report đính kèm) | ✅ Done | `src/services/postmortem_report.py` |
+| Việt | Implement `GmailClient` — gửi email postmortem qua Gmail SMTP với HTML body + attachment | ✅ Done | `src/services/email_client.py` |
+| Việt | Tích hợp postmortem + email vào webhook — sau execute thành công → tự sinh + gửi postmortem | ✅ Done | `src/api/webhooks.py` hàm `_try_send_postmortem()` |
+| Việt | Fix pipeline gap #1: Auto-transition ticket sang Resolved sau execute thành công | ✅ Done | `webhooks.py` bước 7, 2 test mới |
+| Việt | Fix pipeline gap #2: Guard chống postmortem gửi 2 lần khi cả Rule #1 + Rule #2 fire | ✅ Done | `/webhooks/jira/resolved` guard, 1 test mới |
+| Việt | Implement `POST /webhooks/jira/resolved` — xử lý manual resolution khi con người tự sửa | ✅ Done | `webhooks.py`, 9 test mới |
+| Việt | Setup Jira credentials trong `.env` — kết nối thành công tới `jibinarybro.atlassian.net` | ✅ Done | 25 incident đọc được từ Jira Cloud |
+| Việt | Viết `docs/pipeline.md` — tài liệu pipeline chi tiết cho toàn team | ✅ Done | 568 dòng, có sơ đồ Mermaid |
+| Trương Công Thái Đức | Review + vá 6 chỗ trong nhánh `viet` trước merge | ✅ Done | `751edf4` |
+| Trương Công Thái Đức | Thêm `scripts/duyet.py` — kích webhook phê duyệt cho issue có sẵn | ✅ Done | `0247edc` |
+| Trương Công Thái Đức | Fix UI: vá 3 lỗi lộ ra khi tập demo trên màn hình thật | ✅ Done | `06f7845` |
+| Trương Công Thái Đức | Viết runbook buổi demo | ✅ Done | `docs/demo-runbook.md` |
+
+**Tổng kết ngày:** Pipeline hoàn chỉnh tự động end-to-end. Toàn bộ 501 test pass. Hai khoảng trống pipeline cuối cùng được fix: (1) ticket không auto-resolve sau execute, (2) postmortem gửi 2 lần khi cả 2 rule fire. Jira Cloud kết nối thành công, 25 incident đã tồn tại. Tài liệu pipeline chi tiết viết xong cho team.
+
+**Test toàn bộ:** 501 test pass (tăng 3 test từ 498 → 501 nhờ thêm test cho 2 fix + guard).
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->
