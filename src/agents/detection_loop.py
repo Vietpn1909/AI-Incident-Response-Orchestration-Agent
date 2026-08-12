@@ -18,7 +18,10 @@ import logging
 from dataclasses import dataclass, field
 
 from src.agents.incident_graph import build_incident_graph
+from src.agents.war_room_registry import WarRoomRegistry
+from src.services.incident_alert import IncidentAlerter
 from src.services.jira import JiraClient
+from src.services.meeting_room import DailyRoomClient
 from src.services.prometheus import PrometheusClient
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,9 @@ class CycleResult:
     detected: int = 0
     opened: list[str] = field(default_factory=list)
     updated: list[str] = field(default_factory=list)
+    #: `{jira key: URL phòng họp}` của các war room vừa mở mới ở vòng này. Rỗng
+    #: là bình thường: chưa cấu hình `DAILY_API_KEY`, hoặc sự cố dưới mức P2.
+    meeting_rooms: dict[str, str] = field(default_factory=dict)
     error: str | None = None
 
     @property
@@ -39,7 +45,14 @@ class CycleResult:
         return self.detected == 0 and self.error is None
 
 
-def run_cycle(prometheus_client: PrometheusClient, jira: JiraClient) -> CycleResult:
+def run_cycle(
+    prometheus_client: PrometheusClient,
+    jira: JiraClient,
+    *,
+    room: DailyRoomClient | None = None,
+    alerter: IncidentAlerter | None = None,
+    registry: WarRoomRegistry | None = None,
+) -> CycleResult:
     """Một vòng: đọc Prometheus → phân loại → mở hoặc cập nhật war room.
 
     Lỗi Prometheus được bắt trong node `detect` và trả về ở `CycleResult.error`
@@ -51,13 +64,30 @@ def run_cycle(prometheus_client: PrometheusClient, jira: JiraClient) -> CycleRes
     của một vòng quét (~2,2s đo ngày 02/08), và đổi lại thì hàm này không giữ
     trạng thái gì giữa các vòng — quan trọng khi client bị thay giữa chừng lúc
     test.
+
+    ⚠️ `registry` là ngoại lệ **có chủ đích** của câu "không giữ trạng thái gì
+    giữa các vòng" ở trên. Trạng thái đó không nằm trong hàm này mà nằm ở object
+    người gọi đưa vào — `run_cycle()` chỉ đọc ghi lên nó. Không có nó thì mỗi
+    vòng poll lại mở một phòng họp mới và gửi lại một mail cảnh báo; xem
+    `war_room_registry.py` để biết vì sao không thể suy ra từ state của graph.
+
+    Args:
+        prometheus_client: Nguồn tín hiệu.
+        jira: Lớp quản lý vòng đời incident.
+        room: Client mở phòng họp. `None` — mặc định — là tắt tính năng; giữ
+            chữ ký cũ chạy y nguyên cho mọi caller và test đã có.
+        alerter: Client gửi mail báo sự cố. `None` là tắt.
+        registry: Trí nhớ xuyên vòng quét, do người gọi sở hữu.
     """
-    agent = build_incident_graph(prometheus_client, jira)
+    agent = build_incident_graph(
+        prometheus_client, jira, room=room, alerter=alerter, registry=registry
+    )
     state = agent.invoke({})
 
     return CycleResult(
         detected=len(state.get("signals") or []),
         opened=list(state.get("opened") or []),
         updated=list(state.get("updated") or []),
+        meeting_rooms=dict(state.get("meeting_rooms") or {}),
         error=state.get("error"),
     )

@@ -61,6 +61,16 @@ class IncidentAgentState(TypedDict, total=False):
     #: cái, và hai war room không bao giờ gặp nhau để nối.
     all_war_rooms: dict[str, str]
 
+    #: `{jira key: URL phòng họp}` của các war room **vừa được gán phòng** ở
+    #: vòng này. War room đã có phòng từ vòng trước KHÔNG nằm ở đây.
+    #:
+    #: Chỉ sự cố P1/P2 mới vào đây (xem `MUC_CAN_HOP` trong `incident_graph`), và
+    #: mọi war room của cùng một sự cố lan truyền dùng **chung một URL** — một
+    #: lỗi gốc thì người trực phải vào cùng một cuộc gọi.
+    #:
+    #: Rỗng không có nghĩa là hỏng: phần lớn vòng quét là sự cố đã có phòng rồi.
+    meeting_rooms: dict[str, str]
+
     #: Các cặp war room vừa được nối ở vòng này. Output của `link_incidents`.
     linked: list[tuple[str, str]]
 

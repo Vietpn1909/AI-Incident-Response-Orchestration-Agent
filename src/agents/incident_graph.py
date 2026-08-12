@@ -43,9 +43,12 @@ from src.agents.nodes.link_incidents import link_incidents
 from src.agents.nodes.open_war_room import open_war_room
 from src.agents.nodes.propose_remediation import propose_remediation
 from src.agents.state import IncidentAgentState
-from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal
+from src.agents.war_room_registry import WarRoomRegistry
+from src.models.incident import Hypothesis, IncidentSignal, RemediationProposal, Severity
 from src.services import rules
+from src.services.incident_alert import IncidentAlerter
 from src.services.jira import JiraClient
+from src.services.meeting_room import DailyRoomClient
 from src.services.prometheus import PrometheusClient, PrometheusError
 from src.services.status_updater import (
     status_detected,
@@ -54,20 +57,46 @@ from src.services.status_updater import (
 
 logger = logging.getLogger(__name__)
 
+#: Chỉ sự cố nặng mới cần gọi người vào họp. Thêm P3 vào đây nếu buổi demo
+#: không đẩy tải lên nổi P2.
+MUC_CAN_HOP = {Severity.P1, Severity.P2}
 
-def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
+
+def build_incident_graph(
+    prometheus_client: PrometheusClient,
+    jira: JiraClient,
+    *,
+    room: DailyRoomClient | None = None,
+    alerter: IncidentAlerter | None = None,
+    registry: WarRoomRegistry | None = None,
+):
     """Dựng và compile graph cho một cặp client cụ thể.
 
     Dependency đi vào bằng closure chứ không nằm trong state: `PrometheusClient`
     và `JiraClient` là kết nối mạng, nhét chúng vào state thì state hết
     serialize được — mà LangGraph cần điều đó để checkpoint và để LangSmith ghi
-    lại trace.
+    lại trace. `room` và `alerter` đi cùng đường đó, cùng lý do đó.
 
     Args:
         prometheus_client: Nguồn tín hiệu.
         jira: `FakeJiraClient` khi phát triển, `RealJiraClient` khi chạy thật —
             graph không phân biệt, đó là mục đích của contract ③.
+        room: Client mở phòng họp. `None` — mặc định — nghĩa là **tắt** phòng
+            họp, và graph chạy y hệt như trước khi có nó.
+        alerter: Client gửi mail báo sự cố. `None` là tắt. Độc lập với `room`:
+            mất phòng họp không phải lý do nuốt luôn cảnh báo, nên mail vẫn gửi
+            (chỉ thiếu nút vào họp).
+        registry: Trí nhớ xuyên vòng quét — war room nào đã có phòng, đã báo
+            mail. `None` thì tự dựng một cái **chỉ sống trong vòng này**, đủ để
+            các war room cùng cụm dùng chung phòng nhưng KHÔNG nhớ được sang
+            vòng sau. Tiến trình chạy dài phải tự giữ một cái và truyền vào,
+            xem `scripts/run_agent.py` — không thì mỗi vòng poll lại mở một
+            phòng mới và gửi lại một mail.
     """
+    # Registry rơi về bản dùng-một-lần thay vì `None`, để phần dưới không phải
+    # rải `if registry is not None` khắp nơi. Ngữ nghĩa vẫn đúng: không ai giữ
+    # nó thì nó chỉ nhớ được trong vòng quét này.
+    registry = registry if registry is not None else WarRoomRegistry()
 
     def detect(state: IncidentAgentState) -> dict:
         """Đọc Prometheus, chạy rule engine cho cả ba use case."""
@@ -109,9 +138,11 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
         updated: list[str] = []
         war_rooms: dict[str, str] = {}
         all_war_rooms: dict[str, str] = {}
+        signal_theo_key: dict[str, IncidentSignal] = {}
         for signal in state.get("signals") or []:
             outcome = open_war_room(jira, signal)
             all_war_rooms[signal.affected_service] = outcome.jira_key
+            signal_theo_key[outcome.jira_key] = signal
             if outcome.created:
                 opened.append(outcome.jira_key)
                 war_rooms[signal.affected_service] = outcome.jira_key
@@ -122,11 +153,17 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
                     logger.warning("%s: không post được status detected (%s)", outcome.jira_key, err)
             else:
                 updated.append(outcome.jira_key)
+
+        # Phòng họp và mail chạy SAU vòng lặp, trên cả cụm cùng lúc — không nằm
+        # trong nhánh `outcome.created`. Xem docstring `_lo_phong_va_bao_nguoi()`.
+        meeting_rooms = _lo_phong_va_bao_nguoi(room, alerter, registry, signal_theo_key)
+
         return {
             "opened": opened,
             "updated": updated,
             "war_rooms": war_rooms,
             "all_war_rooms": all_war_rooms,
+            "meeting_rooms": meeting_rooms,
         }
 
     def hypothesize_node(state: IncidentAgentState) -> dict:
@@ -310,6 +347,108 @@ def _co_lan_truyen(state: IncidentAgentState) -> str:
     if not state.get("spreading"):
         return "propose_remediation"
     return "link_incidents"
+
+
+def _lo_phong_va_bao_nguoi(
+    room: DailyRoomClient | None,
+    alerter: IncidentAlerter | None,
+    registry: WarRoomRegistry,
+    signal_theo_key: dict[str, IncidentSignal],
+) -> dict[str, str]:
+    """Lo một phòng họp dùng chung cho cả cụm, rồi gọi người vào bằng mail.
+
+    Trả `{jira key: URL}` của những war room **vừa được gán phòng ở vòng này** —
+    cái đã có phòng từ vòng trước không nằm trong đó, để log không lặp lại.
+
+    ## Vì sao xét cả cụm chứ không xét từng war room
+
+    Sự cố lan truyền sinh ra nhiều war room nhưng chỉ có **một lỗi gốc**, nên
+    người trực phải vào cùng một cuộc gọi. Mở cho mỗi issue một phòng riêng thì
+    họ bị chia thành hai nhóm nói chuyện tách nhau — tệ hơn cả không có phòng.
+    `link_incidents` cũng đang nối chúng lại theo đúng lập luận này.
+
+    ## Vì sao điều kiện KHÔNG còn là `outcome.created`
+
+    Đây là bản vá cho lỗi đo được ngày 12/08 trên demo stack, ghi đầy đủ trong
+    docstring [`war_room_registry.py`](war_room_registry.py): vòng 1 chỉ một
+    service vượt ngưỡng nên nó là P3 → không đủ mức mở phòng; vòng 2 service thứ
+    hai vượt theo, luật nâng cả hai lên P1 → giờ đủ mức, nhưng cái mở ở vòng 1
+    không còn `created=True`. Nó trượt ở cả hai vòng vì hai lý do khác nhau, và
+    vĩnh viễn không có phòng dù đã là P1.
+
+    Nên điều kiện giờ là "đang mở, đủ nặng, **chưa** có phòng". Việc chống mở
+    trùng chuyển sang cho `registry` — vốn chặt hơn `created` vì nó sống xuyên
+    các vòng quét, còn `created` chỉ đúng trong đúng vòng issue được tạo.
+
+    ## Mail độc lập với phòng
+
+    Daily hỏng thì mail vẫn gửi, chỉ thiếu nút vào họp. Mất chỗ họp không phải
+    lý do để nuốt luôn cảnh báo — người trực vẫn cần biết có sự cố.
+    """
+    can_hop = [
+        jira_key
+        for jira_key, signal in signal_theo_key.items()
+        if signal.severity in MUC_CAN_HOP
+    ]
+    if not can_hop:
+        return {}
+
+    url = registry.url_cua_cum(can_hop)
+    if url is None and room is not None:
+        # Đặt tên phòng theo war room đầu tiên của cụm. Chỉ là cái tên — mọi
+        # issue trong cụm đều dùng chung đúng URL này.
+        dai_dien = can_hop[0]
+        url = _tao_phong_hop(room, dai_dien, signal_theo_key[dai_dien])
+
+    vua_gan = registry.gan_phong(can_hop, url) if url else []
+
+    if alerter is not None:
+        for jira_key in can_hop:
+            if not registry.can_bao_mail(jira_key):
+                continue
+            # Chỉ đánh dấu khi gửi được. Hỏng thì để vòng sau thử lại — mất một
+            # cảnh báo tệ hơn nhiều so với gửi lặp một lần.
+            if alerter.bao_su_co(jira_key, signal_theo_key[jira_key], url or ""):
+                registry.da_bao(jira_key)
+
+    return {jira_key: url for jira_key in vua_gan} if url else {}
+
+
+def _tao_phong_hop(room: DailyRoomClient, jira_key: str, signal: IncidentSignal) -> str | None:
+    """Mở phòng họp cho một war room, nuốt lỗi để không làm sập cả vòng quét.
+
+    Là hàm module-level chứ không phải closure, cùng lý do với `_xet_nang_muc()`
+    và `_chan_doan_mot_issue()`: test gọi thẳng được, không phải dựng cả một sự
+    cố giả qua Prometheus rồi chạy hết graph mới tới được nó.
+
+    `DailyRoomClient.create()` đã tự nuốt lỗi của nó và trả `None`, nhưng vẫn
+    bọc thêm `try` ở đây: `room` là tham số, và người gọi hoàn toàn có thể truyền
+    vào một client khác — mock trong test, hay một provider khác về sau. Chỗ này
+    không được tin rằng bên kia cũng nuốt lỗi giùm mình. Cùng lập luận với
+    `_xet_nang_muc()`: `run_cycle()` không bọc gì và `run_agent.py` chỉ bắt
+    `KeyboardInterrupt`, nên một exception lọt tới đây là **giết cả tiến trình**.
+
+    Log ở mức INFO ngay khi có URL, trước cả khi trả về: phòng đã tồn tại thật
+    trên Daily rồi. Nếu để người gọi log hộ mà họ quên hoặc bỏ sót nhánh nào thì
+    coi như không có phòng — không ai biết đường nào mà vào.
+
+    Returns:
+        URL phòng họp, hoặc `None` khi không mở được. `None` KHÔNG phải lỗi cần
+        dừng: war room vẫn mở, chỉ là không có link để gọi người vào.
+    """
+    try:
+        phong = room.create(jira_key)
+    except Exception as error:
+        logger.warning(
+            "%s (%s): không mở được phòng họp (%s)", jira_key, signal.affected_service, error
+        )
+        return None
+
+    if phong is None:
+        return None
+
+    logger.info("%s: phòng họp %s", jira_key, phong.url)
+    return phong.url
 
 
 def _chan_doan_mot_issue(jira: JiraClient, jira_key: str, signal: IncidentSignal) -> Hypothesis | None:
