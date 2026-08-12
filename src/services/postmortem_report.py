@@ -29,10 +29,9 @@ Theo văn hoá blameless — mô tả hệ thống và quy trình, không chỉ 
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import datetime, timedelta, timezone
 
-from src.models.incident import Incident, Postmortem
-
+from src.models.incident import Incident
 
 # ---------------------------------------------------------------------------
 # Jira URL helper
@@ -402,7 +401,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
     five_whys_html = ""
     if reasoning and reasoning != "—":
         # Parse reasoning thành các bước — nếu có dạng số 1. 2. 3.
-        lines = [l.strip() for l in reasoning.strip().split("\n") if l.strip()]
+        lines = [dong.strip() for dong in reasoning.strip().split("\n") if dong.strip()]
         if len(lines) >= 2:
             why_items = ""
             for i, line in enumerate(lines, 1):

@@ -30,7 +30,7 @@ from src.config import get_settings
 from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
 from src.services.remediation import UnsupportedActionError, execute
-from src.services.status_updater import status_approved, status_executing
+from src.services.status_updater import status_approved
 
 logger = logging.getLogger(__name__)
 

@@ -178,8 +178,16 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
             try:
                 res = analyze_logs(signal, hypothesis)
                 updated_hypotheses[jira_key] = res.hypothesis
-                _post_lai_neu_log_doi_ket_luan(jira, jira_key, hypothesis, res.hypothesis)
-                # Agent auto-comment: status THU THẬP LOG
+
+                # THỨ TỰ QUAN TRỌNG: post "THU THẬP LOG" TRƯỚC, rồi mới post
+                # kết luận rút ra từ log.
+                #
+                # Comment trên Jira xếp theo thời gian post, nên đảo hai lời gọi
+                # này là war room đọc ngược nhân quả. Đo trên KAN-21: comment
+                # "CHẨN ĐOÁN NGUYÊN NHÂN" nêu kết luận từ log nằm TRÊN comment
+                # "THU THẬP LOG" đã tìm ra nó — người trực đọc thấy kết luận đến
+                # trước bằng chứng sinh ra nó, đúng thứ làm mất lòng tin vào một
+                # chuỗi suy luận tự động.
                 try:
                     sample_logs = res.hypothesis.log_evidence[:5] if res.hypothesis.log_evidence else None
                     jira.add_comment(
@@ -191,6 +199,8 @@ def build_incident_graph(prometheus_client: PrometheusClient, jira: JiraClient):
                     )
                 except Exception as err:
                     logger.warning("%s: không post được status logs_collected (%s)", jira_key, err)
+
+                _post_lai_neu_log_doi_ket_luan(jira, jira_key, hypothesis, res.hypothesis)
             except Exception as error:
                 logger.error("%s: lỗi khi thu thập/phân tích log (%s)", jira_key, error)
 

@@ -17,7 +17,6 @@ from src.services.email_client import (
     GmailClient,
 )
 
-
 # ────────── FakeEmailClient ──────────
 
 

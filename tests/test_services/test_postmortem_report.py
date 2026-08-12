@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from src.models.incident import (
     ActionItem,
+    DeployRecord,
     Hypothesis,
     Incident,
     IncidentSignal,
@@ -16,17 +17,16 @@ from src.models.incident import (
     RemediationProposal,
     Severity,
     TimelineEvent,
-    DeployRecord,
 )
 from src.services.email_client import Attachment, FakeEmailClient
 from src.services.postmortem_report import (
-    build_detailed_report,
-    build_email_body,
+    _compute_approval_wait,
     _compute_mttd,
     _compute_mttr,
-    _compute_approval_wait,
     _fmt_time,
     _fmt_time_full,
+    build_detailed_report,
+    build_email_body,
 )
 
 

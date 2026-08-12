@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from src.models.incident import IncidentSignal
 from src.services.jira import JiraClient
-from src.services.status_updater import _ts
+from src.services.status_updater import ts
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,14 @@ def open_war_room(jira: JiraClient, signal: IncidentSignal) -> WarRoomResult:
 
     Returns:
         `WarRoomResult` — key của issue, và có phải vừa tạo mới không.
+
+    ⚠️ **Hàm này KHÔNG còn tự post bằng chứng lúc tạo issue.** Việc đó chuyển
+    sang `status_detected()` do `incident_graph.open_war_rooms()` gọi, để tránh
+    hai comment cùng nội dung trên một war room.
+
+    Hệ quả: gọi `open_war_room()` trực tiếp — trong script, test, hay một node
+    mới — sẽ tạo ra issue KHÔNG có dòng bằng chứng nào, và không có gì báo lỗi.
+    Ai gọi ngoài graph thì phải tự post `status_detected(signal)` kèm theo.
     """
     service = signal.affected_service
 
@@ -53,7 +61,7 @@ def open_war_room(jira: JiraClient, signal: IncidentSignal) -> WarRoomResult:
         # Agent auto-comment: cập nhật tín hiệu vẫn còn (cùng format status_updater)
         jira.add_comment(
             existing,
-            f"🔄 [{_ts(signal.detected_at)}] TÍN HIỆU VẪN CÒN\n\n"
+            f"🔄 [{ts(signal.detected_at)}] TÍN HIỆU VẪN CÒN\n\n"
             f"Metric: {signal.metric_name} = {signal.metric_value:.3f} "
             f"(ngưỡng {signal.threshold:.3f})\n"
             f"Vượt ngưỡng liên tục: {signal.breached_for_seconds:.0f}s\n\n"

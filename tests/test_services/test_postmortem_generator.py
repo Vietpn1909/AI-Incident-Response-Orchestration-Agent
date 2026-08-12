@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from src.models.incident import (
-    ActionItem,
     DeployRecord,
     Hypothesis,
     Incident,
@@ -18,11 +17,11 @@ from src.models.incident import (
 )
 from src.services.jira.client import FakeJiraClient
 from src.services.postmortem_generator import (
-    generate_postmortem,
     _derive_action_items,
     _derive_impact,
     _derive_root_cause,
     _derive_summary,
+    generate_postmortem,
 )
 
 
@@ -300,7 +299,7 @@ class TestReportIntegration:
         assert "retry" in html.lower()
 
     def test_report_co_jira_key_that_khi_co_jira(self):
-        from src.services.postmortem_report import build_email_body, build_detailed_report
+        from src.services.postmortem_report import build_detailed_report, build_email_body
 
         jira = FakeJiraClient(verbose=False)
         incident = _full_incident()
