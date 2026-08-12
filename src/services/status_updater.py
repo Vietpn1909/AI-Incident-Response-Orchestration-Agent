@@ -22,7 +22,7 @@ Thời gian hiển thị song song UTC+7 và UTC để đồng bộ với báo c
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta, timezone
 
 from src.models.incident import (
     Hypothesis,
@@ -35,7 +35,7 @@ from src.models.incident import (
 _TZ_LOCAL = timezone(timedelta(hours=7))
 
 
-def _ts(dt: datetime | None = None) -> str:
+def ts(dt: datetime | None = None) -> str:
     """Format timestamp song song UTC+7 / UTC."""
     dt = dt or datetime.now(UTC)
     local = dt.astimezone(_TZ_LOCAL)
@@ -57,7 +57,7 @@ def _ts_full(dt: datetime | None = None) -> str:
 def status_detected(signal: IncidentSignal) -> str:
     """🔴 PHÁT HIỆN — comment khi mở war room mới."""
     lines = [
-        f"🔴 [{_ts(signal.detected_at)}] PHÁT HIỆN SỰ CỐ",
+        f"🔴 [{ts(signal.detected_at)}] PHÁT HIỆN SỰ CỐ",
         "",
         f"Dịch vụ: {signal.affected_service}",
         f"Mức độ: {signal.severity.value}",
@@ -87,7 +87,7 @@ def status_logs_collected(
 ) -> str:
     """🔍 THU THẬP LOG — comment khi đã collect và phân tích log."""
     lines = [
-        f"🔍 [{_ts()}] THU THẬP LOG",
+        f"🔍 [{ts()}] THU THẬP LOG",
         "",
         f"Dịch vụ: {signal.affected_service}",
         f"Tổng log thu thập: {logs_collected} dòng",
@@ -98,8 +98,12 @@ def status_logs_collected(
         lines.append("")
         lines.append("Các dòng log đáng chú ý:")
         for le in sample_logs[:5]:  # Tối đa 5 dòng sample
-            ts = f" [{le.timestamp}]" if le.timestamp else ""
-            lines.append(f"  [{le.level}]{ts} {le.message}")
+            # KHÔNG đặt tên biến này là `ts` — trùng tên hàm `ts()` ở module này,
+            # và Python coi cả hàm là biến cục bộ ngay từ dòng đầu, nên lời gọi
+            # `ts()` ở trên chết bằng UnboundLocalError kể cả khi `sample_logs`
+            # rỗng và dòng dưới không bao giờ chạy.
+            moc_gio = f" [{le.timestamp}]" if le.timestamp else ""
+            lines.append(f"  [{le.level}]{moc_gio} {le.message}")
 
     lines.append("")
     lines.append("Agent đang xây dựng giả thuyết nguyên nhân...")
@@ -113,7 +117,7 @@ def status_diagnosed(
 ) -> str:
     """🧠 CHẨN ĐOÁN — comment khi đã xác định nguyên nhân."""
     lines = [
-        f"🧠 [{_ts()}] CHẨN ĐOÁN NGUYÊN NHÂN",
+        f"🧠 [{ts()}] CHẨN ĐOÁN NGUYÊN NHÂN",
         "",
         f"Nguyên nhân: {hypothesis.statement}",
         f"Độ tin cậy: {hypothesis.confidence:.0%}",
@@ -124,7 +128,7 @@ def status_diagnosed(
         lines.append("")
         lines.append("Deploy liên quan:")
         lines.append(f"  • Version: {d.version}")
-        lines.append(f"  • Deploy lúc: {_ts(d.deployed_at)}")
+        lines.append(f"  • Deploy lúc: {ts(d.deployed_at)}")
         lines.append(f"  • Thay đổi: {d.change_note or '—'}")
 
     if hypothesis.reasoning:
@@ -155,7 +159,7 @@ def status_proposed(
     params_str = ", ".join(f"{k}={v}" for k, v in proposal.params.items()) if proposal.params else "—"
 
     lines = [
-        f"⚡ [{_ts()}] ĐỀ XUẤT KHẮC PHỤC",
+        f"⚡ [{ts()}] ĐỀ XUẤT KHẮC PHỤC",
         "",
         f"Hành động: {action_display}",
         f"Đối tượng: {proposal.target}",
@@ -181,7 +185,7 @@ def status_proposed(
 def status_approved(approved_by: str) -> str:
     """✅ PHÊ DUYỆT — comment khi on-call đã duyệt."""
     return (
-        f"✅ [{_ts()}] ĐÃ PHÊ DUYỆT\n"
+        f"✅ [{ts()}] ĐÃ PHÊ DUYỆT\n"
         f"\n"
         f"Người phê duyệt: {approved_by}\n"
         f"Agent bắt đầu thực thi hành động khắc phục..."
@@ -198,7 +202,7 @@ def status_executing(proposal: RemediationProposal) -> str:
     action_display = action_map.get(proposal.action, f"Đang thực thi: {proposal.action}")
 
     return (
-        f"🔧 [{_ts()}] ĐANG THỰC THI\n"
+        f"🔧 [{ts()}] ĐANG THỰC THI\n"
         f"\n"
         f"{action_display} — {proposal.target}\n"
         f"Vui lòng đợi xác nhận..."
@@ -215,7 +219,7 @@ def status_improving(
     baseline_str = f" (baseline: {baseline:.2f})" if baseline is not None else ""
 
     return (
-        f"📈 [{_ts()}] CẢI THIỆN\n"
+        f"📈 [{ts()}] CẢI THIỆN\n"
         f"\n"
         f"Metric: {metric_name}\n"
         f"Trước khắc phục: {previous_value:.2f}\n"
@@ -233,7 +237,7 @@ def status_worsening(
 ) -> str:
     """🔴 CHUYỂN BIẾN XẤU — comment khi metric xấu đi sau remediation."""
     lines = [
-        f"🔴 [{_ts()}] CHUYỂN BIẾN XẤU",
+        f"🔴 [{ts()}] CHUYỂN BIẾN XẤU",
         "",
         f"Metric: {metric_name}",
         f"Trước: {previous_value:.2f}",
@@ -253,7 +257,7 @@ def status_resolved(
 ) -> str:
     """✅ RESOLVED — comment khi incident được đóng."""
     lines = [
-        f"✅ [{_ts()}] INCIDENT RESOLVED",
+        f"✅ [{ts()}] INCIDENT RESOLVED",
         "",
         f"Tổng thời gian xử lý: {duration_minutes} phút",
     ]
@@ -270,12 +274,22 @@ def status_escalated(
     severity_from: Severity,
     severity_to: Severity,
     waiting_minutes: float,
+    threshold_minutes: float | None = None,
 ) -> str:
-    """⏰ NÂNG MỨC — comment khi escalate do chờ duyệt quá lâu."""
+    """⏰ NÂNG MỨC — comment khi escalate do chờ duyệt quá lâu.
+
+    `threshold_minutes` là ngưỡng làm Agent quyết định nâng. Bản comment cũ có
+    ghi nó, bản này bỏ mất — mà thiếu nó thì người trực đọc "đã chờ 12 phút"
+    không biết vì sao Agent nâng đúng lúc đó chứ không phải sớm hay muộn hơn.
+    Con số đó chính là thứ biến một hành động tự động thành hành động giải
+    thích được.
+    """
+    ngưỡng = f" (ngưỡng {threshold_minutes:.0f} phút)" if threshold_minutes is not None else ""
     return (
-        f"⏰ [{_ts()}] NÂNG MỨC ĐỘ\n"
+        f"⏰ [{ts()}] NÂNG MỨC ĐỘ\n"
         f"\n"
-        f"Đề xuất khắc phục đã chờ duyệt {waiting_minutes:.0f} phút mà chưa ai phê duyệt.\n"
+        f"Đề xuất khắc phục đã chờ duyệt {waiting_minutes:.0f} phút{ngưỡng} "
+        f"mà chưa ai phê duyệt.\n"
         f"Nâng mức: {severity_from.value} → {severity_to.value}\n"
         f"\n"
         f"Sự cố vẫn đang diễn ra. Agent KHÔNG tự thực thi — vẫn chờ người phê duyệt."

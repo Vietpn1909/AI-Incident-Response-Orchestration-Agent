@@ -287,3 +287,47 @@ class TestStatusEscalated:
     def test_khong_tu_thuc_thi(self):
         result = status_escalated(Severity.P2, Severity.P1, 15.0)
         assert "Agent KHÔNG tự thực thi" in result
+
+
+def test_nang_muc_ghi_ro_nguong():
+    """Comment nâng mức phải nói ngưỡng, không chỉ nói đã chờ bao lâu.
+
+    Bản comment cũ trong escalate.py có ghi ngưỡng; khi chuyển sang
+    status_escalated() nó bị bỏ mất. Thiếu con số đó thì người trực đọc "đã chờ
+    12 phút" mà không biết vì sao Agent nâng đúng lúc đó — đúng thứ biến một
+    hành động tự động thành hành động giải thích được.
+    """
+    from src.models.incident import Severity
+    from src.services.status_updater import status_escalated
+
+    co_nguong = status_escalated(Severity.P3, Severity.P2, 12.0, 10.0)
+    assert "12 phút" in co_nguong
+    assert "ngưỡng 10 phút" in co_nguong
+
+    # Không truyền ngưỡng thì bỏ hẳn cụm đó, không in "ngưỡng None"
+    khong_nguong = status_escalated(Severity.P3, Severity.P2, 12.0)
+    assert "ngưỡng" not in khong_nguong
+    assert "None" not in khong_nguong
+
+
+def test_thu_thap_log_chay_duoc_khi_khong_co_sample():
+    """Chốt lỗi che tên: biến cục bộ trùng tên hàm `ts()` của chính module.
+
+    Python coi hàm là biến cục bộ ngay từ dòng đầu, nên lời gọi `ts()` ở đầu hàm
+    chết bằng UnboundLocalError KỂ CẢ khi nhánh gán biến không bao giờ chạy.
+    """
+    from datetime import UTC, datetime
+
+    from src.models.incident import IncidentSignal, Severity
+    from src.services.status_updater import status_logs_collected
+
+    signal = IncidentSignal(
+        affected_service="service-thanh-toan",
+        severity=Severity.P2,
+        detected_at=datetime.now(UTC),
+        metric_name="p95",
+        metric_value=4.0,
+        threshold=2.0,
+        breached_for_seconds=60.0,
+    )
+    assert "THU THẬP LOG" in status_logs_collected(signal, 100, 5, None)

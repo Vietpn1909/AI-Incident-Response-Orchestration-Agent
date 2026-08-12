@@ -24,15 +24,13 @@ placeholder.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from src.models.incident import (
     ActionItem,
     Hypothesis,
     Incident,
     Postmortem,
-    RemediationProposal,
-    TimelineEvent,
 )
 from src.services.jira import JiraClient
 
