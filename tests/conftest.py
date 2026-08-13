@@ -53,6 +53,10 @@ _BIEN_GOI_RA_NGOAI = (
     "SMTP_APP_PASSWORD",
     "INCIDENT_ALERT_RECIPIENTS",
     "POSTMORTEM_RECIPIENTS",
+    # Đường ra cũ nhất mà danh sách này bỏ sót. `hypothesize` gọi LLM thật qua
+    # DashScope, nên MỌI test chạy graph với tín hiệu thật đều đi ra mạng.
+    "OPENAI_API_KEY",
+    "LLM_BASE_URL",
 )
 
 
