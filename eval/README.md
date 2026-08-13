@@ -2,6 +2,12 @@
 
 **Chủ sở hữu: Trung** · Deliverable **#10**
 
+Ngoài phép đo live cho UC-1–UC-3 bên dưới, bộ baseline offline 30 case nằm tại
+[`eval/cases/README.md`](cases/README.md). Bộ này đo cả **incident recall**,
+precision, tỷ lệ báo nhầm, severity, bằng chứng và top-1 nguyên nhân gốc mà
+không gọi Docker/Jira Cloud/LLM; đường tích hợp dừng ở `FakeJiraClient` sau khi
+node detect quyết định mở incident.
+
 Mentor đã nhấn mạnh chính chỗ này: *"khi làm bài toán AI, vấn đề đo đạc như thế nào — cần phải clear, cần đo đạc cụ thể"*. Đây là câu trả lời.
 
 ## Hai họ metric — đừng lẫn vào nhau
