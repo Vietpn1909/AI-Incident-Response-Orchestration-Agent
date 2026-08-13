@@ -226,3 +226,341 @@ def test_loi_jira_khong_thanh_500_trong_rong(
 
     assert response.status_code == expected_http
     assert expected_text in response.json()["detail"]
+
+
+# ──────────────────────────────── postmortem tự động sau remediation
+
+
+@pytest.fixture
+def jira_with_smtp(monkeypatch: pytest.MonkeyPatch) -> FakeJiraClient:
+    """Fixture có đủ SMTP config để postmortem email chạy được."""
+    client = FakeJiraClient(verbose=False)
+
+    def fake_settings() -> Settings:
+        return Settings(
+            jira_webhook_secret=SECRET,
+            jira_agent_account_id=AGENT,
+            jira_base_url="https://example.atlassian.net",
+            jira_email="agent@example.com",
+            jira_api_token="token",
+            jira_project_key="KAN",
+            smtp_email="test@gmail.com",
+            smtp_app_password="xxxx-xxxx-xxxx-xxxx",
+            postmortem_recipients="leader@gmail.com,oncall@gmail.com",
+        )
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(webhooks, "get_settings", fake_settings)
+    monkeypatch.setattr(webhooks, "build_jira_client", lambda: client)
+    # Mock GmailClient để không gửi email thật
+    monkeypatch.setattr(
+        webhooks,
+        "GmailClient",
+        lambda email, password: _FakeGmailClient(),
+    )
+    return client
+
+
+class _FakeGmailClient:
+    """Mock GmailClient — trả success mà không gọi SMTP."""
+
+    def send(self, **kwargs):
+        from src.services.email_client import EmailResult
+        return EmailResult(
+            success=True,
+            recipients=kwargs.get("to", []),
+            subject=kwargs.get("subject", ""),
+        )
+
+
+def _create_incident_with_hypothesis(jira: FakeJiraClient) -> str:
+    """Tạo incident có đầy đủ signal + hypothesis + proposal để postmortem sinh được."""
+    from src.models.incident import (
+        DeployRecord,
+        Hypothesis,
+        MetricEvidence,
+    )
+
+    signal = IncidentSignal(
+        affected_service="service-thanh-toan",
+        severity=Severity.P2,
+        detected_at=datetime(2026, 8, 12, 10, 0, tzinfo=UTC),
+        metric_name="p95_latency",
+        metric_value=3.3,
+        threshold=2.0,
+        evidence=[
+            MetricEvidence(name="db_pool", value=48, unit="/50", baseline=15),
+        ],
+    )
+    key = jira.create_incident(signal)
+
+    # Thêm hypothesis
+    hypothesis = Hypothesis(
+        statement="Connection pool cạn kiệt do retry logic",
+        confidence=0.9,
+        evidence=signal.evidence,
+        related_deploy=DeployRecord(
+            service="service-thanh-toan",
+            version="v1.4.2",
+            deployed_at=datetime(2026, 8, 12, 9, 45, tzinfo=UTC),
+            deployed_by="ci",
+            commit_sha="abc",
+            change_note="retry logic",
+        ),
+    )
+    jira.post_hypothesis(key, hypothesis)
+
+    # Thêm proposal
+    jira.post_proposal(
+        key,
+        RemediationProposal(
+            action="rollback",
+            target="service-thanh-toan",
+            params={"to_version": "v1.4.1"},
+        ),
+    )
+
+    return key
+
+
+def test_postmortem_gui_sau_remediation_thanh_cong(jira_with_smtp: FakeJiraClient):
+    """Pipeline đầy đủ: approve → execute → postmortem email gửi thành công."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.approve_as_human(key)
+
+    response = _post({"issue": {"key": key}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["succeeded"] is True
+    assert body["postmortem_sent"] is True
+
+    # Kiểm tra có comment ghi nhận đã gửi postmortem
+    timeline = jira_with_smtp.get_incident(key).timeline
+    assert any("postmortem" in e.detail.lower() for e in timeline)
+
+
+def test_postmortem_bo_qua_khi_thieu_smtp(jira: FakeJiraClient, incident_key: str):
+    """Thiếu SMTP config → bỏ qua postmortem, không lỗi."""
+    jira.approve_as_human(incident_key)
+
+    response = _post({"issue": {"key": incident_key}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["succeeded"] is True
+    assert body["postmortem_sent"] is False
+
+
+def test_postmortem_bo_qua_khi_remediation_that_bai(
+    monkeypatch: pytest.MonkeyPatch, jira_with_smtp: FakeJiraClient
+):
+    """Remediation thất bại → không gửi postmortem."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.approve_as_human(key)
+
+    # Mock execute để trả thất bại
+    from src.services.remediation import RemediationResult
+
+    def fake_execute(*args, **kwargs):
+        return RemediationResult(
+            action="rollback",
+            target="service-thanh-toan",
+            succeeded=False,
+            detail="Rollback failed",
+            approved_by="human",
+        )
+
+    monkeypatch.setattr(webhooks, "execute", fake_execute)
+
+    response = _post({"issue": {"key": key}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["succeeded"] is False
+    assert body["postmortem_sent"] is False
+
+
+def test_postmortem_loi_khong_pha_webhook(
+    monkeypatch: pytest.MonkeyPatch, jira_with_smtp: FakeJiraClient
+):
+    """Postmortem lỗi → webhook vẫn trả 200 (remediation đã thành công)."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.approve_as_human(key)
+
+    # Mock generate_postmortem để ném exception
+    def broken_generator(*args, **kwargs):
+        raise RuntimeError("Postmortem service down")
+
+    monkeypatch.setattr(webhooks, "generate_postmortem", broken_generator)
+
+    response = _post({"issue": {"key": key}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["succeeded"] is True
+    assert body["postmortem_sent"] is False
+
+
+def test_postmortem_response_co_flag(jira: FakeJiraClient, incident_key: str):
+    """Response luôn có trường postmortem_sent."""
+    jira.approve_as_human(incident_key)
+
+    response = _post({"issue": {"key": incident_key}})
+
+    assert response.status_code == 200
+    assert "postmortem_sent" in response.json()
+
+
+# ──────────────────────── POST /webhooks/jira/resolved (manual resolution)
+
+
+def _post_resolved(body: dict, secret: str | None = SECRET):
+    headers = {"X-Webhook-Secret": secret} if secret else {}
+    return client.post("/webhooks/jira/resolved", json=body, headers=headers)
+
+
+def test_resolved_thieu_secret_thi_401(jira: FakeJiraClient, incident_key: str):
+    assert _post_resolved({"issue": {"key": incident_key}}, secret=None).status_code == 401
+
+
+def test_resolved_sai_secret_thi_401(jira: FakeJiraClient, incident_key: str):
+    assert _post_resolved({"issue": {"key": incident_key}}, secret="sai").status_code == 401
+
+
+def test_resolved_khong_co_key_thi_422(jira: FakeJiraClient):
+    assert _post_resolved({"foo": "bar"}).status_code == 422
+
+
+def test_resolved_issue_khong_ton_tai(jira: FakeJiraClient):
+    response = _post_resolved({"issue": {"key": "KAN-99999"}})
+    assert response.status_code == 404
+
+
+def test_resolved_manual_thanh_cong(jira_with_smtp: FakeJiraClient):
+    """Happy path: incident resolved thủ công, có ghi chú."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    # Chuyển thẳng sang Resolved bằng account người (bỏ qua Remediating)
+    jira_with_smtp.transition(key, IncidentState.RESOLVED, actor=FakeJiraClient.HUMAN_ACCOUNT_ID)
+
+    response = _post_resolved({
+        "issue": {"key": key},
+        "resolution_note": "Tự restart lại service bằng kubectl rollout restart",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolution"] == "manual"
+    assert body["resolution_note"] == "Tự restart lại service bằng kubectl rollout restart"
+    assert body["postmortem_sent"] is True
+
+
+def test_resolved_manual_khong_co_ghi_chu(jira_with_smtp: FakeJiraClient):
+    """Resolved mà không ghi chú — vẫn gửi postmortem, ghi 'thủ công'."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.transition(key, IncidentState.RESOLVED, actor=FakeJiraClient.HUMAN_ACCOUNT_ID)
+
+    response = _post_resolved({"issue": {"key": key}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolution"] == "manual"
+    assert body["resolution_note"] is None
+    assert body["postmortem_sent"] is True
+
+
+def test_resolved_bo_qua_khi_thieu_smtp(jira: FakeJiraClient, incident_key: str):
+    """Thiếu SMTP → bỏ qua postmortem, không lỗi."""
+    jira.transition(incident_key, IncidentState.RESOLVED, actor=FakeJiraClient.HUMAN_ACCOUNT_ID)
+
+    response = _post_resolved({"issue": {"key": incident_key}})
+
+    assert response.status_code == 200
+    assert response.json()["postmortem_sent"] is False
+
+
+def test_resolved_comment_ghi_chu_tren_war_room(jira_with_smtp: FakeJiraClient):
+    """Ghi chú giải quyết phải xuất hiện trên war room."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.transition(key, IncidentState.RESOLVED, actor=FakeJiraClient.HUMAN_ACCOUNT_ID)
+
+    _post_resolved({
+        "issue": {"key": key},
+        "resolution_note": "Đã tăng connection pool lên 100",
+    })
+
+    timeline = jira_with_smtp.get_incident(key).timeline
+    assert any("GHI CHÚ GIẢI QUYẾT THỦ CÔNG" in e.detail for e in timeline)
+
+
+def test_resolved_co_comment_postmortem_tren_war_room(jira_with_smtp: FakeJiraClient):
+    """Comment postmortem ghi nhận là manual resolution."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.transition(key, IncidentState.RESOLVED, actor=FakeJiraClient.HUMAN_ACCOUNT_ID)
+
+    _post_resolved({"issue": {"key": key}})
+
+    timeline = jira_with_smtp.get_incident(key).timeline
+    assert any("manual resolution" in e.detail.lower() for e in timeline)
+
+
+# ────────────── Fix #1: Auto-transition sang Resolved sau execute
+
+
+def test_auto_resolved_sau_execute_thanh_cong(jira: FakeJiraClient, incident_key: str):
+    """Sau execute thành công, ticket phải tự chuyển sang Resolved."""
+    jira.approve_as_human(incident_key)
+
+    _post({"issue": {"key": incident_key}})
+
+    incident = jira.get_incident(incident_key)
+    assert incident.state == IncidentState.RESOLVED
+
+
+def test_khong_auto_resolved_khi_execute_that_bai(
+    monkeypatch: pytest.MonkeyPatch, jira_with_smtp: FakeJiraClient
+):
+    """Execute thất bại → KHÔNG chuyển sang Resolved."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.approve_as_human(key)
+
+    from src.services.remediation import RemediationResult
+
+    def fake_execute(*args, **kwargs):
+        return RemediationResult(
+            action="rollback",
+            target="service-thanh-toan",
+            succeeded=False,
+            detail="Rollback failed",
+            approved_by="human",
+        )
+
+    monkeypatch.setattr(webhooks, "execute", fake_execute)
+
+    _post({"issue": {"key": key}})
+
+    incident = jira_with_smtp.get_incident(key)
+    assert incident.state == IncidentState.REMEDIATING
+
+
+# ────────────── Fix #2: Guard chống gửi postmortem 2 lần
+
+
+def test_resolved_skip_khi_da_co_postmortem(jira_with_smtp: FakeJiraClient):
+    """Nếu Rule #1 đã gửi postmortem, Rule #2 fire thì skip."""
+    key = _create_incident_with_hypothesis(jira_with_smtp)
+    jira_with_smtp.approve_as_human(key)
+
+    # Rule #1: execute + postmortem + auto-resolve
+    resp1 = _post({"issue": {"key": key}})
+    assert resp1.status_code == 200
+    assert resp1.json()["postmortem_sent"] is True
+
+    # Rule #2 fire (vì ticket vừa sang Resolved)
+    resp2 = _post_resolved({"issue": {"key": key}})
+
+    assert resp2.status_code == 200
+    body = resp2.json()
+    assert body["resolution"] == "already_handled"
+    assert body["postmortem_sent"] is False
+

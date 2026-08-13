@@ -1,0 +1,33 @@
+# Theme nền cho cả hai trang Streamlit (`ui/war_room.py`, `ui/status_page.py`).
+#
+# Vì sao cần file này chứ không nhét hết vào CSS inject:
+# Streamlit tự vẽ rất nhiều thứ theo theme của nó — header, sidebar, widget,
+# thanh progress, nền của `st.code`, màu chữ mặc định. CSS inject chỉ đè được
+# phần bên ngoài; đặt nền tối ở đây thì mọi widget sinh ra đã đúng tông sẵn,
+# CSS chỉ còn lo phần trang trí (thẻ, viền neon, khối log). Thiếu file này thì
+# trang mở ra nền trắng rồi mới nhấp nháy sang tối, và các widget Streamlit tự
+# vẽ vẫn giữ màu sáng.
+#
+# ⚠️ Streamlit đọc file này theo **thư mục đang đứng lúc chạy lệnh**, không phải
+# theo vị trí file .py. Chạy đúng như docs/demo-runbook.md — đứng ở gốc repo:
+#     API_URL=http://localhost:8000 streamlit run ui/war_room.py
+# Đứng trong `ui/` mà chạy `streamlit run war_room.py` là mất theme này.
+#
+# ⚠️ Chỉ dùng các khoá theme đã có từ lâu (base/primaryColor/backgroundColor/
+# secondaryBackgroundColor/textColor/font). `ui/requirements.txt` cố tình không
+# ghim version Streamlit, nên khoá mới xuất hiện ở bản gần đây có thể làm bản cũ
+# báo lỗi cấu hình ngay lúc khởi động.
+
+[theme]
+base = "dark"
+# Xanh cyan — dùng cho nút chính, link, thanh độ tin cậy. Đây là màu "trung
+# tính, đang hoạt động"; đỏ/cam để dành riêng cho báo động, không dùng trang trí.
+primaryColor = "#38bdf8"
+backgroundColor = "#090d16"
+# Nền cấp hai: nền thẻ, nền code block, nền widget.
+secondaryBackgroundColor = "#111827"
+textColor = "#e5e7eb"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
