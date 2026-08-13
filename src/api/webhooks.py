@@ -27,7 +27,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from src.config import get_settings
-from src.models.incident import IncidentState
+from src.models.incident import Incident, IncidentState
 from src.services.email_client import Attachment, GmailClient
 from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
@@ -424,7 +424,7 @@ async def jira_resolved_webhook(
 def _try_send_postmortem_manual(
     client: JiraClient,
     jira_key: str,
-    incident: "Incident",
+    incident: Incident,
     *,
     resolved_by: str,
     resolution_note: str,
@@ -524,6 +524,7 @@ def _try_send_postmortem_manual(
 
 def _now():
     """Helper — tránh import datetime ở top-level chỉ cho một chỗ."""
-    from datetime import UTC, datetime as dt
+    from datetime import UTC
+    from datetime import datetime as dt
     return dt.now(UTC)
 
