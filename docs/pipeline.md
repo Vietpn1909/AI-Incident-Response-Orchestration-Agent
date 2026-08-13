@@ -275,13 +275,23 @@ Trước khi thực thi, hệ thống phải **xác minh** qua 3 cửa kiểm tr
 
 **Chuyện gì xảy ra:** Sau khi qua cả 3 cửa, hệ thống thực hiện hành động đã được duyệt.
 
-Ví dụ: **Rollback service-thanh-toan về v1.4.1** — hệ thống tự động quay lại phiên bản cũ ổn định.
+Ví dụ: **Rollback service-thanh-toan về v1.4.1**.
+
+> ⚠️ Đọc kỹ đoạn này: **hành động KHÔNG thực sự chạy.** Xem lưu ý ngay bên dưới,
+> và mục "Khoảng cách giữa THIẾT KẾ và HIỆN TRẠNG" ở cuối tài liệu.
 
 Agent viết 2 comment lên Jira:
 1. "✅ PHÊ DUYỆT — Được duyệt bởi `Nguyễn Văn A`"
 2. "⚡ ĐÃ THỰC THI — Rollback service-thanh-toan về v1.4.1 — thành công"
 
-> *Lưu ý hiện tại:* Hành động đang ở chế độ **mô phỏng** (ghi log thay vì thực thi thật) vì các service demo chưa hỗ trợ rollback thật.
+> *Lưu ý hiện tại:* Hành động đang ở chế độ **mô phỏng** — `remediation.execute()`
+> ghi một dòng log rồi trả `succeeded=True` **cắm cứng**, không kiểm tra gì và
+> không đụng vào service nào. Sau khi duyệt, p95 vẫn nguyên như cũ.
+>
+> Lý do là **lựa chọn phạm vi**, không phải vì service demo không làm được: với
+> UC-4 thì "rollback" chính là tắt cờ `SIMULATE_MISSING_MIGRATION` rồi khởi động
+> lại container, hiệu ứng đo được ngay (lỗi 100% → 0%). Nhóm ưu tiên làm đúng
+> phần chẩn đoán và cổng phê duyệt trước.
 
 ---
 
@@ -557,11 +567,47 @@ flowchart TD
 
 ## Trigger tự động: Jira Automation Rules
 
-Pipeline hoạt động tự động nhờ **2 Jira Automation Rules**:
+Chặng Jira → backend **thiết kế** để chạy tự động bằng 2 Automation Rule:
 
 | Rule | Trigger | Gọi endpoint | Mục đích |
 |------|---------|--------------|----------|
 | **Rule #1** | Ticket chuyển sang "Remediating" | `POST /webhooks/jira` | Thực thi remediation |
 | **Rule #2** | Ticket chuyển sang "Resolved" | `POST /webhooks/jira/resolved` | Sinh postmortem cho manual resolution |
 
-> Xem hướng dẫn cài đặt chi tiết tại [`docs/jira-setup.md`](jira-setup.md)
+> ⚠️ **Tính tới 13/08/2026, CẢ HAI rule đều CHƯA được cấu hình trên Jira.**
+>
+> Nghĩa là chặng này hiện **không tự chạy**. Sau khi người trực bấm
+> `Remediating`, phải kích webhook bằng tay:
+>
+> ```bash
+> python scripts/duyet.py KAN-23
+> ```
+>
+> Script đó gọi đúng endpoint mà Rule #1 sẽ gọi, cùng payload — nên cả ba lớp
+> kiểm tra vẫn chạy nguyên vẹn. Nó thay cái *cầu nối*, không thay cái *cổng*.
+>
+> Cấu hình rule mất ~20 phút và phải bấm trên giao diện Jira. Xem
+> [`docs/jira-setup.md`](jira-setup.md) Phần 5 (cấu hình) và Phần 6.2 (cách kích
+> tay trong lúc chưa có rule).
+
+---
+
+## ⚠️ Khoảng cách giữa THIẾT KẾ và HIỆN TRẠNG
+
+Tài liệu này mô tả pipeline **như thiết kế**. Ba chỗ hiện chưa khớp — ghi ra đây
+để người đọc không nhầm, và để người trình bày nói chủ động thay vì bị hỏi vặn.
+
+| Chỗ | Thiết kế | Hiện trạng 13/08/2026 |
+|---|---|---|
+| **Thi hành khắc phục** | đổi phiên bản / scale service thật | **Mô phỏng** — `remediation.execute()` ghi log rồi trả `succeeded=True` cắm cứng. Không đụng vào service nào |
+| **Jira Automation Rule** | Jira tự gọi webhook | **Chưa cấu hình** — gõ `scripts/duyet.py` bằng tay |
+| **Xác nhận đã hồi phục** | đo lại sau khi sửa, đóng vòng | **Chưa có node `verify`** — không ai kiểm hành động khắc phục có tác dụng không |
+
+Ba chỗ này nối liền nhau: phải có thi hành thật rồi mới `verify` được, và có
+`verify` thì vòng *sửa → đo → xác nhận khỏi* mới khép.
+
+Lý do dừng ở mô phỏng là **lựa chọn phạm vi**, không phải vì service demo không
+làm được — thực tế với UC-4 (deploy thiếu migration) thì "rollback" chính là tắt
+cờ `SIMULATE_MISSING_MIGRATION` rồi khởi động lại container, và hiệu ứng đo được
+ngay: tỷ lệ lỗi 100% → 0%. Nhóm ưu tiên làm đúng phần chẩn đoán và cổng phê
+duyệt trước, vì đó là chỗ sai thì hỏng thật.
