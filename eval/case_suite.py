@@ -618,10 +618,10 @@ def main() -> None:
     metrics = payload["metrics"]
     cm = metrics["confusion_matrix"]
     print(f"{'='*60}")
-    print(f"  EVALUATION RESULTS — {metrics['case_count']} test cases")
+    print(f"  EVALUATION RESULTS -- {metrics['case_count']} test cases")
     print(f"{'='*60}")
     print(f"  Confusion Matrix: TP={cm['TP']}  FN={cm['FN']}  FP={cm['FP']}  TN={cm['TN']}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"  Recall       = {_percent(metrics['incident_recall'])}")
     print(f"  Precision    = {_percent(metrics['incident_precision'])}")
     print(f"  F1 Score     = {_percent(metrics['f1_score'])}")
@@ -630,7 +630,7 @@ def main() -> None:
     print(f"  Specificity  = {_percent(metrics['specificity'])}")
     print(f"  False Alarm  = {_percent(metrics['false_alarm_rate'])}")
     print(f"  MCC          = {_mcc_fmt(metrics['mcc'])}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"  Severity Acc = {_percent(metrics['severity_accuracy'])}")
     print(f"  Root Cause   = {_percent(metrics['top1_root_cause_accuracy'])}")
     print(f"  Noisy Reject = {_percent(metrics['noisy_rejection_rate'])}")

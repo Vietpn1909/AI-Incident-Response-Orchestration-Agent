@@ -130,6 +130,54 @@ uvicorn src.main:app --reload --port 8000
 
 > ⚠️ **Bước 2 không được bỏ qua.** `.git/hooks/` không nằm trong repo nên mỗi clone phải tự cài. Thiếu hook thì AI usage log chỉ ghi local và **không bao giờ submit** lên grading server — mất deliverable #4 mà không có cảnh báo nào.
 
+### Biến môi trường
+
+Tất cả cấu hình đọc từ `.env`. Copy `.env.example` rồi điền giá trị:
+
+| Biến | Bắt buộc | Mô tả | Ví dụ |
+|------|:--------:|-------|-------|
+| `OPENAI_API_KEY` | ✅ | API key cho LLM (OpenAI, OpenRouter, DashScope) | `sk-or-v1-...` |
+| `LLM_BASE_URL` | | Base URL endpoint tương thích OpenAI. Để trống nếu dùng OpenAI | `https://openrouter.ai/api/v1` |
+| `MODEL_NAME` | | Tên model. Mặc định `gpt-4o-mini` | `qwen/qwen3-235b-a22b` |
+| `LLM_TEMPERATURE` | | Nhiệt độ LLM. Khuyến nghị `0.2` cho chẩn đoán ổn định | `0.2` |
+| `DATABASE_URL` | ✅ | PostgreSQL cho bảng deploy_history | `postgresql://demo:demo@localhost:5432/demo` |
+| `JIRA_BASE_URL` | ✅ | URL workspace Jira Cloud | `https://yourteam.atlassian.net` |
+| `JIRA_EMAIL` | ✅ | Email tài khoản Jira | `admin@gmail.com` |
+| `JIRA_API_TOKEN` | ✅ | API token Jira (tạo tại id.atlassian.com) | `ATATT3x...` |
+| `JIRA_PROJECT_KEY` | ✅ | Key của project trên Jira | `KAN` |
+| `JIRA_AGENT_ACCOUNT_ID` | ✅ | accountId của account Agent (dùng cho HITL) | `712020:1bf02a7a-...` |
+| `JIRA_WEBHOOK_SECRET` | ✅ | Shared secret cho webhook endpoint | `KVBM+glk...` |
+| `SMTP_EMAIL` | | Email gửi cảnh báo và postmortem (Gmail) | `alert@gmail.com` |
+| `SMTP_APP_PASSWORD` | | App Password Gmail (bật 2FA trước) | `xxxx xxxx xxxx xxxx` |
+| `POSTMORTEM_RECIPIENTS` | | Email nhận postmortem, phân cách bằng dấu phẩy | `leader@gmail.com,oncall@gmail.com` |
+| `DAILY_API_KEY` | | API key Daily.co cho phòng họp khẩn | `ec8797...` |
+| `LANGCHAIN_API_KEY` | | LangSmith API key cho AI logging | `lsv2_...` |
+
+> 💡 **Thiếu SMTP/Daily thì Agent vẫn chạy**, chỉ mất email cảnh báo và phòng họp. Thiếu Jira thì dùng `--fake`.
+
+### Sample Queries (PromQL)
+
+Dùng trên Prometheus UI (`http://localhost:9090`):
+
+```promql
+# P95 latency theo service (chỉ số Agent theo dõi)
+histogram_quantile(0.95,
+  sum by (service, le) (
+    rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])
+  )
+)
+
+# Request rate theo service
+sum by (service) (rate(http_requests_total{handler!="/metrics"}[1m]))
+
+# Error rate (5xx)
+sum by (service) (rate(http_requests_total{status=~"5.."}[1m]))
+  / sum by (service) (rate(http_requests_total[1m]))
+
+# Login failure rate (UC-3: credential stuffing)
+sum by (service) (rate(http_requests_total{handler="/login", status=~"4.."}[1m]))
+```
+
 ## Git Workflow
 
 ```bash
@@ -225,7 +273,7 @@ Rồi mở http://localhost:9090 và query p95 — xem [demo/README.md](demo/REA
 | 7 | Pitch Deck | `presentation/` | Long | ⏳ |
 | 8 | Weekly Journal | `JOURNAL.md` | Đức | 🔄 |
 | 9 | Worklog | `WORKLOG.md` | Cả đội | 🔄 |
-| 10 | Evaluation Evidence | `eval/results/` | Trung | ⏳ |
+| 10 | Evaluation Evidence | `eval/EVIDENCE.md` + `eval/results/` | Trung | ✅ |
 
 ## Giải thích thuật ngữ
 

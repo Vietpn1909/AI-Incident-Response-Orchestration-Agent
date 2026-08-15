@@ -34,10 +34,17 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from src.agents.detection_loop import run_cycle  # noqa: E402
 from src.agents.war_room_registry import WarRoomRegistry  # noqa: E402
 from src.config import configure_logging, force_utf8_console, get_settings  # noqa: E402
+from src.models.incident import IncidentState  # noqa: E402
+from src.services.email_client import Attachment, GmailClient  # noqa: E402
+from src.services.hitl import ApprovalError, assert_human_approved  # noqa: E402
 from src.services.incident_alert import IncidentAlerter, build_alerter  # noqa: E402
 from src.services.jira import FakeJiraClient, JiraClient, RealJiraClient  # noqa: E402
 from src.services.meeting_room import DailyRoomClient, build_room_client  # noqa: E402
+from src.services.postmortem_generator import generate_postmortem  # noqa: E402
+from src.services.postmortem_report import build_detailed_report, build_email_body  # noqa: E402
 from src.services.prometheus import PrometheusClient  # noqa: E402
+from src.services.remediation import UnsupportedActionError, execute  # noqa: E402
+from src.services.status_updater import status_approved  # noqa: E402
 
 logger = logging.getLogger("agent")
 
@@ -110,6 +117,186 @@ def build_alert(no_mail: bool) -> IncidentAlerter | None:
     return build_alerter()
 
 
+# ---------------------------------------------------------------------------
+# Poll Jira: tự phát hiện khi người duyệt chuyển ticket sang Remediating
+# ---------------------------------------------------------------------------
+
+def poll_jira_approvals(
+    jira: JiraClient,
+    awaiting_keys: set[str],
+    already_executed: set[str],
+) -> None:
+    """Kiểm tra các ticket đang Awaiting Approval, nếu có người chuyển sang
+    Remediating → verify HITL → execute → postmortem → email.
+
+    Đây là thay thế cho webhook pattern: Agent TỰ phát hiện approval mỗi vòng
+    quét, không cần Jira Automation hay script tay.
+
+    Args:
+        jira: Client Jira (thật hoặc giả).
+        awaiting_keys: Tập Jira key đang chờ duyệt (được cập nhật bên ngoài).
+        already_executed: Tập Jira key đã execute rồi, tránh chạy lại.
+    """
+    settings = get_settings()
+    agent_id = settings.jira_agent_account_id
+
+    if not agent_id:
+        return  # Thiếu agent account ID thì không kiểm tra được HITL
+
+    for jira_key in list(awaiting_keys):
+        if jira_key in already_executed:
+            continue
+
+        try:
+            # Hỏi Jira: ai đã chuyển ticket sang Remediating?
+            approved_by = assert_human_approved(
+                jira, jira_key, agent_account_id=agent_id,
+            )
+        except ApprovalError:
+            # Chưa có ai duyệt, hoặc Agent tự duyệt → bỏ qua, vòng sau hỏi lại
+            continue
+        except Exception as error:
+            logger.debug("%s: lỗi khi kiểm tra approval (%s)", jira_key, error)
+            continue
+
+        # ĐÃ ĐƯỢC DUYỆT bởi người thật
+        logger.info("🟢 %s: NGƯỜI DUYỆT %s — bắt đầu thực thi", jira_key, approved_by)
+        _execute_approved(jira, jira_key, approved_by)
+        already_executed.add(jira_key)
+        awaiting_keys.discard(jira_key)
+
+
+def _execute_approved(jira: JiraClient, jira_key: str, approved_by: str) -> None:
+    """Thực thi remediation + sinh postmortem + gửi email cho 1 ticket đã duyệt.
+
+    Luồng giống hệt `POST /webhooks/jira` nhưng chạy bên trong agent loop thay
+    vì qua HTTP.
+    """
+    settings = get_settings()
+
+    # 1. Đọc incident và proposal
+    try:
+        incident = jira.get_incident(jira_key)
+    except Exception as error:
+        logger.error("%s: không đọc được incident (%s)", jira_key, error)
+        return
+
+    proposal = incident.proposal if incident else None
+    if proposal is None:
+        logger.warning("%s: không có đề xuất khắc phục — bỏ qua", jira_key)
+        return
+
+    # 2. Comment: PHÊ DUYỆT
+    try:
+        jira.add_comment(jira_key, status_approved(approved_by))
+    except Exception:
+        logger.warning("%s: không post được comment phê duyệt", jira_key)
+
+    # 3. Execute remediation
+    try:
+        result = execute(
+            proposal.action, proposal.target,
+            approved_by=approved_by, params=proposal.params,
+        )
+    except UnsupportedActionError as error:
+        try:
+            jira.add_comment(jira_key, f"⚠️ Không thi hành được: {error}")
+        except Exception:
+            pass
+        logger.error("%s: hành động không được phép (%s)", jira_key, error)
+        return
+
+    # 4. Comment: kết quả thực thi
+    try:
+        jira.add_comment(jira_key, result.as_comment())
+    except Exception:
+        logger.warning("%s: không post được kết quả thực thi", jira_key)
+
+    logger.info(
+        "✅ %s: %s → %s — %s%s",
+        jira_key, result.action, result.target,
+        "thành công" if result.succeeded else "THẤT BẠI",
+        " (mô phỏng)" if result.simulated else "",
+    )
+
+    # 5. Sinh postmortem + gửi email
+    if result.succeeded:
+        _try_send_postmortem(jira, jira_key)
+
+        # 6. Chuyển sang Resolved
+        try:
+            jira.transition(jira_key, IncidentState.RESOLVED)
+            logger.info("✅ %s: chuyển sang Resolved", jira_key)
+        except Exception:
+            logger.warning("%s: không chuyển được sang Resolved — kéo tay trên Jira", jira_key)
+
+
+def _try_send_postmortem(jira: JiraClient, jira_key: str) -> bool:
+    """Sinh postmortem từ dữ liệu thật và gửi email."""
+    settings = get_settings()
+
+    if not settings.smtp_email or not settings.smtp_app_password:
+        logger.info("%s: bỏ qua postmortem email — SMTP chưa cấu hình", jira_key)
+        return False
+
+    recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
+    if not recipients:
+        logger.info("%s: bỏ qua postmortem email — POSTMORTEM_RECIPIENTS trống", jira_key)
+        return False
+
+    try:
+        incident = jira.get_incident(jira_key)
+        if incident is None:
+            logger.warning("%s: không đọc được incident — bỏ qua postmortem", jira_key)
+            return False
+
+        # Sinh postmortem
+        postmortem = generate_postmortem(incident, jira=jira)
+        incident.postmortem = postmortem
+
+        # Attach lên Jira
+        try:
+            jira.attach_postmortem(jira_key, postmortem)
+        except Exception:
+            logger.warning("%s: không attach được postmortem lên Jira", jira_key)
+
+        # Render HTML
+        jira_base_url = settings.jira_base_url
+        email_body = build_email_body(incident, jira_base_url=jira_base_url)
+        report_html = build_detailed_report(incident, jira_base_url=jira_base_url)
+
+        # Gửi email
+        gmail = GmailClient(settings.smtp_email, settings.smtp_app_password)
+        services_str = ", ".join(incident.affected_services)
+        result = gmail.send(
+            to=recipients,
+            subject=f"[Postmortem] {incident.severity.value} — {services_str} — {jira_key}",
+            body_html=email_body,
+            attachments=[
+                Attachment(
+                    filename=f"postmortem_{jira_key}.html",
+                    content=report_html.encode("utf-8"),
+                    mime_type="text/html",
+                )
+            ],
+        )
+
+        if result.success:
+            logger.info("📧 %s: postmortem gửi tới %s", jira_key, ", ".join(recipients))
+            try:
+                jira.add_comment(jira_key, f"📧 Đã gửi báo cáo postmortem tới {', '.join(recipients)}")
+            except Exception:
+                pass
+            return True
+
+        logger.warning("%s: gửi postmortem thất bại — %s", jira_key, result.error)
+        return False
+
+    except Exception:
+        logger.exception("%s: lỗi khi sinh/gửi postmortem", jira_key)
+        return False
+
+
 def main() -> int:
     # PHẢI đứng trước parse_args(): argparse in `--help` và thông báo lỗi tham
     # số thẳng ra stdout ngay trong parse_args(), tức trước cả configure_logging().
@@ -136,6 +323,12 @@ def main() -> int:
     # lại mở một phòng họp mới và gửi lại một mail cho cùng một sự cố.
     registry = WarRoomRegistry()
 
+    # Trí nhớ cho bước poll Jira approval — giữ xuyên các vòng quét.
+    # `awaiting_keys`: các ticket đang chờ duyệt, được thêm vào khi Agent đề xuất.
+    # `already_executed`: các ticket đã execute rồi, tránh chạy lặp.
+    awaiting_keys: set[str] = set()
+    already_executed: set[str] = set()
+
     logger.info("Bắt đầu quét %s mỗi %.0fs. Ctrl+C để dừng.", args.prometheus, args.interval)
     cycles = 0
     try:
@@ -159,6 +352,14 @@ def main() -> int:
                     logger.info("%s: phòng họp %s", jira_key, url)
                 if result.updated:
                     logger.info("Vòng %d: cập nhật %s (đã có incident mở)", cycles, ", ".join(result.updated))
+
+            # Thu thập các ticket vừa đề xuất remediation ở vòng này
+            for key in result.opened + result.updated:
+                awaiting_keys.add(key)
+
+            # Poll Jira: kiểm tra xem có ticket nào được người duyệt chưa
+            if awaiting_keys - already_executed:
+                poll_jira_approvals(jira, awaiting_keys, already_executed)
 
             if args.once:
                 break
