@@ -1,10 +1,10 @@
-# Bộ 30 test case incident
+# Bộ 50 test case incident
 
 Bộ dữ liệu này phục vụ **error analysis** cho baseline phát hiện incident:
 
-- 10 case `normal`;
-- 15 case `incident`;
-- 5 case `noisy`/mơ hồ.
+- 15 case `normal`;
+- 25 case `incident`;
+- 10 case `noisy`/mơ hồ.
 
 Ground truth được ghi trong
 [`incident_cases.json`](incident_cases.json) **trước khi chạy** Agent. Các case

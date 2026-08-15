@@ -1,32 +1,32 @@
 # Kết quả bộ 30 test case incident
 
-- Sinh lúc: `2026-08-13T16:35:47.754519+00:00`
-- Dataset SHA-256: `9e17ed1135392df2f30947deb5d31b6583f8bb2a1026180035ded4eedc1d4ea1`
+- Sinh lúc: `2026-08-15T03:49:50.389319+00:00`
+- Dataset SHA-256: `e6f14ef6755fb10b207462560654a6c93b1d99adff2d9a751064e640527355be`
 - Phạm vi recall: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
 
 ## Chỉ số chính
 
 | Chỉ số | Kết quả | Cách tính |
 |---|---:|---|
-| Recall incident | **93.33%** | TP / (TP + FN) |
-| Precision incident | 93.33% | TP / (TP + FP) |
-| Tỷ lệ báo nhầm | 6.67% | FP / (FP + TN) |
-| Đúng severity | 100.00% | severity đúng / incident đã bắt được |
-| Top-1 nguyên nhân gốc (rule baseline) | 46.67% | đúng nguyên nhân / 15 incident thật |
-| Đủ bằng chứng metric | 93.33% | đủ evidence / 15 incident thật |
-| Từ chối case nhiễu | 80.00% | noisy không mở incident / 5 |
+| Recall incident | **72.00%** | TP / (TP + FN) |
+| Precision incident | 72.00% | TP / (TP + FP) |
+| Tỷ lệ báo nhầm | 28.00% | FP / (FP + TN) |
+| Đúng severity | 88.89% | severity đúng / incident đã bắt được |
+| Top-1 nguyên nhân gốc (rule baseline) | 28.00% | đúng nguyên nhân / 15 incident thật |
+| Đủ bằng chứng metric | 72.00% | đủ evidence / 15 incident thật |
+| Từ chối case nhiễu | 50.00% | noisy không mở incident / 5 |
 
 ## Confusion matrix
 
-- TP=14, FN=1, FP=1, TN=14.
+- TP=18, FN=7, FP=7, TN=18.
 - Recall chỉ đo khả năng không bỏ lọt incident; phải đọc cùng precision và tỷ lệ báo nhầm.
 
 ## Đối chiếu với rule trực tiếp
 
 | Đường chạy | Recall | Precision | Báo nhầm |
 |---|---:|---:|---:|
-| Pipeline phát hiện → Jira | 93.33% | 93.33% | 6.67% |
-| Gọi rule trực tiếp | 93.33% | 93.33% | 6.67% |
+| Pipeline phát hiện → Jira | 72.00% | 72.00% | 28.00% |
+| Gọi rule trực tiếp | 72.00% | 72.00% | 28.00% |
 
 Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không mở Jira thì lỗi nằm ở wiring/collector, không phải threshold.
 
@@ -34,11 +34,11 @@ Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không m�
 
 | Họ | TP | FN | Recall |
 |---|---:|---:|---:|
-| UC-1 | 5 | 0 | 100.00% |
-| UC-2 | 4 | 0 | 100.00% |
-| UC-3 | 3 | 0 | 100.00% |
-| UC-4 | 1 | 0 | 100.00% |
-| dependency | 1 | 0 | 100.00% |
+| UC-1 | 6 | 2 | 75.00% |
+| UC-2 | 4 | 1 | 80.00% |
+| UC-3 | 4 | 1 | 80.00% |
+| UC-4 | 2 | 1 | 66.67% |
+| dependency | 2 | 1 | 66.67% |
 | deployment | 0 | 1 | 0.00% |
 
 ## Kết quả từng case
@@ -75,6 +75,26 @@ Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không m�
 | A03 | noisy | UC-2 | TN | — | — |
 | A04 | noisy | deployment | TN | — | — |
 | A05 | noisy | UC-3 | FP | P2 | — |
+| N11 | normal | UC-4 | TN | — | — |
+| N12 | normal | UC-2 | FP | P1 | — |
+| N13 | normal | UC-2 | TN | — | — |
+| N14 | normal | UC-1 | FP | P3 | — |
+| N15 | normal | UC-3 | TN | — | — |
+| I16 | incident | UC-4 | FN | — | sai |
+| I17 | incident | UC-1 | TP | P3 | sai |
+| I18 | incident | UC-2 | FN | — | sai |
+| I19 | incident | UC-3 | FN | — | sai |
+| I20 | incident | UC-3 | TP | P2 | sai |
+| I21 | incident | dependency | TP | P2 | sai |
+| I22 | incident | dependency | FN | — | sai |
+| I23 | incident | UC-1 | FN | — | sai |
+| I24 | incident | UC-4 | TP | P4 | sai |
+| I25 | incident | UC-1 | FN | — | sai |
+| A06 | noisy | UC-3 | FP | P2 | — |
+| A07 | noisy | UC-4 | FP | P2 | — |
+| A08 | noisy | UC-2 | FP | P1 | — |
+| A09 | noisy | UC-2 | TN | — | — |
+| A10 | noisy | UC-1 | FP | P4 | — |
 
 ## Top error để cải thiện tiếp
 
@@ -87,6 +107,22 @@ Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không m�
 - `I14` — Payment service unreachable từ service phụ thuộc: TP, top-1 nguyên nhân sai.
 - `I15` — Lỗi xác thực backend bị metric tổng hợp che khuất: FN, top-1 nguyên nhân sai.
 - `A05` — Load test đăng nhập đã được phê duyệt nhưng vượt ngưỡng: FP.
+- `N12` — Blue-green deploy: 2 restarts (= ngưỡng crashloop) nhưng là deploy có chủ đích: FP.
+- `N14` — Health check prober thay đổi: error_rate 3% nhưng toàn từ synthetic checks: FP.
+- `I16` — Silent data corruption: service trả 200 OK nhưng ghi sai DB, metric hoàn toàn xanh: FN, top-1 nguyên nhân sai.
+- `I17` — Partial outage 1 pod: 5% request timeout 30s nhưng p95 tổng hợp bình thường: TP, top-1 nguyên nhân sai.
+- `I18` — Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ: FN, top-1 nguyên nhân sai.
+- `I19` — Evasive credential stuffing: 0.95/s suốt 24h — ngay dưới mọi ngưỡng detection: FN, top-1 nguyên nhân sai.
+- `I20` — DDoS làm cover cho credential stuffing: latency alert che khuất auth attack: TP, top-1 nguyên nhân sai.
+- `I21` — Thundering herd: sau recovery, 100% client reconnect đồng thời gây pool cạn lần 2: TP, top-1 nguyên nhân sai.
+- `I22` — Supply chain attack: dependency gửi data ra ngoài, metric hoàn toàn bình thường: FN, top-1 nguyên nhân sai.
+- `I23` — Monitoring blind spot: Prometheus exporter crash, metric trả 0 — service thật ra đang chết: FN, top-1 nguyên nhân sai.
+- `I24` — Config drift tích lũy: 10 deploy nhỏ mỗi cái +10% latency, tổng = 2.5× baseline: TP, top-1 nguyên nhân sai.
+- `I25` — Race condition: double-charge khi 2 request trùng idempotency key, không lỗi 5xx: FN, top-1 nguyên nhân sai.
+- `A06` — Pentest hợp pháp: 30 auth failures/s từ pentester đã được approve: FP.
+- `A07` — Canary tự rollback: p95=3s trong 35s nhưng canary đã tự kill trước impact lan rộng: FP.
+- `A08` — Chaos engineering đã lên lịch: 3 lần restart có chủ đích trong maintenance window: FP.
+- `A10` — CDN traffic shift: p95 tăng 3× do route change nhưng vẫn dưới ngưỡng cứng: FP.
 
 ## Giới hạn
 
