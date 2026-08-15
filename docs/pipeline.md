@@ -284,14 +284,24 @@ Agent viết 2 comment lên Jira:
 1. "✅ PHÊ DUYỆT — Được duyệt bởi `Nguyễn Văn A`"
 2. "⚡ ĐÃ THỰC THI — Rollback service-thanh-toan về v1.4.1 — thành công"
 
-> *Lưu ý hiện tại:* Hành động đang ở chế độ **mô phỏng** — `remediation.execute()`
-> ghi một dòng log rồi trả `succeeded=True` **cắm cứng**, không kiểm tra gì và
-> không đụng vào service nào. Sau khi duyệt, p95 vẫn nguyên như cũ.
+> *Trạng thái 15/08/2026:* **`rollback` trên `service-thanh-toan` chạy THẬT.**
 >
-> Lý do là **lựa chọn phạm vi**, không phải vì service demo không làm được: với
-> UC-4 thì "rollback" chính là tắt cờ `SIMULATE_MISSING_MIGRATION` rồi khởi động
-> lại container, hiệu ứng đo được ngay (lỗi 100% → 0%). Nhóm ưu tiên làm đúng
-> phần chẩn đoán và cổng phê duyệt trước.
+> Đo trọn vòng: bật UC-4 → 100% request lỗi → duyệt → thi hành → **120/120
+> request thành công, Prometheus ghi 125 request toàn 2xx trong 2 phút**. Cờ
+> trong container đi từ `1` về `0`.
+>
+> Bật bằng `REMEDIATION_REAL=1`, **mặc định TẮT**. Ba hành động còn lại
+> (`scale_up`, `increase_pool`, `rate_limit`) vẫn mô phỏng — chúng cần đổi cấu
+> hình hoặc dựng thêm instance, không đảo được bằng một lệnh.
+>
+> Bốn lớp chặn, vì đây là chỗ Agent chạy lệnh `docker` thật:
+> 1. **Cổng HITL** — thiếu `approved_by` là ném lỗi ngay
+> 2. **Tắt theo mặc định**, và chỉ đúng chuỗi `"1"` mới bật (`true`/`yes` không tính)
+> 3. **Danh sách trắng theo CẶP** `(hành động, đối tượng)` — không theo hành động
+> 4. **Lệnh cố định**, không `shell=True`; `target` chỉ dùng để TRA bảng, không
+>    bao giờ nối vào dòng lệnh
+>
+> Xem [`src/services/executors.py`](../src/services/executors.py).
 
 ---
 
@@ -574,21 +584,30 @@ Chặng Jira → backend **thiết kế** để chạy tự động bằng 2 Aut
 | **Rule #1** | Ticket chuyển sang "Remediating" | `POST /webhooks/jira` | Thực thi remediation |
 | **Rule #2** | Ticket chuyển sang "Resolved" | `POST /webhooks/jira/resolved` | Sinh postmortem cho manual resolution |
 
-> ⚠️ **Tính tới 13/08/2026, CẢ HAI rule đều CHƯA được cấu hình trên Jira.**
+> ✅ **Rule #1 đã cấu hình và chạy được — đo ngày 15/08/2026.**
 >
-> Nghĩa là chặng này hiện **không tự chạy**. Sau khi người trực bấm
-> `Remediating`, phải kích webhook bằng tay:
+> Kéo KAN-36 sang `Remediating` bằng account người, không gõ lệnh nào: sau ~30
+> giây issue tự có thêm 2 comment (8 → 10).
 >
-> ```bash
-> python scripts/duyet.py KAN-23
+> ```
+> ✅ ĐÃ PHÊ DUYỆT — Người phê duyệt: 712020:fd2ca790…
+> Đã thực thi khắc phục (mô phỏng): rollback → service-thanh-toan — thành công
 > ```
 >
-> Script đó gọi đúng endpoint mà Rule #1 sẽ gọi, cùng payload — nên cả ba lớp
-> kiểm tra vẫn chạy nguyên vẹn. Nó thay cái *cầu nối*, không thay cái *cổng*.
+> Giao diện Jira mới gọi rule là **flow**: Space settings → Automation →
+> **Create flow** → *Create from scratch*. Trigger là **"Work item transitioned"**
+> với *To status* = `Remediating`, action là **"Send web request"**.
 >
-> Cấu hình rule mất ~20 phút và phải bấm trên giao diện Jira. Xem
-> [`docs/jira-setup.md`](jira-setup.md) Phần 5 (cấu hình) và Phần 6.2 (cách kích
-> tay trong lúc chưa có rule).
+> ⚠️ Rule #2 (`/webhooks/jira/resolved`) **chưa cấu hình**. Endpoint đã kiểm sẵn
+> sàng: sai secret → 401, đúng secret → 200.
+>
+> ⚠️ Render free tier **ngủ sau 15 phút** không có request, tỉnh lại mất 30–60s.
+> Rule gọi lúc nó ngủ sẽ timeout và **fail im lặng**. Trước mỗi buổi demo:
+> `curl https://p-035-incident-agent.onrender.com/health`
+>
+> Khi rule chưa bật hoặc hỏng, vẫn kích tay được bằng `python scripts/duyet.py
+> KAN-xx` — script gọi đúng endpoint đó, cùng payload, nên cả ba lớp kiểm tra
+> chạy nguyên vẹn.
 
 ---
 
@@ -599,8 +618,8 @@ Tài liệu này mô tả pipeline **như thiết kế**. Ba chỗ hiện chưa 
 
 | Chỗ | Thiết kế | Hiện trạng 13/08/2026 |
 |---|---|---|
-| **Thi hành khắc phục** | đổi phiên bản / scale service thật | **Mô phỏng** — `remediation.execute()` ghi log rồi trả `succeeded=True` cắm cứng. Không đụng vào service nào |
-| **Jira Automation Rule** | Jira tự gọi webhook | **Chưa cấu hình** — gõ `scripts/duyet.py` bằng tay |
+| **Thi hành khắc phục** | đổi phiên bản / scale service thật | **UC-4 chạy THẬT** từ 15/08 (`REMEDIATION_REAL=1`) — đo được lỗi 100% → 0%. Ba hành động còn lại vẫn mô phỏng |
+| **Jira Automation Rule** | 2 rule tự gọi webhook | Rule #1 (`Remediating`) **đã chạy** từ 15/08. Rule #2 (`Resolved`) chưa cấu hình |
 | **Xác nhận đã hồi phục** | đo lại sau khi sửa, đóng vòng | **Chưa có node `verify`** — không ai kiểm hành động khắc phục có tác dụng không |
 
 Ba chỗ này nối liền nhau: phải có thi hành thật rồi mới `verify` được, và có

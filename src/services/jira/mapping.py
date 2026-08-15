@@ -22,6 +22,19 @@ from src.models.incident import IncidentState, Severity
 # Label đánh dấu issue do Agent tạo — để JQL lọc khỏi issue thường của đội.
 INCIDENT_LABEL = "incident"
 
+#: Label cho **việc cần làm sau sự cố**, do postmortem sinh ra.
+#:
+#: Phải KHÁC `INCIDENT_LABEL`. Trước 15/08, `create_subtasks()` gắn luôn nhãn
+#: `incident` cho mọi subtask nó tạo, mà JQL tìm incident lọc đúng bằng nhãn đó —
+#: nên hành động khắc phục bị đếm là sự cố.
+#:
+#: Đo trên board ngày 15/08: 5 issue "đang mở", nhưng 3 trong đó là
+#: "Thêm alert cho pool saturation > 80%", "Review max connection pool size",
+#: "Review monitoring" — việc cần làm, không phải sự cố. War room hiện
+#: "Đang xảy ra (5)" trong khi chỉ có 2 sự cố thật, và cả ba đều là P4 không có
+#: service nào, nhìn như dữ liệu hỏng.
+ACTION_ITEM_LABEL = "postmortem-action"
+
 _SEVERITY_PREFIX = "severity-"
 _SERVICE_PREFIX = "service-"
 
@@ -174,4 +187,14 @@ def jql_open_incidents(project_key: str, affected_service: str | None = None) ->
     if affected_service:
         clauses.append(f'labels = "{service_label(affected_service)}"')
     clauses.append(f'status != "{jira_status_for(IncidentState.RESOLVED)}"')
+    # Loại subtask ra khỏi kết quả — thắt lưng lẫn dây đeo.
+    #
+    # Đổi nhãn trong `create_subtasks()` chỉ chữa cho issue tạo TỪ NAY. Những
+    # subtask đã mang nhãn `incident` từ trước vẫn nằm trên board và vẫn lọt vào
+    # mọi truy vấn, mà xoá issue trên Jira thì không lấy lại được.
+    #
+    # Điều kiện này còn đúng về mặt ngữ nghĩa: một war room là issue độc lập,
+    # không bao giờ là subtask của issue khác. Nên lọc theo `issuetype` là mô tả
+    # đúng thứ đang tìm, không phải mẹo vá tạm.
+    clauses.append("issuetype != Subtask")
     return " AND ".join(clauses) + " ORDER BY created DESC"

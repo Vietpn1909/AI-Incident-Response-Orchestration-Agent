@@ -16,6 +16,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.services import executors
+
 logger = logging.getLogger(__name__)
 
 #: Các hành động Agent được phép đề xuất. Hành động ngoài danh sách này bị từ
@@ -95,6 +97,27 @@ def execute(
 
     params = params or {}
     logger.info("Thực thi %s trên %s, params=%s, duyệt bởi %s", action, target, params, approved_by)
+
+    # Thử thi hành THẬT trước. Trả `None` nghĩa là cặp (action, target) không nằm
+    # trong danh sách trắng, hoặc `REMEDIATION_REAL` chưa bật — khi đó rơi về
+    # đường mô phỏng y như cũ.
+    #
+    # Đặt ở đây chứ không ở webhook: mọi lời gọi `execute()` đều phải đi qua cùng
+    # một chỗ, kể cả lời gọi từ test hay script. Để webhook tự quyết thì sẽ có
+    # ngày xuất hiện đường thứ hai không qua kiểm.
+    that = executors.thi_hanh_that(action, target)
+    if that is not None:
+        thanh_cong, mo_ta = that
+        logger.info("Thi hành THẬT %s → %s: %s", action, target, "OK" if thanh_cong else "HỎNG")
+        return RemediationResult(
+            action=action,
+            target=target,
+            succeeded=thanh_cong,
+            detail=mo_ta,
+            approved_by=approved_by,
+            simulated=False,
+            params=params,
+        )
 
     detail = _describe(action, target, params)
     return RemediationResult(
