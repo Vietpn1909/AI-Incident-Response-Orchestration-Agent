@@ -284,14 +284,24 @@ Agent viết 2 comment lên Jira:
 1. "✅ PHÊ DUYỆT — Được duyệt bởi `Nguyễn Văn A`"
 2. "⚡ ĐÃ THỰC THI — Rollback service-thanh-toan về v1.4.1 — thành công"
 
-> *Lưu ý hiện tại:* Hành động đang ở chế độ **mô phỏng** — `remediation.execute()`
-> ghi một dòng log rồi trả `succeeded=True` **cắm cứng**, không kiểm tra gì và
-> không đụng vào service nào. Sau khi duyệt, p95 vẫn nguyên như cũ.
+> *Trạng thái 15/08/2026:* **`rollback` trên `service-thanh-toan` chạy THẬT.**
 >
-> Lý do là **lựa chọn phạm vi**, không phải vì service demo không làm được: với
-> UC-4 thì "rollback" chính là tắt cờ `SIMULATE_MISSING_MIGRATION` rồi khởi động
-> lại container, hiệu ứng đo được ngay (lỗi 100% → 0%). Nhóm ưu tiên làm đúng
-> phần chẩn đoán và cổng phê duyệt trước.
+> Đo trọn vòng: bật UC-4 → 100% request lỗi → duyệt → thi hành → **120/120
+> request thành công, Prometheus ghi 125 request toàn 2xx trong 2 phút**. Cờ
+> trong container đi từ `1` về `0`.
+>
+> Bật bằng `REMEDIATION_REAL=1`, **mặc định TẮT**. Ba hành động còn lại
+> (`scale_up`, `increase_pool`, `rate_limit`) vẫn mô phỏng — chúng cần đổi cấu
+> hình hoặc dựng thêm instance, không đảo được bằng một lệnh.
+>
+> Bốn lớp chặn, vì đây là chỗ Agent chạy lệnh `docker` thật:
+> 1. **Cổng HITL** — thiếu `approved_by` là ném lỗi ngay
+> 2. **Tắt theo mặc định**, và chỉ đúng chuỗi `"1"` mới bật (`true`/`yes` không tính)
+> 3. **Danh sách trắng theo CẶP** `(hành động, đối tượng)` — không theo hành động
+> 4. **Lệnh cố định**, không `shell=True`; `target` chỉ dùng để TRA bảng, không
+>    bao giờ nối vào dòng lệnh
+>
+> Xem [`src/services/executors.py`](../src/services/executors.py).
 
 ---
 
@@ -608,7 +618,7 @@ Tài liệu này mô tả pipeline **như thiết kế**. Ba chỗ hiện chưa 
 
 | Chỗ | Thiết kế | Hiện trạng 13/08/2026 |
 |---|---|---|
-| **Thi hành khắc phục** | đổi phiên bản / scale service thật | **Mô phỏng** — `remediation.execute()` ghi log rồi trả `succeeded=True` cắm cứng. Không đụng vào service nào |
+| **Thi hành khắc phục** | đổi phiên bản / scale service thật | **UC-4 chạy THẬT** từ 15/08 (`REMEDIATION_REAL=1`) — đo được lỗi 100% → 0%. Ba hành động còn lại vẫn mô phỏng |
 | **Jira Automation Rule** | 2 rule tự gọi webhook | Rule #1 (`Remediating`) **đã chạy** từ 15/08. Rule #2 (`Resolved`) chưa cấu hình |
 | **Xác nhận đã hồi phục** | đo lại sau khi sửa, đóng vòng | **Chưa có node `verify`** — không ai kiểm hành động khắc phục có tác dụng không |
 

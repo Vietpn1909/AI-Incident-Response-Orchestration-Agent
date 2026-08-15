@@ -192,10 +192,15 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 > "Jira ghi lại ai làm gì. Agent không sửa được lịch sử này — nên đây là bằng
 > chứng kiểm toán được, không phải lời hứa suông."
 
-**Chủ động nói phần mô phỏng, đừng để bị phát hiện:**
+**Nói rõ hành động nào thật, hành động nào mô phỏng:**
 
-> "Và bọn em ghi rõ ngay ở đây: hành động này đang mô phỏng, nó **không** thực sự
-> rollback. Bọn em không giấu chỗ đó."
+> "Ở kịch bản này hành động là mô phỏng — hệ thống ghi nhận đầy đủ ai duyệt và
+> duyệt cái gì, nhưng chưa đổi phiên bản thật. Bọn em không giấu chỗ đó.
+>
+> Nhưng với kịch bản deploy hỏng thì nó **sửa thật**, và em cho các thầy cô xem
+> ngay bây giờ."
+
+→ chuyển sang màn ⑥.
 
 ---
 
@@ -203,10 +208,12 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 
 **"Sau khi duyệt thì có sửa thật không?"**
 
-> "Không. Phần thi hành đang mô phỏng — ghi nhận đầy đủ ai duyệt, duyệt cái gì,
-> lúc nào, nhưng chưa đổi phiên bản thật. Bọn em ưu tiên làm đúng phần khó trước:
-> chẩn đoán chính xác, và cái khoá không cho AI tự ý hành động. Nối vào công cụ
-> deploy thật là thay một hàm — nhưng nếu cái khoá sai thì có nối cũng không dám dùng."
+> "Có, với kịch bản deploy hỏng. Em bấm duyệt, hệ thống kiểm đúng người rồi thi
+> hành — **tỷ lệ lỗi từ 100% về 0%**, số lấy từ Prometheus chứ không phải em nói.
+>
+> Ba hành động còn lại vẫn mô phỏng vì chúng cần đổi cấu hình hoặc dựng thêm
+> instance, không đảo được bằng một lệnh. Bọn em ưu tiên làm đúng phần khó trước:
+> chẩn đoán chính xác, và cái khoá không cho AI tự ý hành động."
 
 **"Vậy có phải AI Agent thật không?"**
 
@@ -251,7 +258,54 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 
 ---
 
-## Màn dự phòng nếu còn thời gian — UC-4
+## ⑥ Màn mạnh nhất — UC-4 sửa THẬT
+
+Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ 0,048s và pool
+0%. Rồi Agent sửa thật, và hệ thống hồi phục đo được.
+
+```bash
+# ① gây sự cố
+SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
+  docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
+sleep 10 && python eval/run_measurements.py payment-load --seconds 70 --concurrency 3 --pause 0.05
+```
+
+> "Bây giờ không ai thanh toán được. 100% giao dịch thất bại."
+
+```bash
+# ② Agent chẩn đoán — số đo mù, chỉ log nói được
+python scripts/run_agent.py --once
+```
+
+> "Số đo chỉ biết mọi thứ đang hỏng rất nhanh. Nó không nói được vì sao. Agent
+> phải đi đọc log của service mới tìm ra **tên cột còn thiếu**."
+
+**→ Sang Jira, kéo phiếu sang `Remediating`** *(account NGƯỜI)*
+
+```bash
+# ③ thi hành THẬT — bật cờ, mặc định tắt
+REMEDIATION_REAL=1 python scripts/duyet.py KAN-xx
+```
+
+Chờ 20 giây rồi đo lại:
+
+```bash
+for i in $(seq 1 60); do curl -s -o /dev/null -X POST localhost:8001/pay \
+  -H 'Content-Type: application/json' -d "{\"order_id\":\"x-$i\",\"amount\":100}"; done
+```
+
+> "Trước khi duyệt: 100% lỗi. Sau khi duyệt: 0%. Đây không phải mô phỏng — Agent
+> vừa khởi động lại service với cấu hình đã đảo lại."
+
+Đo ngày 15/08: **120/120 request thành công**, Prometheus ghi 125 request toàn
+2xx, cờ trong container đi từ `1` về `0`.
+
+⚠️ `REMEDIATION_REAL` mặc định **TẮT**. Không bật thì mọi hành động vẫn mô phỏng
+— an toàn khi tập, và chỉ bật đúng lúc muốn diễn màn này.
+
+---
+
+## Màn dự phòng nếu còn thời gian — UC-4 (chỉ chẩn đoán)
 
 Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ 0,048s và pool 0%.
 
@@ -279,8 +333,9 @@ SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
 
 ## Việc còn tồn — nói ra nếu được hỏi "còn thiếu gì"
 
-- **Thi hành thật**: hiện mô phỏng. Với UC-4 làm thật được trong ~30 phút và cho
-  hiệu ứng đo được (lỗi 100% → 0%), nhưng chưa làm.
+- **Thi hành thật**: `rollback` trên `service-thanh-toan` **đã chạy thật** từ
+  15/08 — bật bằng `REMEDIATION_REAL=1`, mặc định tắt. Đo trọn vòng: lỗi 100% →
+  0%, 120/120 request thành công. Ba hành động còn lại vẫn mô phỏng.
 - **Jira Automation Rule #1 đã chạy** từ 15/08 — bấm `Remediating` là chuỗi tự
   đi tới cùng. Rule #2 (postmortem khi `Resolved`) chưa cấu hình.
 - ⚠️ **Render free tier ngủ sau 15 phút**, tỉnh lại mất 30–60s, và rule gọi lúc
