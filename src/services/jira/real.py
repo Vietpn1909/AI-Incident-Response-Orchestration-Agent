@@ -42,6 +42,7 @@ from src.models.incident import (
     TimelineEvent,
 )
 from src.services.jira.mapping import (
+    ACTION_ITEM_LABEL,
     INCIDENT_LABEL,
     jira_status_for,
     jql_open_incidents,
@@ -353,7 +354,10 @@ class RealJiraClient:
                         "issuetype": {"name": "Subtask"},
                         "parent": {"key": jira_key},
                         "summary": item.title[:250],
-                        "labels": [INCIDENT_LABEL],
+                        # ⚠️ KHÔNG dùng INCIDENT_LABEL ở đây — xem ghi chú ở
+                        # `ACTION_ITEM_LABEL`. Đây là việc cần làm SAU sự cố,
+                        # không phải một sự cố.
+                        "labels": [ACTION_ITEM_LABEL],
                     }
                 },
             )
@@ -541,7 +545,14 @@ class RealJiraClient:
     def list_incidents(self, only_open: bool = False) -> list[Incident]:
         if only_open:
             return self._search(jql_open_incidents(self._project))
-        jql = f"project = {self._project} AND labels = \"{INCIDENT_LABEL}\" ORDER BY created DESC"
+        # `issuetype != Subtask` cùng lý do như trong `jql_open_incidents()`:
+        # subtask là việc cần làm sau sự cố, không phải sự cố. Thiếu điều kiện
+        # này thì danh sách "tất cả incident" trên war room vẫn lẫn action item
+        # cũ đã mang nhãn `incident` từ trước bản vá 15/08.
+        jql = (
+            f"project = {self._project} AND labels = \"{INCIDENT_LABEL}\" "
+            "AND issuetype != Subtask ORDER BY created DESC"
+        )
         return self._search(jql)
 
     def _timeline_from_changelog(self, jira_key: str) -> list[TimelineEvent]:
