@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import logging
+import math
 import re
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
@@ -329,6 +330,25 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
+def _f_beta(precision: float | None, recall: float | None, beta: float) -> float | None:
+    """F-beta score: beta=1 → F1, beta=2 → F2 (thiên recall)."""
+    if precision is None or recall is None or (precision + recall) == 0:
+        return None
+    b2 = beta * beta
+    return round((1 + b2) * precision * recall / (b2 * precision + recall), 4)
+
+
+def _mcc(tp: int, tn: int, fp: int, fn: int) -> float | None:
+    """Matthews Correlation Coefficient — chỉ số tổng hợp tốt nhất cho binary classification.
+
+    Giá trị: -1 (hoàn toàn sai) → 0 (ngẫu nhiên) → +1 (hoàn toàn đúng).
+    """
+    denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    if denom == 0:
+        return None
+    return round((tp * tn - fp * fn) / denom, 4)
+
+
 def compute_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Tính confusion matrix và các metric đánh giá Agent."""
     confusion = Counter(result["classification"] for result in results)
@@ -341,6 +361,13 @@ def compute_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     true_incidents = [result for result in results if result["expected_incident"]]
     noisy_cases = [result for result in results if result["split"] == "noisy"]
 
+    recall = _ratio(tp, positives)
+    precision = _ratio(tp, tp + fp)
+    f1 = _f_beta(precision, recall, beta=1)
+    f2 = _f_beta(precision, recall, beta=2)
+    mcc = _mcc(tp, tn, fp, fn)
+
+    # --- Per-family: recall + precision + F1 ---
     per_family: dict[str, dict[str, Any]] = {}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for result in results:
@@ -348,27 +375,51 @@ def compute_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     for family, family_results in sorted(grouped.items()):
         family_tp = sum(item["classification"] == "TP" for item in family_results)
         family_fn = sum(item["classification"] == "FN" for item in family_results)
+        family_fp = sum(item["classification"] == "FP" for item in family_results)
+        family_recall = _ratio(family_tp, family_tp + family_fn)
+        family_precision = _ratio(family_tp, family_tp + family_fp)
         per_family[family] = {
             "true_incidents": family_tp + family_fn,
             "true_positives": family_tp,
             "false_negatives": family_fn,
-            "recall": _ratio(family_tp, family_tp + family_fn),
+            "false_positives": family_fp,
+            "recall": family_recall,
+            "precision": family_precision,
+            "f1": _f_beta(family_precision, family_recall, beta=1),
         }
+
+    # --- Severity confusion matrix ---
+    severity_matrix: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    severity_correct_count = 0
+    for item in detected_incidents:
+        expected = item.get("expected_severity") or "?"
+        predicted = item.get("predicted_severity") or "?"
+        severity_matrix[expected][predicted] += 1
+        if item.get("severity_correct") is True:
+            severity_correct_count += 1
+    # Convert to plain dict for JSON serialization
+    severity_matrix_plain = {k: dict(v) for k, v in severity_matrix.items()}
 
     return {
         "case_count": len(results),
         "true_incident_count": positives,
         "negative_count": negatives,
         "confusion_matrix": {key: confusion[key] for key in ("TP", "FN", "FP", "TN")},
-        "incident_recall": _ratio(tp, positives),
-        "incident_precision": _ratio(tp, tp + fp),
-        "false_alarm_rate": _ratio(fp, negatives),
-        "specificity": _ratio(tn, negatives),
+        # --- Core detection metrics ---
+        "incident_recall": recall,
+        "incident_precision": precision,
+        "f1_score": f1,
+        "f2_score": f2,
         "accuracy": _ratio(tp + tn, len(results)),
+        "specificity": _ratio(tn, negatives),
+        "false_alarm_rate": _ratio(fp, negatives),
+        "mcc": mcc,
+        # --- Severity & root cause ---
         "severity_accuracy": _ratio(
-            sum(item["severity_correct"] is True for item in detected_incidents),
+            severity_correct_count,
             len(detected_incidents),
         ),
+        "severity_confusion_matrix": severity_matrix_plain,
         "top1_root_cause_accuracy": _ratio(
             sum(item["root_cause_correct"] is True for item in true_incidents),
             len(true_incidents),
@@ -390,59 +441,99 @@ def _percent(value: float | None) -> str:
     return "N/A" if value is None else f"{value * 100:.2f}%"
 
 
+def _mcc_fmt(value: float | None) -> str:
+    """Format MCC: giá trị -1..+1, không phải phần trăm."""
+    return "N/A" if value is None else f"{value:+.4f}"
+
+
 def render_markdown(payload: dict[str, Any]) -> str:
     metrics = payload["metrics"]
     confusion = metrics["confusion_matrix"]
     lines = [
-        "# Kết quả bộ 30 test case incident",
+        f"# Kết quả đánh giá — {metrics['case_count']} test case",
         "",
         f"- Sinh lúc: `{payload['generated_at']}`",
         f"- Dataset SHA-256: `{payload['dataset_sha256']}`",
-        "- Phạm vi recall: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.",
+        "- Phạm vi: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.",
         "",
-        "## Chỉ số chính",
-        "",
-        "| Chỉ số | Kết quả | Cách tính |",
-        "|---|---:|---|",
-        f"| Recall incident | **{_percent(metrics['incident_recall'])}** | TP / (TP + FN) |",
-        f"| Precision incident | {_percent(metrics['incident_precision'])} | TP / (TP + FP) |",
-        f"| Tỷ lệ báo nhầm | {_percent(metrics['false_alarm_rate'])} | FP / (FP + TN) |",
-        f"| Đúng severity | {_percent(metrics['severity_accuracy'])} | severity đúng / incident đã bắt được |",
-        f"| Top-1 nguyên nhân gốc (rule baseline) | {_percent(metrics['top1_root_cause_accuracy'])} | đúng nguyên nhân / 15 incident thật |",
-        f"| Đủ bằng chứng metric | {_percent(metrics['evidence_coverage'])} | đủ evidence / 15 incident thật |",
-        f"| Từ chối case nhiễu | {_percent(metrics['noisy_rejection_rate'])} | noisy không mở incident / 5 |",
-        "",
-        "## Confusion matrix",
+        "## 1. Confusion Matrix",
         "",
         f"- TP={confusion['TP']}, FN={confusion['FN']}, FP={confusion['FP']}, TN={confusion['TN']}.",
-        "- Recall chỉ đo khả năng không bỏ lọt incident; phải đọc cùng precision và tỷ lệ báo nhầm.",
         "",
-        "## Đối chiếu với rule trực tiếp",
+        "## 2. Bộ chỉ số phát hiện (Detection Metrics)",
         "",
-        "| Đường chạy | Recall | Precision | Báo nhầm |",
-        "|---|---:|---:|---:|",
-        f"| Pipeline phát hiện → Jira | {_percent(metrics['incident_recall'])} | {_percent(metrics['incident_precision'])} | {_percent(metrics['false_alarm_rate'])} |",
-        f"| Gọi rule trực tiếp | {_percent(payload['rule_baseline']['metrics']['incident_recall'])} | {_percent(payload['rule_baseline']['metrics']['incident_precision'])} | {_percent(payload['rule_baseline']['metrics']['false_alarm_rate'])} |",
+        "| Chỉ số | Kết quả | Công thức | Ý nghĩa |",
+        "|---|---:|---|---|",
+        f"| **Recall** | **{_percent(metrics['incident_recall'])}** | TP/(TP+FN) | Khả năng không bỏ lọt incident |",
+        f"| **Precision** | **{_percent(metrics['incident_precision'])}** | TP/(TP+FP) | Tỷ lệ alert đúng |",
+        f"| **F1 Score** | **{_percent(metrics['f1_score'])}** | 2·P·R/(P+R) | Cân bằng Precision-Recall |",
+        f"| **F2 Score** | **{_percent(metrics['f2_score'])}** | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |",
+        f"| **Accuracy** | **{_percent(metrics['accuracy'])}** | (TP+TN)/All | Tổng thể đúng bao nhiêu |",
+        f"| **Specificity** | **{_percent(metrics['specificity'])}** | TN/(TN+FP) | Khả năng nhận diện normal |",
+        f"| **False Alarm Rate** | **{_percent(metrics['false_alarm_rate'])}** | FP/(FP+TN) | Tỷ lệ báo nhầm |",
+        f"| **MCC** | **{_mcc_fmt(metrics['mcc'])}** | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |",
         "",
-        "Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không mở Jira thì lỗi nằm ở wiring/collector, không phải threshold.",
+        "## 3. Chỉ số chất lượng chẩn đoán",
         "",
-        "## Recall theo họ sự cố",
+        "| Chỉ số | Kết quả | Ý nghĩa |",
+        "|---|---:|---|",
+        f"| Severity Accuracy | **{_percent(metrics['severity_accuracy'])}** | Phân loại mức độ đúng (P1-P4) |",
+        f"| Root Cause Accuracy | {_percent(metrics['top1_root_cause_accuracy'])} | Xác định đúng nguyên nhân gốc |",
+        f"| Evidence Coverage | {_percent(metrics['evidence_coverage'])} | Đủ bằng chứng metric |",
+        f"| Noisy Rejection | {_percent(metrics['noisy_rejection_rate'])} | Chặn đúng case nhiễu |",
         "",
-        "| Họ | TP | FN | Recall |",
-        "|---|---:|---:|---:|",
     ]
-    for family, family_metrics in metrics["per_family"].items():
-        if not family_metrics["true_incidents"]:
+
+    # --- Severity Confusion Matrix ---
+    sev_matrix = metrics.get("severity_confusion_matrix", {})
+    if sev_matrix:
+        sev_levels = sorted({lv for row in sev_matrix.values() for lv in row} | set(sev_matrix.keys()))
+        lines.extend([
+            "## 4. Severity Confusion Matrix",
+            "",
+            "| Actual \\ Predicted | " + " | ".join(sev_levels) + " |",
+            "|---" + "|---" * len(sev_levels) + "|",
+        ])
+        for actual in sev_levels:
+            cells = [str(sev_matrix.get(actual, {}).get(pred, 0)) for pred in sev_levels]
+            lines.append(f"| **{actual}** | " + " | ".join(cells) + " |")
+        lines.append("")
+
+    # --- Cross-validation ---
+    lines.extend([
+        "## 5. Đối chiếu Pipeline vs Rule trực tiếp",
+        "",
+        "| Đường chạy | Recall | Precision | F1 | Báo nhầm |",
+        "|---|---:|---:|---:|---:|",
+        f"| Pipeline (detect → Jira) | {_percent(metrics['incident_recall'])} | {_percent(metrics['incident_precision'])} | {_percent(metrics['f1_score'])} | {_percent(metrics['false_alarm_rate'])} |",
+        f"| Rule trực tiếp | {_percent(payload['rule_baseline']['metrics']['incident_recall'])} | {_percent(payload['rule_baseline']['metrics']['incident_precision'])} | {_percent(payload['rule_baseline']['metrics'].get('f1_score'))} | {_percent(payload['rule_baseline']['metrics']['false_alarm_rate'])} |",
+        "",
+        "Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.",
+        "",
+    ])
+
+    # --- Per-family ---
+    lines.extend([
+        "## 6. Metrics theo họ sự cố",
+        "",
+        "| Họ | TP | FN | FP | Recall | Precision | F1 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ])
+    for family, fm in metrics["per_family"].items():
+        if not fm["true_incidents"] and not fm.get("false_positives", 0):
             continue
         lines.append(
-            f"| {family} | {family_metrics['true_positives']} | "
-            f"{family_metrics['false_negatives']} | {_percent(family_metrics['recall'])} |"
+            f"| {family} | {fm['true_positives']} | "
+            f"{fm['false_negatives']} | {fm.get('false_positives', 0)} | "
+            f"{_percent(fm['recall'])} | {_percent(fm.get('precision'))} | "
+            f"{_percent(fm.get('f1'))} |"
         )
 
+    # --- Per-case results ---
     lines.extend(
         [
             "",
-            "## Kết quả từng case",
+            "## 7. Kết quả từng case",
             "",
             "| ID | Nhóm | Họ | Kết quả | Severity | Nguyên nhân gốc |",
             "|---|---|---|---:|---:|---:|",
@@ -461,7 +552,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         for result in payload["results"]
         if result["classification"] in {"FN", "FP"} or result["root_cause_correct"] is False
     ]
-    lines.extend(["", "## Top error để cải thiện tiếp", ""])
+    lines.extend(["", "## 8. Top error để cải thiện tiếp", ""])
     for result in errors:
         reason = result["classification"]
         if result["root_cause_correct"] is False:
@@ -525,13 +616,26 @@ def main() -> None:
     logging.getLogger("src.agents.nodes.detect").setLevel(logging.ERROR)
     payload = run_suite(args.cases, args.output_dir)
     metrics = payload["metrics"]
-    print(
-        f"cases={metrics['case_count']} "
-        f"recall={_percent(metrics['incident_recall'])} "
-        f"precision={_percent(metrics['incident_precision'])} "
-        f"false_alarm={_percent(metrics['false_alarm_rate'])}"
-    )
-    print(f"wrote={args.output_dir}")
+    cm = metrics["confusion_matrix"]
+    print(f"{'='*60}")
+    print(f"  EVALUATION RESULTS — {metrics['case_count']} test cases")
+    print(f"{'='*60}")
+    print(f"  Confusion Matrix: TP={cm['TP']}  FN={cm['FN']}  FP={cm['FP']}  TN={cm['TN']}")
+    print(f"{'─'*60}")
+    print(f"  Recall       = {_percent(metrics['incident_recall'])}")
+    print(f"  Precision    = {_percent(metrics['incident_precision'])}")
+    print(f"  F1 Score     = {_percent(metrics['f1_score'])}")
+    print(f"  F2 Score     = {_percent(metrics['f2_score'])}")
+    print(f"  Accuracy     = {_percent(metrics['accuracy'])}")
+    print(f"  Specificity  = {_percent(metrics['specificity'])}")
+    print(f"  False Alarm  = {_percent(metrics['false_alarm_rate'])}")
+    print(f"  MCC          = {_mcc_fmt(metrics['mcc'])}")
+    print(f"{'─'*60}")
+    print(f"  Severity Acc = {_percent(metrics['severity_accuracy'])}")
+    print(f"  Root Cause   = {_percent(metrics['top1_root_cause_accuracy'])}")
+    print(f"  Noisy Reject = {_percent(metrics['noisy_rejection_rate'])}")
+    print(f"{'='*60}")
+    print(f"  wrote={args.output_dir}")
 
 
 if __name__ == "__main__":

@@ -1,47 +1,65 @@
-# Kết quả bộ 30 test case incident
+# Kết quả đánh giá — 50 test case
 
-- Sinh lúc: `2026-08-15T03:49:50.389319+00:00`
+- Sinh lúc: `2026-08-15T04:12:14.822399+00:00`
 - Dataset SHA-256: `e6f14ef6755fb10b207462560654a6c93b1d99adff2d9a751064e640527355be`
-- Phạm vi recall: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
+- Phạm vi: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
 
-## Chỉ số chính
-
-| Chỉ số | Kết quả | Cách tính |
-|---|---:|---|
-| Recall incident | **72.00%** | TP / (TP + FN) |
-| Precision incident | 72.00% | TP / (TP + FP) |
-| Tỷ lệ báo nhầm | 28.00% | FP / (FP + TN) |
-| Đúng severity | 88.89% | severity đúng / incident đã bắt được |
-| Top-1 nguyên nhân gốc (rule baseline) | 28.00% | đúng nguyên nhân / 15 incident thật |
-| Đủ bằng chứng metric | 72.00% | đủ evidence / 15 incident thật |
-| Từ chối case nhiễu | 50.00% | noisy không mở incident / 5 |
-
-## Confusion matrix
+## 1. Confusion Matrix
 
 - TP=18, FN=7, FP=7, TN=18.
-- Recall chỉ đo khả năng không bỏ lọt incident; phải đọc cùng precision và tỷ lệ báo nhầm.
 
-## Đối chiếu với rule trực tiếp
+## 2. Bộ chỉ số phát hiện (Detection Metrics)
 
-| Đường chạy | Recall | Precision | Báo nhầm |
-|---|---:|---:|---:|
-| Pipeline phát hiện → Jira | 72.00% | 72.00% | 28.00% |
-| Gọi rule trực tiếp | 72.00% | 72.00% | 28.00% |
+| Chỉ số | Kết quả | Công thức | Ý nghĩa |
+|---|---:|---|---|
+| **Recall** | **72.00%** | TP/(TP+FN) | Khả năng không bỏ lọt incident |
+| **Precision** | **72.00%** | TP/(TP+FP) | Tỷ lệ alert đúng |
+| **F1 Score** | **72.00%** | 2·P·R/(P+R) | Cân bằng Precision-Recall |
+| **F2 Score** | **72.00%** | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |
+| **Accuracy** | **72.00%** | (TP+TN)/All | Tổng thể đúng bao nhiêu |
+| **Specificity** | **72.00%** | TN/(TN+FP) | Khả năng nhận diện normal |
+| **False Alarm Rate** | **28.00%** | FP/(FP+TN) | Tỷ lệ báo nhầm |
+| **MCC** | **+0.4400** | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |
 
-Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không mở Jira thì lỗi nằm ở wiring/collector, không phải threshold.
+## 3. Chỉ số chất lượng chẩn đoán
 
-## Recall theo họ sự cố
+| Chỉ số | Kết quả | Ý nghĩa |
+|---|---:|---|
+| Severity Accuracy | **88.89%** | Phân loại mức độ đúng (P1-P4) |
+| Root Cause Accuracy | 28.00% | Xác định đúng nguyên nhân gốc |
+| Evidence Coverage | 72.00% | Đủ bằng chứng metric |
+| Noisy Rejection | 50.00% | Chặn đúng case nhiễu |
 
-| Họ | TP | FN | Recall |
-|---|---:|---:|---:|
-| UC-1 | 6 | 2 | 75.00% |
-| UC-2 | 4 | 1 | 80.00% |
-| UC-3 | 4 | 1 | 80.00% |
-| UC-4 | 2 | 1 | 66.67% |
-| dependency | 2 | 1 | 66.67% |
-| deployment | 0 | 1 | 0.00% |
+## 4. Severity Confusion Matrix
 
-## Kết quả từng case
+| Actual \ Predicted | P1 | P2 | P3 | P4 |
+|---|---|---|---|---|
+| **P1** | 7 | 1 | 0 | 0 |
+| **P2** | 0 | 5 | 1 | 0 |
+| **P3** | 0 | 0 | 2 | 0 |
+| **P4** | 0 | 0 | 0 | 2 |
+
+## 5. Đối chiếu Pipeline vs Rule trực tiếp
+
+| Đường chạy | Recall | Precision | F1 | Báo nhầm |
+|---|---:|---:|---:|---:|
+| Pipeline (detect → Jira) | 72.00% | 72.00% | 72.00% | 28.00% |
+| Rule trực tiếp | 72.00% | 72.00% | 72.00% | 28.00% |
+
+Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
+
+## 6. Metrics theo họ sự cố
+
+| Họ | TP | FN | FP | Recall | Precision | F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| UC-1 | 6 | 2 | 2 | 75.00% | 75.00% | 75.00% |
+| UC-2 | 4 | 1 | 2 | 80.00% | 66.67% | 72.73% |
+| UC-3 | 4 | 1 | 2 | 80.00% | 66.67% | 72.73% |
+| UC-4 | 2 | 1 | 1 | 66.67% | 66.67% | 66.67% |
+| dependency | 2 | 1 | 0 | 66.67% | 100.00% | 80.00% |
+| deployment | 0 | 1 | 0 | 0.00% | N/A | N/A |
+
+## 7. Kết quả từng case
 
 | ID | Nhóm | Họ | Kết quả | Severity | Nguyên nhân gốc |
 |---|---|---|---:|---:|---:|
@@ -96,7 +114,7 @@ Hai đường phải khớp. Nếu rule bắt được nhưng pipeline không m�
 | A09 | noisy | UC-2 | TN | — | — |
 | A10 | noisy | UC-1 | FP | P4 | — |
 
-## Top error để cải thiện tiếp
+## 8. Top error để cải thiện tiếp
 
 - `I03` — Độ trễ P1 nhưng pool chỉ sát ngưỡng: TP, top-1 nguyên nhân sai.
 - `I04` — Lỗi 5xx tăng dù latency thấp: TP, top-1 nguyên nhân sai.
