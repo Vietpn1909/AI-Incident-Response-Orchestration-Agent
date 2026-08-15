@@ -164,7 +164,20 @@ python scripts/duyet.py KAN-26      # ⛔ BỊ CHẶN — chưa ai duyệt
 
 > "Phiếu này chưa ai duyệt. Bị từ chối."
 
-**Sang Jira, kéo phiếu gốc → Remediating.**
+**Sang Jira, kéo phiếu gốc → Remediating.** *(nhớ đăng nhập account NGƯỜI)*
+
+Từ 15/08 **không cần gõ lệnh nữa** — Jira Automation tự gọi webhook. Chờ ~30
+giây rồi F5 issue, hai comment tự hiện:
+
+```
+✅ ĐÃ PHÊ DUYỆT — Người phê duyệt: 712020:fd2ca790…
+Đã thực thi khắc phục (mô phỏng): rollback → … — thành công
+```
+
+> "Em không gõ lệnh nào. Jira tự gọi sang hệ thống, hệ thống kiểm ai đã duyệt
+> rồi mới cho thi hành."
+
+Rule hỏng hoặc Render đang ngủ thì vẫn kích tay được — cùng endpoint, cùng payload:
 
 ```bash
 python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
@@ -268,6 +281,9 @@ SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
 
 - **Thi hành thật**: hiện mô phỏng. Với UC-4 làm thật được trong ~30 phút và cho
   hiệu ứng đo được (lỗi 100% → 0%), nhưng chưa làm.
-- **Jira Automation rule** chưa cấu hình, nên bước Jira→backend phải gõ
-  `scripts/duyet.py` bằng tay. Có rule rồi thì bấm Remediating là xong.
+- **Jira Automation Rule #1 đã chạy** từ 15/08 — bấm `Remediating` là chuỗi tự
+  đi tới cùng. Rule #2 (postmortem khi `Resolved`) chưa cấu hình.
+- ⚠️ **Render free tier ngủ sau 15 phút**, tỉnh lại mất 30–60s, và rule gọi lúc
+  nó ngủ sẽ **fail im lặng**. Trước demo phải đánh thức:
+  `curl https://p-035-incident-agent.onrender.com/health`
 - **Node `verify`** — đo lại sau khi sửa để biết có đỡ không — chưa có.

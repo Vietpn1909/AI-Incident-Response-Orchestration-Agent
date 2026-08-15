@@ -42,8 +42,14 @@ async def test_agent_health_tra_trang_thai_do_duoc(client):
     assert response.status_code == 200
     data = response.json()
 
-    # Đủ 6 node của chuỗi ứng phó sự cố, không phải "LangGraph Agent v1.0".
-    assert data["graph"]["count"] == 6
+    # Là chuỗi node thật, không phải chuỗi quảng cáo kiểu "LangGraph Agent v1.0".
+    #
+    # KHÔNG cắm cứng con số. Bản đầu ghi `== 6` và lệch ngay khi graph thêm
+    # `analyze_logs` với `link_incidents` — endpoint báo 6 trong khi graph có 8,
+    # và không test nào đỏ vì chính test này cũng cắm cùng con số sai.
+    # Việc khớp với graph thật do `test_agent_health.py` lo.
+    assert data["graph"]["count"] == len(data["graph"]["nodes"])
+    assert data["graph"]["count"] >= 6
     assert data["graph"]["nodes"][0] == "detect"
     assert data["graph"]["nodes"][-1] == "escalate"
 
