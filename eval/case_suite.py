@@ -1,4 +1,4 @@
-"""Bộ chấm offline cho 30 test case phát hiện incident.
+"""Bộ chấm offline cho 50 test case phát hiện incident.
 
 Module này chỉ gọi các hàm public, tất định trong ``src.services.rules``. Nó
 không gọi Jira, Docker, Prometheus hay LLM, vì vậy có thể chạy lặp lại mà không
@@ -17,19 +17,22 @@ import json
 import logging
 import math
 import re
+import sys
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from src.agents.nodes.detect import detect_incidents
-from src.agents.nodes.open_war_room import open_war_room
-from src.models.incident import IncidentSignal
-from src.services import rules
-from src.services.jira import FakeJiraClient
-from src.services.prometheus import MetricSample
-
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from src.agents.nodes.detect import detect_incidents  # noqa: E402
+from src.agents.nodes.open_war_room import open_war_room  # noqa: E402
+from src.models.incident import IncidentSignal  # noqa: E402
+from src.services import rules  # noqa: E402
+from src.services.jira import FakeJiraClient  # noqa: E402
+from src.services.prometheus import MetricSample  # noqa: E402
+
 DEFAULT_CASES = ROOT / "eval" / "cases" / "incident_cases.json"
 DEFAULT_OUTPUT_DIR = ROOT / "eval" / "results" / "case-suite"
 ALLOWED_SPLITS = {"normal", "incident", "noisy"}
@@ -602,7 +605,7 @@ def run_suite(cases_path: Path, output_dir: Path) -> dict[str, Any]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Chạy baseline offline cho 30 incident cases")
+    parser = argparse.ArgumentParser(description="Chạy baseline offline cho 50 incident cases")
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     return parser.parse_args()

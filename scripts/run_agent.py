@@ -43,7 +43,7 @@ from src.services.meeting_room import DailyRoomClient, build_room_client  # noqa
 from src.services.postmortem_generator import generate_postmortem  # noqa: E402
 from src.services.postmortem_report import build_detailed_report, build_email_body  # noqa: E402
 from src.services.prometheus import PrometheusClient  # noqa: E402
-from src.services.remediation import UnsupportedActionError, execute  # noqa: E402
+from src.services.remediation import UnsupportedActionError, execute, is_already_remediated  # noqa: E402
 from src.services.status_updater import status_approved  # noqa: E402
 
 logger = logging.getLogger("agent")
@@ -160,6 +160,13 @@ def poll_jira_approvals(
             continue
 
         # ĐÃ ĐƯỢC DUYỆT bởi người thật
+        # Kiểm idempotency: bên webhook có thể đã chạy trước rồi.
+        if is_already_remediated(jira, jira_key):
+            logger.info("⚠️ %s: đã được thi hành bởi webhook — bỏ qua", jira_key)
+            already_executed.add(jira_key)
+            awaiting_keys.discard(jira_key)
+            continue
+
         logger.info("🟢 %s: NGƯỜI DUYỆT %s — bắt đầu thực thi", jira_key, approved_by)
         _execute_approved(jira, jira_key, approved_by)
         already_executed.add(jira_key)

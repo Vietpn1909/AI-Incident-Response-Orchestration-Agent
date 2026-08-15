@@ -20,6 +20,40 @@ from src.services import executors
 
 logger = logging.getLogger(__name__)
 
+#: Chuỗi mà `RemediationResult.as_comment()` luôn bắt đầu bằng. Dùng làm
+#: marker idempotency: trước khi thi hành, đọc comment Jira, thấy chuỗi này
+#: thì bên kia (webhook hoặc poll) đã chạy rồi → bỏ qua.
+#:
+#: Jira là chỗ nhớ chung duy nhất mà cả webhook (Render) lẫn agent loop
+#: (tiến trình khác) cùng nhìn thấy.
+REMEDIATION_MARKER = "Đã thực thi khắc phục"
+
+
+def is_already_remediated(client: Any, jira_key: str) -> bool:
+    """Kiểm tra xem issue đã được thi hành remediation chưa.
+
+    Đọc toàn bộ comment text trên issue, tìm marker ``REMEDIATION_MARKER``.
+    Comment này do ``RemediationResult.as_comment()`` sinh ra và được cả webhook
+    lẫn poll post lên Jira SAU khi execute thành công.
+
+    Args:
+        client: ``JiraClient`` (Protocol) — gọi ``get_comment_bodies()``.
+        jira_key: Issue cần kiểm tra.
+
+    Returns:
+        ``True`` nếu đã có comment chứa marker → **không được execute lại**.
+    """
+    try:
+        bodies = client.get_comment_bodies(jira_key)
+    except Exception:
+        # Lỗi Jira khi đọc comment: an toàn hơn là BỎ QUA (không execute).
+        # Lý do: nếu đọc hỏng mà vẫn cho execute, hai bên đều trượt guard →
+        # vẫn bị duplicate. Bỏ qua thì tệ nhất là tạm không execute, vòng sau
+        # sẽ thử lại.
+        logger.warning("%s: không đọc được comment để kiểm idempotency — bỏ qua", jira_key)
+        return True  # treat as already done to be safe
+    return any(REMEDIATION_MARKER in body for body in bodies)
+
 #: Các hành động Agent được phép đề xuất. Hành động ngoài danh sách này bị từ
 #: chối ngay — tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù.
 SUPPORTED_ACTIONS = frozenset(
