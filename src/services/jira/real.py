@@ -116,6 +116,29 @@ def _adf(text: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"type": "doc", "version": 1, "content": content}
 
 
+def _adf_to_text(adf: Any) -> str:
+    """Rút plain text từ ADF (Atlassian Document Format).
+
+    Duyệt đệ quy giống ``_extract_payloads()`` nhưng thu text thay vì JSON.
+    Dùng cho ``get_comment_bodies()``: chỉ cần tìm marker text trong comment,
+    không cần cấu trúc đầy đủ.
+    """
+    parts: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "text":
+                parts.append(node.get("text", ""))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(adf)
+    return " ".join(parts)
+
+
 def _extract_payloads(adf: Any) -> list[dict[str, Any]]:
     """Duyệt ADF, lấy ra mọi khối JSON có khoá đánh dấu của mình.
 
@@ -326,6 +349,23 @@ class RealJiraClient:
         for comment in data.get("comments", []):
             payloads.extend(_extract_payloads(comment.get("body")))
         return payloads
+
+    def get_comment_bodies(self, jira_key: str) -> list[str]:
+        """Trả về danh sách nội dung text (plain text) của mọi comment trên issue.
+
+        Dùng cho idempotency check: trước khi thi hành, đọc comment tìm marker
+        ``Đã thực thi khắc phục``. Nếu có thì bên kia đã chạy rồi.
+
+        ADF (Atlassian Document Format) được duyệt đệ quy để rút text, giống
+        cách ``_extract_payloads()`` duyệt tìm JSON.
+        """
+        data = self._call(
+            "GET", f"/rest/api/3/issue/{jira_key}/comment?maxResults=100&orderBy=created"
+        )
+        bodies: list[str] = []
+        for comment in data.get("comments", []):
+            bodies.append(_adf_to_text(comment.get("body")))
+        return bodies
 
     def transition(self, jira_key: str, to_state: IncidentState) -> None:
         transition_id = self._transition_id(jira_key, to_state)

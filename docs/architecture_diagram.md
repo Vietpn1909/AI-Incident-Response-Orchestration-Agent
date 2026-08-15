@@ -31,11 +31,17 @@ graph LR
         API[FastAPI]
         JC["JiraClient<br/>Protocol"]
         JIRA[["Jira Cloud<br/>Issue · Workflow · Automation"]]
+        HITL["HITL Gate<br/>changelog verify"]
     end
 
     subgraph LONG["🟪 Long — Giao diện"]
         SP["Status page<br/>công khai"]
         WR["War-room view<br/>nội bộ"]
+    end
+
+    subgraph COMMS["📡 Kênh thông báo"]
+        MAIL["Gmail SMTP<br/>cảnh báo + postmortem"]
+        DAILY["Daily.co<br/>phòng họp khẩn"]
     end
 
     ONCALL(["👤 On-call / IC"])
@@ -54,9 +60,17 @@ graph LR
     AGENT -->|"③ JiraClient"| JC
     JC <--> JIRA
 
+    AGENT -->|"tạo phòng họp"| DAILY
+    AGENT -->|"gửi cảnh báo"| MAIL
+    DAILY -->|"link phòng họp"| MAIL
+    MAIL -->|"🔴 email P1"| ONCALL
+
     ONCALL -->|"✋ DUYỆT (HITL)"| JIRA
-    JIRA -. "webhook sau khi duyệt" .-> API
-    API -->|"thực thi remediation"| AGENT
+    AGENT -.->|"poll: Remediating?"| JIRA
+    JIRA -.-> HITL
+    HITL -->|"verified → execute"| AGENT
+    AGENT -->|"📧 postmortem"| MAIL
+
     API -->|"④ JSON"| SP
     API -->|"④ JSON"| WR
     ONCALL -->|xem| WR
@@ -65,6 +79,7 @@ graph LR
     style VIET fill:#dcfce7,stroke:#22c55e
     style DUC fill:#fef9c3,stroke:#eab308
     style LONG fill:#f3e8ff,stroke:#a855f7
+    style COMMS fill:#fff7ed,stroke:#f97316
     style ONCALL fill:#fee2e2,stroke:#ef4444
 ```
 

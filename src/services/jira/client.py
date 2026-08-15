@@ -153,6 +153,18 @@ class JiraClient(Protocol):
         """Đọc lại incident từ Jira — API và status page dùng hàm này."""
         ...
 
+    def get_comment_bodies(self, jira_key: str) -> list[str]:
+        """Trả về danh sách nội dung text của mọi comment trên issue.
+
+        Dùng cho kiểm tra idempotency: trước khi thi hành remediation, đọc
+        comment xem có marker ``Đã thực thi khắc phục`` chưa. Nếu có thì bên
+        kia (webhook hoặc poll) đã chạy rồi → bỏ qua.
+
+        Jira là chỗ nhớ chung duy nhất mà cả webhook (Render) lẫn agent loop
+        (tiến trình khác) cùng nhìn thấy.
+        """
+        ...
+
     def list_incidents(self, only_open: bool = False) -> list[Incident]:
         """Danh sách incident cho war-room view."""
         ...
@@ -177,6 +189,9 @@ class FakeJiraClient:
         self._incidents: dict[str, Incident] = {}
         self._counter = 0
         self._verbose = verbose
+        #: Lưu text comment riêng cho `get_comment_bodies()`. Timeline cũng ghi
+        #: nhưng kiểm tra bằng cách duyệt timeline dễ lẫn với các entry khác.
+        self._comments: dict[str, list[str]] = {}
         # (jira_key, to_state) -> accountId của người transition gần nhất
         self._transition_authors: dict[tuple[str, IncidentState], str] = {}
         # (jira_key, to_state) -> thời điểm transition gần nhất. Bản thật đọc từ
@@ -215,6 +230,8 @@ class FakeJiraClient:
 
     def add_comment(self, jira_key: str, body: str) -> None:
         self._append_timeline(jira_key, "agent", "comment", body)
+        # Lưu comment text riêng để `get_comment_bodies()` đọc lại được.
+        self._comments.setdefault(jira_key, []).append(body)
         self._log(f"{jira_key} comment: {body}")
 
     def post_hypothesis(self, jira_key: str, hypothesis: Hypothesis) -> None:
@@ -316,6 +333,9 @@ class FakeJiraClient:
 
     def get_incident(self, jira_key: str) -> Incident | None:
         return self._incidents.get(jira_key)
+
+    def get_comment_bodies(self, jira_key: str) -> list[str]:
+        return list(self._comments.get(jira_key, []))
 
     def list_incidents(self, only_open: bool = False) -> list[Incident]:
         incidents = list(self._incidents.values())

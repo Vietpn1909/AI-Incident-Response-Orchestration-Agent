@@ -33,7 +33,7 @@ from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
 from src.services.postmortem_generator import generate_postmortem
 from src.services.postmortem_report import build_detailed_report, build_email_body
-from src.services.remediation import UnsupportedActionError, execute
+from src.services.remediation import UnsupportedActionError, execute, is_already_remediated
 from src.services.status_updater import status_approved
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,21 @@ async def jira_webhook(
             "thi hành. Cần người có quyền phê duyệt thực hiện lại bước chuyển trạng thái.",
         )
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+    # ---- Lớp 2½: idempotency — kiểm tra xem bên kia đã thi hành chưa ----
+    #
+    # Webhook (Render) và poll_jira_approvals (agent loop) chạy trên hai tiến
+    # trình khác nhau. Không có bước này thì 1 lần duyệt → 2 lần execute,
+    # gây 2 lần remediation thật + 4 comment + 2 postmortem + 2 email.
+    #
+    # Jira comment là chỗ nhớ chung duy nhất cả hai cùng nhìn thấy.
+    if is_already_remediated(client, jira_key):
+        logger.info("%s: đã được thi hành bởi đường khác — bỏ qua", jira_key)
+        return {
+            "jira_key": jira_key,
+            "already_done": True,
+            "detail": "Remediation đã được thi hành (phát hiện qua comment marker). Bỏ qua để tránh trùng.",
+        }
 
     # ---- Lớp 3: thi hành ----
     try:

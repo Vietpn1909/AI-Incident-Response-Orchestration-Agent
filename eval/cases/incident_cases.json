@@ -1,0 +1,2119 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "title": "Binary Brothers incident detection benchmark",
+    "frozen_at": "2026-08-15",
+    "language": "vi",
+    "expected_counts": {
+      "normal": 15,
+      "incident": 25,
+      "noisy": 10
+    },
+    "purpose": "Error analysis cho khả năng phát hiện incident, severity, evidence và top-1 root cause.",
+    "provenance_note": "Các case là snapshot tổng hợp do nhóm thiết kế từ pattern của nguồn tham khảo; không phải dữ liệu thô sao chép từ các nguồn.",
+    "difficulty": "enterprise-grade",
+    "design_note": "Cases designed to exploit specific blind spots of the rule engine: silent failures, partial outages, evasive attacks, monitoring gaps, multi-vector attacks, and supply chain compromise."
+  },
+  "sources": {
+    "local_use_cases": {
+      "url": "../../docs/use-cases.md",
+      "used_for": "Ground truth UC-1 đến UC-4 đã khóa trước khi đo."
+    },
+    "cloudflare_2025": {
+      "url": "https://blog.cloudflare.com/cloudflare-incident-march-21-2025/",
+      "used_for": "Mẫu impact, timeline, lỗi triển khai sai môi trường, ảnh hưởng bị cache che khuất và đối chiếu log/deploy."
+    },
+    "aws_fis": {
+      "url": "https://docs.aws.amazon.com/fis/latest/userguide/what-is.html",
+      "used_for": "Cấu trúc experiment gồm target, action, duration và stop condition; chỉ chạy trong demo/pre-production."
+    },
+    "otel_feature_flags": {
+      "url": "https://opentelemetry.io/docs/demo/feature-flags/",
+      "used_for": "Các pattern memory leak, payment failure, payment unreachable, flood traffic và lỗi ngắn hạn."
+    },
+    "cloudflare_feb2026": {
+      "url": "https://blog.cloudflare.com/cloudflare-outage-february-20-2026/",
+      "used_for": "Pattern BYOIP route withdrawal, config misconfiguration gây outage, cascading failure cross-region."
+    },
+    "cloudflare_nov2025": {
+      "url": "https://blog.cloudflare.com/18-november-2025-outage/",
+      "used_for": "Bug trong generation logic feature file gây service-wide outage, pattern config rollout lỗi."
+    },
+    "cloudflare_jun2025": {
+      "url": "https://blog.cloudflare.com/cloudflare-service-outage-june-12-2025/",
+      "used_for": "KV/Workers/Access outage do single point of failure, pattern dependency cascade."
+    }
+  },
+  "cases": [
+    {
+      "id": "N01",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "Tải thanh toán nhẹ ổn định",
+      "source_refs": [
+        "local_use_cases",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "tải nhẹ",
+        "duration_seconds": 120,
+        "stop_condition": "dừng nếu p95 vượt 1 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.18,
+        "p95_baseline_seconds": 0.16,
+        "baseline_samples": 30,
+        "error_rate": 0.001,
+        "pool_saturation": 0.3,
+        "breached_for_seconds": 120
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": null,
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N02",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "Baseline đã warm-up, dao động nhỏ",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "hai service demo",
+        "action": "warm-up đều",
+        "duration_seconds": 1800,
+        "stop_condition": "dừng nếu lỗi 5xx vượt 1%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-dat-hang",
+        "p95_seconds": 0.25,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.002,
+        "pool_saturation": 0.35,
+        "breached_for_seconds": 1800
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": null,
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N03",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "Tác vụ định kỳ làm độ trễ tăng nhẹ trong thời gian ngắn",
+      "source_refs": [
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "chạy tác vụ định kỳ đã biết",
+        "duration_seconds": 12,
+        "stop_condition": "dừng nếu p95 vượt 1 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.8,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.4,
+        "breached_for_seconds": 12
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Tác vụ định kỳ hợp lệ, nằm dưới ngưỡng và tự kết thúc",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N04",
+      "split": "normal",
+      "family": "UC-3",
+      "title": "Một vài người dùng gõ sai mật khẩu",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "login sai rải rác",
+        "duration_seconds": 180,
+        "stop_condition": "dừng nếu vượt 1 lần mỗi giây"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 0.2,
+        "breached_for_seconds": 180,
+        "unique_source_ips": 8,
+        "unique_accounts": 5,
+        "top_source_ratio": 0.2
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Sai mật khẩu hợp lệ",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N05",
+      "split": "normal",
+      "family": "UC-3",
+      "title": "Login thất bại sát ngưỡng nhưng vẫn bình thường",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "login sai phân tán",
+        "duration_seconds": 180,
+        "stop_condition": "dừng nếu vượt ngưỡng P3"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 0.8,
+        "breached_for_seconds": 180,
+        "unique_source_ips": 25,
+        "unique_accounts": 6,
+        "top_source_ratio": 0.08
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Lưu lượng người dùng bình thường",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N06",
+      "split": "normal",
+      "family": "UC-2",
+      "title": "Một lần restart do deploy, bộ nhớ thấp",
+      "source_refs": [
+        "local_use_cases",
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "deploy phiên bản mới",
+        "duration_seconds": 60,
+        "stop_condition": "rollback nếu service không lên lại sau 30 giây"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 1,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.42,
+        "memory_peak_10m_mb": 54
+      },
+      "context": {
+        "deploy": "v1.4.4 deploy có chủ đích"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Restart bình thường khi deploy",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N07",
+      "split": "normal",
+      "family": "UC-2",
+      "title": "Service chạy ổn với bộ nhớ cao nhưng chưa sát trần",
+      "source_refs": [
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "tải giữ cache ổn định",
+        "duration_seconds": 600,
+        "stop_condition": "dừng ở 110 MB"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 0,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.78,
+        "memory_peak_10m_mb": 100
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Bộ nhớ ổn định, không restart",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N08",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "p95 ngay dưới ngưỡng cứng thấp nhất",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "tải vừa",
+        "duration_seconds": 120,
+        "stop_condition": "dừng nếu p95 vượt 1 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-dat-hang",
+        "p95_seconds": 0.95,
+        "p95_baseline_seconds": 0.5,
+        "baseline_samples": 30,
+        "error_rate": 0.005,
+        "pool_saturation": 0.6,
+        "breached_for_seconds": 120
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": null,
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N09",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "Khởi động lạnh có baseline chưa đủ mẫu",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "Prometheus mới khởi động",
+        "action": "tải nhẹ",
+        "duration_seconds": 240,
+        "stop_condition": "không mở incident chỉ vì baseline non"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.3,
+        "p95_baseline_seconds": 0.05,
+        "baseline_samples": 4,
+        "error_rate": 0.0,
+        "pool_saturation": 0.2,
+        "breached_for_seconds": 240
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Baseline chưa chín",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N10",
+      "split": "normal",
+      "family": "UC-4",
+      "title": "Migration đã chạy, thanh toán thành công",
+      "source_refs": [
+        "local_use_cases",
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan v1.4.3",
+        "action": "gọi /pay khi schema đúng",
+        "duration_seconds": 120,
+        "stop_condition": "rollback nếu lỗi 5xx vượt 1%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.05,
+        "p95_baseline_seconds": 0.05,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.1,
+        "breached_for_seconds": 120
+      },
+      "context": {
+        "logs": [],
+        "deploy": "v1.4.3 đã chạy migration"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": null,
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "I01",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Pool cạn dưới tải như demo chính",
+      "source_refs": [
+        "local_use_cases",
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "flood /pay giữ connection",
+        "duration_seconds": 90,
+        "stop_condition": "dừng nếu p95 vượt 10 giây hoặc lỗi vượt 50%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 3.93,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.05,
+        "pool_saturation": 1.0,
+        "breached_for_seconds": 60
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Connection pool cạn vì truy vấn giữ connection lâu",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "pool",
+            "connection"
+          ],
+          [
+            "cạn",
+            "kiệt",
+            "hết"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "db_pool"
+        ]
+      }
+    },
+    {
+      "id": "I02",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Pool cạn ở mức P3",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "tải tăng vừa",
+        "duration_seconds": 60,
+        "stop_condition": "dừng nếu p95 vượt 2 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 1.4,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.02,
+        "pool_saturation": 0.97,
+        "breached_for_seconds": 45
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P3",
+        "root_cause": "Connection pool gần cạn",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "pool",
+            "connection"
+          ],
+          [
+            "cạn",
+            "kiệt",
+            "hết"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "db_pool"
+        ]
+      }
+    },
+    {
+      "id": "I03",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Độ trễ P1 nhưng pool chỉ sát ngưỡng",
+      "source_refs": [
+        "local_use_cases",
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "chạy pg_sleep khi đang giữ database connection",
+        "duration_seconds": 60,
+        "stop_condition": "dừng ngay khi p95 vượt 12 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 11.2,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.08,
+        "pool_saturation": 0.92,
+        "breached_for_seconds": 60
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Truy vấn chậm giữ connection",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "truy vấn",
+            "query"
+          ],
+          [
+            "chậm",
+            "giữ",
+            "lâu"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "db_pool"
+        ]
+      }
+    },
+    {
+      "id": "I04",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Lỗi 5xx tăng dù latency thấp",
+      "source_refs": [
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "payment failure có kiểm soát",
+        "duration_seconds": 60,
+        "stop_condition": "dừng nếu lỗi vượt 50%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.4,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.2,
+        "pool_saturation": 0.5,
+        "breached_for_seconds": 60
+      },
+      "context": {
+        "feature_flag": "paymentServiceFailure",
+        "logs": [
+          "paymentServiceFailure enabled: charge method returned an injected error"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Feature flag paymentServiceFailure làm charge method trả lỗi",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "paymentServiceFailure",
+            "feature flag"
+          ],
+          [
+            "charge",
+            "thanh toán"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I05",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Lệch baseline mạnh nhưng chưa vượt ngưỡng cứng",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "tăng tải có kiểm soát",
+        "duration_seconds": 90,
+        "stop_condition": "dừng nếu p95 vượt 1 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.75,
+        "p95_baseline_seconds": 0.15,
+        "baseline_samples": 30,
+        "error_rate": 0.005,
+        "pool_saturation": 0.96,
+        "breached_for_seconds": 60
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P4",
+        "root_cause": "Pool gần cạn làm latency lệch baseline",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "pool",
+            "connection"
+          ],
+          [
+            "cạn",
+            "kiệt",
+            "hết"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "db_pool"
+        ]
+      }
+    },
+    {
+      "id": "I06",
+      "split": "incident",
+      "family": "UC-2",
+      "title": "Service chết liên tục hơn 30 giây",
+      "source_refs": [
+        "local_use_cases",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "stop process trong container demo",
+        "duration_seconds": 45,
+        "stop_condition": "khôi phục service sau 45 giây"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 0,
+        "restarts_10m": 0,
+        "down_for_seconds": 45,
+        "memory_ratio": 0.3,
+        "memory_peak_10m_mb": 40
+      },
+      "context": {
+        "experiment_event": "Fault injection gửi SIGTERM tới process thanh toán"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Fault injection gửi SIGTERM làm process thanh toán dừng",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "SIGTERM",
+            "fault injection"
+          ],
+          [
+            "process",
+            "tiến trình"
+          ]
+        ],
+        "required_evidence": [
+          "up ("
+        ]
+      }
+    },
+    {
+      "id": "I07",
+      "split": "incident",
+      "family": "UC-2",
+      "title": "Crash loop hai lần nhưng chưa có bằng chứng OOM",
+      "source_refs": [
+        "local_use_cases",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "gửi SIGKILL hai lần vào process demo",
+        "duration_seconds": 120,
+        "stop_condition": "dừng sau lần restart thứ hai"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 2,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.45,
+        "memory_peak_10m_mb": 60
+      },
+      "context": {
+        "experiment_event": "Fault injection gửi SIGKILL ở cả hai lần crash"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Fault injection gửi SIGKILL hai lần làm process restart",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "SIGKILL",
+            "fault injection"
+          ],
+          [
+            "restart",
+            "khởi động lại"
+          ]
+        ],
+        "required_evidence": [
+          "restart"
+        ]
+      }
+    },
+    {
+      "id": "I08",
+      "split": "incident",
+      "family": "UC-2",
+      "title": "Một restart với đỉnh bộ nhớ chạm trần",
+      "source_refs": [
+        "local_use_cases",
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "bật memory leak /pay/batch",
+        "duration_seconds": 180,
+        "stop_condition": "dừng tải ngay khi container restart"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 1,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.5,
+        "memory_peak_10m_mb": 126
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "OOM-kill do rò rỉ bộ nhớ chạm limit 128 MB",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "oom",
+            "bộ nhớ",
+            "memory"
+          ],
+          [
+            "128",
+            "giới hạn",
+            "trần"
+          ]
+        ],
+        "required_evidence": [
+          "restart",
+          "đỉnh bộ nhớ"
+        ]
+      }
+    },
+    {
+      "id": "I09",
+      "split": "incident",
+      "family": "UC-2",
+      "title": "OOM đồng thời service đang down",
+      "source_refs": [
+        "local_use_cases",
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "memory leak kéo dài",
+        "duration_seconds": 180,
+        "stop_condition": "dừng tải khi bộ nhớ vượt 125 MB"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 0,
+        "restarts_10m": 1,
+        "down_for_seconds": 40,
+        "memory_ratio": 0.2,
+        "memory_peak_10m_mb": 125
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "OOM-kill do rò rỉ bộ nhớ",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "oom",
+            "bộ nhớ",
+            "memory"
+          ],
+          [
+            "rò rỉ",
+            "giới hạn",
+            "trần"
+          ]
+        ],
+        "required_evidence": [
+          "up (",
+          "đỉnh bộ nhớ"
+        ]
+      }
+    },
+    {
+      "id": "I10",
+      "split": "incident",
+      "family": "UC-3",
+      "title": "Credential stuffing P1 từ một nguồn",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "70 login sai mỗi giây",
+        "duration_seconds": 60,
+        "stop_condition": "dừng sau 60 giây hoặc lỗi vượt 100 mỗi giây"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 70,
+        "breached_for_seconds": 60,
+        "unique_source_ips": 1,
+        "unique_accounts": 80,
+        "top_source_ratio": 0.96
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Credential stuffing từ ít IP vào nhiều tài khoản",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "credential",
+            "bảo mật",
+            "tấn công"
+          ],
+          [
+            "tài khoản",
+            "đăng nhập"
+          ]
+        ],
+        "required_evidence": [
+          "/login",
+          "IP nguồn",
+          "tài khoản bị thử"
+        ]
+      }
+    },
+    {
+      "id": "I11",
+      "split": "incident",
+      "family": "UC-3",
+      "title": "Credential stuffing P2",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "20 login sai mỗi giây",
+        "duration_seconds": 60,
+        "stop_condition": "dừng nếu vượt ngưỡng P1"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 20,
+        "breached_for_seconds": 60,
+        "unique_source_ips": 2,
+        "unique_accounts": 30,
+        "top_source_ratio": 0.82
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Credential stuffing",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "credential",
+            "bảo mật",
+            "tấn công"
+          ],
+          [
+            "tài khoản",
+            "đăng nhập"
+          ]
+        ],
+        "required_evidence": [
+          "/login",
+          "IP nguồn",
+          "tài khoản bị thử"
+        ]
+      }
+    },
+    {
+      "id": "I12",
+      "split": "incident",
+      "family": "UC-3",
+      "title": "Auth burst nhỏ nhưng kéo dài ở mức P3",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "2 login sai mỗi giây",
+        "duration_seconds": 180,
+        "stop_condition": "dừng nếu vượt 10 mỗi giây"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 2,
+        "breached_for_seconds": 180,
+        "unique_source_ips": 1,
+        "unique_accounts": 12,
+        "top_source_ratio": 1.0
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P3",
+        "root_cause": "Tự động thử nhiều tài khoản ở tốc độ thấp",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "bảo mật",
+            "credential",
+            "tấn công"
+          ],
+          [
+            "đăng nhập",
+            "tài khoản"
+          ]
+        ],
+        "required_evidence": [
+          "/login",
+          "tài khoản bị thử"
+        ]
+      }
+    },
+    {
+      "id": "I13",
+      "split": "incident",
+      "family": "UC-4",
+      "title": "Deploy thiếu migration làm 100% payment lỗi",
+      "source_refs": [
+        "local_use_cases",
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan v1.4.3",
+        "action": "bật SIMULATE_MISSING_MIGRATION",
+        "duration_seconds": 60,
+        "stop_condition": "rollback khi lỗi 5xx vượt 50%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.048,
+        "p95_baseline_seconds": 0.049,
+        "baseline_samples": 30,
+        "error_rate": 1.0,
+        "pool_saturation": 0.0,
+        "breached_for_seconds": 60
+      },
+      "context": {
+        "logs": [
+          "asyncpg.exceptions.UndefinedColumnError: column idempotency_key of relation payments does not exist"
+        ],
+        "deploy": "v1.4.3 thêm chống trùng bằng khóa idempotency"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Migration chưa chạy, thiếu cột idempotency_key",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "migration",
+            "schema",
+            "cột"
+          ],
+          [
+            "idempotency_key"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I14",
+      "split": "incident",
+      "family": "dependency",
+      "title": "Payment service unreachable từ service phụ thuộc",
+      "source_refs": [
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "trỏ payment URL sang địa chỉ sai",
+        "duration_seconds": 90,
+        "stop_condition": "khôi phục URL nếu lỗi vượt 50%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-dat-hang",
+        "p95_seconds": 4.0,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.25,
+        "pool_saturation": 0.2,
+        "breached_for_seconds": 60
+      },
+      "context": {
+        "logs": [
+          "ConnectError calling http://service-thanh-toan:8001/pay"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Upstream payment service unreachable",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "upstream",
+            "phụ thuộc",
+            "service-thanh-toan"
+          ],
+          [
+            "unreachable",
+            "không kết nối",
+            "connect"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I15",
+      "split": "incident",
+      "family": "deployment",
+      "title": "Lỗi xác thực backend bị metric tổng hợp che khuất",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "payment write path",
+        "action": "deploy credential sang sai môi trường",
+        "duration_seconds": 180,
+        "stop_condition": "khôi phục credential production khi write failure được xác nhận"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.08,
+        "p95_baseline_seconds": 0.07,
+        "baseline_samples": 30,
+        "error_rate": 0.008,
+        "pool_saturation": 0.2,
+        "breached_for_seconds": 180
+      },
+      "context": {
+        "logs": [
+          "authentication failed using stale credential suffix"
+        ],
+        "deploy": "credential mới được deploy vào môi trường default thay vì production",
+        "note": "Tỷ lệ lỗi tổng hợp thấp là biến thể mô phỏng việc cache/traffic mix che khuất write path; không phải số Cloudflare công bố."
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Credential mới được deploy sai môi trường nên backend từ chối xác thực",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "credential",
+            "xác thực"
+          ],
+          [
+            "môi trường",
+            "production",
+            "deploy"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "A01",
+      "split": "noisy",
+      "family": "UC-1",
+      "title": "Latency cực cao nhưng chỉ kéo dài 10 giây",
+      "source_refs": [
+        "otel_feature_flags",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "delay ngắn",
+        "duration_seconds": 10,
+        "stop_condition": "tự dừng sau 10 giây"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 12.0,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.4,
+        "breached_for_seconds": 10
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Spike ngắn tự hồi phục",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A02",
+      "split": "noisy",
+      "family": "UC-3",
+      "title": "Login burst lớn nhưng quá ngắn",
+      "source_refs": [
+        "local_use_cases",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "burst 80 lần mỗi giây",
+        "duration_seconds": 15,
+        "stop_condition": "tự dừng trước cửa sustained"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 80,
+        "breached_for_seconds": 15,
+        "unique_source_ips": 1,
+        "unique_accounts": 50,
+        "top_source_ratio": 0.98
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Burst ngắn chưa đủ xác nhận",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A03",
+      "split": "noisy",
+      "family": "UC-2",
+      "title": "Một restart trùng lúc deploy",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "rolling restart",
+        "duration_seconds": 45,
+        "stop_condition": "rollback nếu restart lặp lại"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 1,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.4,
+        "memory_peak_10m_mb": 52
+      },
+      "context": {
+        "deploy": "deploy hợp lệ ngay trước restart"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Restart dự kiến",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A04",
+      "split": "noisy",
+      "family": "deployment",
+      "title": "Deploy trùng thời gian nhưng hệ thống khỏe",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "deploy config không liên quan",
+        "duration_seconds": 120,
+        "stop_condition": "rollback nếu có impact"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.2,
+        "p95_baseline_seconds": 0.18,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.25,
+        "breached_for_seconds": 120
+      },
+      "context": {
+        "deploy": "v1.4.5 đổi nội dung status page"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Tương quan thời gian không phải nhân quả",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A05",
+      "split": "noisy",
+      "family": "UC-3",
+      "title": "Load test đăng nhập đã được phê duyệt nhưng vượt ngưỡng",
+      "source_refs": [
+        "local_use_cases",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "load test đã được phê duyệt từ nhiều worker",
+        "duration_seconds": 120,
+        "stop_condition": "dừng nếu một IP chiếm quá 50% hoặc lỗi ảnh hưởng traffic thật"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 12,
+        "breached_for_seconds": 120,
+        "unique_source_ips": 150,
+        "unique_accounts": 2,
+        "top_source_ratio": 0.03
+      },
+      "context": {
+        "maintenance_event": "Bài thử tải pre-production đã được phê duyệt",
+        "note": "Tốc độ vượt ngưỡng nhưng đây là experiment có chủ đích và có stop condition."
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Load test đã được phê duyệt, không phải tấn công thật",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N11",
+      "split": "normal",
+      "family": "UC-4",
+      "title": "Rollback thành công, service hồi phục ngay",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "rollback từ v1.4.3 về v1.4.2",
+        "duration_seconds": 60,
+        "stop_condition": "dừng nếu lỗi 5xx > 1%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.22,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.15,
+        "breached_for_seconds": 60
+      },
+      "context": {
+        "deploy": "rollback v1.4.3 → v1.4.2 hoàn tất"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Rollback thành công, không ảnh hưởng",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N12",
+      "split": "normal",
+      "family": "UC-2",
+      "title": "Blue-green deploy: 2 restarts (= ngưỡng crashloop) nhưng là deploy có chủ đích",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "blue-green deploy v1.8.0",
+        "duration_seconds": 60,
+        "stop_condition": "rollback nếu health check fail"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 2,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.35,
+        "memory_peak_10m_mb": 45
+      },
+      "context": {
+        "deploy": "blue-green deploy v1.8.0 — old pod shutdown + new pod startup = 2 process start events"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Blue-green deploy tạo 2 process start events, không phải crash loop",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N13",
+      "split": "normal",
+      "family": "UC-2",
+      "title": "Container restart sau upgrade runtime, service lên ngay",
+      "source_refs": [
+        "cloudflare_2025",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "upgrade Python runtime",
+        "duration_seconds": 30,
+        "stop_condition": "rollback nếu không lên sau 15s"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-dat-hang",
+        "service_up": 1,
+        "restarts_10m": 1,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.35,
+        "memory_peak_10m_mb": 45
+      },
+      "context": {
+        "deploy": "runtime upgrade có kế hoạch"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Restart do upgrade runtime, bình thường",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N14",
+      "split": "normal",
+      "family": "UC-1",
+      "title": "Health check prober thay đổi: error_rate 3% nhưng toàn từ synthetic checks",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "thêm health check endpoint mới",
+        "duration_seconds": 300,
+        "stop_condition": "fix health check config"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-dat-hang",
+        "p95_seconds": 0.2,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.03,
+        "pool_saturation": 0.1,
+        "breached_for_seconds": 300
+      },
+      "context": {
+        "logs": [
+          "synthetic health check hitting deprecated /healthz endpoint returning 404",
+          "all real user requests returning 200"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Health check prober gọi endpoint deprecated, error_rate không phản ánh user traffic",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "N15",
+      "split": "normal",
+      "family": "UC-3",
+      "title": "Bot crawler gọi endpoint public, không ảnh hưởng auth",
+      "source_refs": [
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "GET /health, GET /status",
+        "action": "bot crawl endpoints public",
+        "duration_seconds": 300,
+        "stop_condition": "dừng nếu ảnh hưởng latency"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 0.0,
+        "breached_for_seconds": 300,
+        "unique_source_ips": 50,
+        "unique_accounts": 0,
+        "top_source_ratio": 0.04
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Bot crawl endpoints public, không có auth failure",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "I16",
+      "split": "incident",
+      "family": "UC-4",
+      "title": "Silent data corruption: service trả 200 OK nhưng ghi sai DB, metric hoàn toàn xanh",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "deploy version với bug serialize, payment ghi sai amount",
+        "duration_seconds": 300,
+        "stop_condition": "rollback khi phát hiện sai lệch reconciliation"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.19,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.15,
+        "breached_for_seconds": 300
+      },
+      "context": {
+        "logs": [
+          "WARN: payment amount mismatch detected in reconciliation batch: expected 500000, got 50000"
+        ],
+        "deploy": "v1.5.1 refactor payment serializer"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Bug serialize ghi sai amount vào DB, không có lỗi 5xx vì service trả 200 OK",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "serialize",
+            "data",
+            "corruption"
+          ],
+          [
+            "amount",
+            "sai",
+            "ghi"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I17",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Partial outage 1 pod: 5% request timeout 30s nhưng p95 tổng hợp bình thường",
+      "source_refs": [
+        "cloudflare_2025",
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan pod-3",
+        "action": "network partition 1 trong 20 pods",
+        "duration_seconds": 300,
+        "stop_condition": "drain pod-3 nếu lỗi > 50% trên pod đó"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.22,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.05,
+        "pool_saturation": 0.15,
+        "breached_for_seconds": 300
+      },
+      "context": {
+        "logs": [
+          "pod-3: connection timeout to database (30s)",
+          "pod-3: 95% of requests returning 504",
+          "aggregate p95 unaffected because pod-3 handles only 5% traffic"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Network partition trên pod-3 gây timeout 30s cho 5% traffic, p95 tổng che khuất",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "pod",
+            "partial"
+          ],
+          [
+            "partition",
+            "timeout"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I18",
+      "split": "incident",
+      "family": "UC-2",
+      "title": "Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ",
+      "source_refs": [
+        "otel_feature_flags"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "bật cache không có eviction",
+        "duration_seconds": 14400,
+        "stop_condition": "restart service nếu memory > 90%"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-dat-hang",
+        "service_up": 1,
+        "restarts_10m": 0,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.84,
+        "memory_peak_10m_mb": 108
+      },
+      "context": {
+        "logs": [
+          "memory usage trend: 60% (4h ago) → 70% (3h ago) → 78% (2h ago) → 84% (now)",
+          "cache entries: 89,000 and growing"
+        ],
+        "feature_flag": "recommendationCache"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Memory leak do cache không eviction, sẽ OOM trong 3 giờ",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "memory",
+            "bộ nhớ",
+            "leak"
+          ],
+          [
+            "cache",
+            "eviction"
+          ]
+        ],
+        "required_evidence": [
+          "đỉnh bộ nhớ"
+        ]
+      }
+    },
+    {
+      "id": "I19",
+      "split": "incident",
+      "family": "UC-3",
+      "title": "Evasive credential stuffing: 0.95/s suốt 24h — ngay dưới mọi ngưỡng detection",
+      "source_refs": [
+        "cloudflare_2025",
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "slow credential stuffing né ngưỡng",
+        "duration_seconds": 86400,
+        "stop_condition": "block IP khi phát hiện"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 0.95,
+        "breached_for_seconds": 86400,
+        "unique_source_ips": 200,
+        "unique_accounts": 5000,
+        "top_source_ratio": 0.008
+      },
+      "context": {
+        "logs": [
+          "5000 unique accounts attempted in 24h from 200 rotating IPs",
+          "no single IP exceeds 5 attempts",
+          "rate consistently below 1/s threshold"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "APT credential stuffing giữ rate dưới ngưỡng detection, 5000 account bị thử trong 24h",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "credential",
+            "stuffing",
+            "tấn công"
+          ],
+          [
+            "evasive",
+            "ngưỡng",
+            "né"
+          ]
+        ],
+        "required_evidence": [
+          "/login",
+          "tài khoản bị thử"
+        ]
+      }
+    },
+    {
+      "id": "I20",
+      "split": "incident",
+      "family": "UC-3",
+      "title": "DDoS làm cover cho credential stuffing: latency alert che khuất auth attack",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "HTTP flood + credential stuff đồng thời",
+        "duration_seconds": 120,
+        "stop_condition": "khi phát hiện cả hai vector"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 25,
+        "breached_for_seconds": 120,
+        "unique_source_ips": 50,
+        "unique_accounts": 100,
+        "top_source_ratio": 0.04
+      },
+      "context": {
+        "logs": [
+          "ALERT: latency P1 already triggered — war room open for UC-1",
+          "credential stuffing running concurrently but masked by DDoS noise",
+          "25 auth failures/s mixed into 10000 req/s flood"
+        ],
+        "concurrent_incident": "UC-1 P1 latency incident already open"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Credential stuffing P2 chạy đồng thời DDoS, bị che bởi latency alert đã mở",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "credential",
+            "stuffing",
+            "tấn công"
+          ],
+          [
+            "che",
+            "cover",
+            "đồng thời"
+          ]
+        ],
+        "required_evidence": [
+          "/login",
+          "tài khoản bị thử"
+        ]
+      }
+    },
+    {
+      "id": "I21",
+      "split": "incident",
+      "family": "dependency",
+      "title": "Thundering herd: sau recovery, 100% client reconnect đồng thời gây pool cạn lần 2",
+      "source_refs": [
+        "cloudflare_2025",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "tất cả connection reconnect sau outage",
+        "duration_seconds": 60,
+        "stop_condition": "rate limit reconnection"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 4.5,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.15,
+        "pool_saturation": 1.0,
+        "breached_for_seconds": 45
+      },
+      "context": {
+        "logs": [
+          "all 500 clients reconnecting simultaneously after 5-minute outage",
+          "connection pool exhausted within 3 seconds of recovery",
+          "previous incident KAN-35 resolved 2 minutes ago"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P2",
+        "root_cause": "Thundering herd sau recovery gây pool cạn lần 2",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "thundering herd",
+            "reconnect"
+          ],
+          [
+            "pool",
+            "cạn",
+            "recovery"
+          ]
+        ],
+        "required_evidence": [
+          "p95",
+          "db_pool"
+        ]
+      }
+    },
+    {
+      "id": "I22",
+      "split": "incident",
+      "family": "dependency",
+      "title": "Supply chain attack: dependency gửi data ra ngoài, metric hoàn toàn bình thường",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "compromised npm package exfiltrate data",
+        "duration_seconds": 3600,
+        "stop_condition": "khi phát hiện outbound traffic bất thường"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.21,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.2,
+        "breached_for_seconds": 3600
+      },
+      "context": {
+        "logs": [
+          "SECURITY: unexpected outbound connection to 45.33.32.156:443 from payment-service",
+          "npm package 'payment-utils@2.1.3' contains obfuscated code sending request headers to external endpoint"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Compromised dependency exfiltrate payment data, không ảnh hưởng metric",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "supply chain",
+            "dependency",
+            "compromise"
+          ],
+          [
+            "exfiltrate",
+            "data",
+            "outbound"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "I23",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Monitoring blind spot: Prometheus exporter crash, metric trả 0 — service thật ra đang chết",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "kill metrics exporter process",
+        "duration_seconds": 300,
+        "stop_condition": "restart exporter"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.0,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.0,
+        "breached_for_seconds": 300
+      },
+      "context": {
+        "logs": [
+          "prometheus scrape target down: service-thanh-toan:9090/metrics",
+          "all metric values returning 0/NaN",
+          "real user complaints: payments failing"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Prometheus exporter crash, metric giả → monitoring blind, service thật ra đang fail",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "exporter",
+            "monitoring",
+            "blind"
+          ],
+          [
+            "scrape",
+            "prometheus"
+          ]
+        ],
+        "required_evidence": [
+          "p95"
+        ]
+      }
+    },
+    {
+      "id": "I24",
+      "split": "incident",
+      "family": "UC-4",
+      "title": "Config drift tích lũy: 10 deploy nhỏ mỗi cái +10% latency, tổng = 2.5× baseline",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "10 deploy nhỏ qua 2 tuần",
+        "duration_seconds": 600,
+        "stop_condition": "rollback batch nếu p95 > 1s"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.5,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.003,
+        "pool_saturation": 0.55,
+        "breached_for_seconds": 600
+      },
+      "context": {
+        "logs": [
+          "deploy v1.4.1: +8% latency",
+          "deploy v1.4.2: +12% latency",
+          "deploy v1.4.3: +9% latency",
+          "cumulative drift: baseline 0.2s → current 0.5s over 14 days"
+        ],
+        "deploy": "10 deploy nhỏ qua 14 ngày"
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P4",
+        "root_cause": "Config drift tích lũy từ 10 deploy nhỏ, baseline trôi dần nên deviation ratio giảm theo",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "drift",
+            "tích lũy"
+          ],
+          [
+            "deploy",
+            "dần dần"
+          ]
+        ],
+        "required_evidence": [
+          "p95"
+        ]
+      }
+    },
+    {
+      "id": "I25",
+      "split": "incident",
+      "family": "UC-1",
+      "title": "Race condition: double-charge khi 2 request trùng idempotency key, không lỗi 5xx",
+      "source_refs": [
+        "otel_feature_flags",
+        "local_use_cases"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "concurrent requests cùng idempotency key",
+        "duration_seconds": 120,
+        "stop_condition": "khi phát hiện duplicate payment"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 0.25,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.0,
+        "pool_saturation": 0.3,
+        "breached_for_seconds": 120
+      },
+      "context": {
+        "logs": [
+          "CRITICAL: duplicate payment detected — order_id=ORD-4521 charged twice",
+          "race condition in idempotency check: SELECT then INSERT not atomic"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": true,
+        "severity": "P1",
+        "root_cause": "Race condition trong idempotency check gây double-charge, không lỗi metric",
+        "accepted_hypothesis_keyword_groups": [
+          [
+            "race condition",
+            "idempotency"
+          ],
+          [
+            "double",
+            "charge",
+            "duplicate"
+          ]
+        ],
+        "required_evidence": [
+          "lỗi 5xx"
+        ]
+      }
+    },
+    {
+      "id": "A06",
+      "split": "noisy",
+      "family": "UC-3",
+      "title": "Pentest hợp pháp: 30 auth failures/s từ pentester đã được approve",
+      "source_refs": [
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "POST /login",
+        "action": "authorized pentest brute force",
+        "duration_seconds": 600,
+        "stop_condition": "khi pentest kết thúc"
+      },
+      "telemetry": {
+        "detector": "auth",
+        "service": "service-thanh-toan",
+        "failures_per_second": 30,
+        "breached_for_seconds": 600,
+        "unique_source_ips": 1,
+        "unique_accounts": 300,
+        "top_source_ratio": 1.0
+      },
+      "context": {
+        "maintenance_event": "Pentest đã được phê duyệt bởi CISO, IP 10.0.5.100 đã whitelist"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Authorized pentest, không phải tấn công thật",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A07",
+      "split": "noisy",
+      "family": "UC-4",
+      "title": "Canary tự rollback: p95=3s trong 35s nhưng canary đã tự kill trước impact lan rộng",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan canary",
+        "action": "canary với auto-rollback",
+        "duration_seconds": 35,
+        "stop_condition": "canary tự rollback khi lỗi > 10%"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-thanh-toan",
+        "p95_seconds": 3.0,
+        "p95_baseline_seconds": 0.2,
+        "baseline_samples": 30,
+        "error_rate": 0.08,
+        "pool_saturation": 0.4,
+        "breached_for_seconds": 35
+      },
+      "context": {
+        "deploy": "canary v1.7.0 tự rollback sau 35s",
+        "logs": [
+          "canary auto-rollback triggered: error_rate 12% exceeded threshold 10%",
+          "canary killed, traffic restored to stable v1.6.9"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Canary tự rollback đúng cách, incident không lan rộng",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A08",
+      "split": "noisy",
+      "family": "UC-2",
+      "title": "Chaos engineering đã lên lịch: 3 lần restart có chủ đích trong maintenance window",
+      "source_refs": [
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "chaos experiment kill process 3 lần",
+        "duration_seconds": 300,
+        "stop_condition": "kết thúc theo lịch"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 3,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.4,
+        "memory_peak_10m_mb": 52
+      },
+      "context": {
+        "maintenance_event": "Chaos engineering experiment FIS-2026-08-15 đã được phê duyệt",
+        "logs": [
+          "AWS FIS experiment started: kill-process-3x",
+          "all 3 kills recovered within 5s each"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Chaos experiment có chủ đích trong maintenance window",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A09",
+      "split": "noisy",
+      "family": "UC-2",
+      "title": "Service restart 1 lần, peak memory 108MB (84.4% — ngay dưới ngưỡng 85%)",
+      "source_refs": [
+        "otel_feature_flags",
+        "aws_fis"
+      ],
+      "experiment": {
+        "target": "service-thanh-toan",
+        "action": "batch job gây memory spike",
+        "duration_seconds": 30,
+        "stop_condition": "dừng nếu memory > 125MB"
+      },
+      "telemetry": {
+        "detector": "crashloop",
+        "service": "service-thanh-toan",
+        "service_up": 1,
+        "restarts_10m": 1,
+        "down_for_seconds": 0,
+        "memory_ratio": 0.6,
+        "memory_peak_10m_mb": 108
+      },
+      "context": {
+        "maintenance_event": "Batch job báo cáo cuối ngày"
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "Restart do batch job, peak memory ngay dưới ngưỡng OOM",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    },
+    {
+      "id": "A10",
+      "split": "noisy",
+      "family": "UC-1",
+      "title": "CDN traffic shift: p95 tăng 3× do route change nhưng vẫn dưới ngưỡng cứng",
+      "source_refs": [
+        "cloudflare_2025"
+      ],
+      "experiment": {
+        "target": "service-dat-hang",
+        "action": "CDN route thay đổi, tải tăng đột ngột",
+        "duration_seconds": 120,
+        "stop_condition": "route ổn định lại"
+      },
+      "telemetry": {
+        "detector": "latency",
+        "service": "service-dat-hang",
+        "p95_seconds": 0.9,
+        "p95_baseline_seconds": 0.3,
+        "baseline_samples": 30,
+        "error_rate": 0.005,
+        "pool_saturation": 0.6,
+        "breached_for_seconds": 120
+      },
+      "context": {
+        "logs": [
+          "CDN route shift: traffic from ap-southeast-1 rerouted to ap-southeast-2",
+          "expected latency increase due to geo proximity change"
+        ]
+      },
+      "ground_truth": {
+        "is_incident": false,
+        "severity": null,
+        "root_cause": "CDN route change tạm thời, latency tăng nhưng dưới ngưỡng cứng",
+        "accepted_hypothesis_keyword_groups": [],
+        "required_evidence": []
+      }
+    }
+  ]
+}
