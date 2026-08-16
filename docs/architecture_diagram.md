@@ -25,6 +25,8 @@ graph LR
         DET["Detector<br/>PromQL + ngưỡng"]
         AGENT["Incident Agent<br/>LangGraph"]
         LLM[LLM]
+        MAIL["Gmail SMTP<br/>cảnh báo + postmortem"]
+        DAILY["Daily.co<br/>phòng họp khẩn"]
     end
 
     subgraph DUC["🟨 Đức — Tích hợp & vòng đời incident"]
@@ -37,12 +39,10 @@ graph LR
     subgraph LONG["🟪 Long — Giao diện"]
         SP["Status page<br/>công khai"]
         WR["War-room view<br/>nội bộ"]
-    end
-
-    subgraph COMMS["📡 Kênh thông báo"]
-        MAIL["Gmail SMTP<br/>cảnh báo + postmortem"]
         DAILY["Daily.co<br/>phòng họp khẩn"]
     end
+
+
 
     ONCALL(["👤 On-call / IC"])
 
