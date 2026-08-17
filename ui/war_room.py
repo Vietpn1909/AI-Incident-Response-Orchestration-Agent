@@ -100,180 +100,1311 @@ SO_DIEM_TOI_DA = 360
 # CSS
 # ---------------------------------------------------------------------------
 #
-# Quy tắc chọn selector ở đây, vì đã sập một lần khi nâng Streamlit:
+# REDESIGN NOTE — 2025-08-16
 #
-# 1. CHỈ bám `data-testid` mà Streamlit đặt tên (`stElementContainer`,
-#    `stVerticalBlock`, `stExpander`, `stMetric`, `stButton`...), tuyệt đối
-#    không bám class kiểu `st-emotion-cache-1r6slb0` — nó đổi mỗi lần build.
-# 2. `ui/requirements.txt` cố tình không ghim version Streamlit, nên mọi thứ ở
-#    đây phải là *trang trí*: CSS hỏng thì trang xấu đi chứ vẫn đọc được.
+# CSS dưới đây viết lại hoàn toàn theo design system trong file mẫu
+# `scratch_warroom_ref.html`. Design tokens dùng CSS variables từ `:root`
+# (dark theme mặc định), KHÔNG phụ thuộc `labels.MAU` cho CSS nữa.
 #
-# ⚠️ Streamlit 1.60 KHÔNG còn `data-testid="stVerticalBlockBorderWrapper"` —
-# lớp bọc của `st.container(border=True)` bây giờ chỉ có class hash do emotion
-# sinh, không bám được. Nên "thẻ" ở đây tự vẽ lấy: hàm `dau_the()` nhét một
-# `<span class="p035-the">` vô hình vào đầu container, rồi CSS chọn đúng khối
-# chứa nó.
-#
-# Mỗi quy tắc thẻ viết bằng HAI selector, cố ý:
-#   1. `:has(> [data-testid="stElementContainer"] .p035-the)` — khớp khi marker
-#      nằm ngay trong khối, đúng cấu trúc hiện tại.
-#   2. `:has(.p035-the):not(:has([data-testid="stVerticalBlock"] .p035-the))` —
-#      "khối trong cùng có chứa marker". Còn đúng kể cả khi bản Streamlit sau
-#      chèn thêm một lớp bọc vào giữa, mà vẫn không quét trúng các khối cha.
-# Thiếu vế `:not(...)` là mọi container cha cũng khớp và cả trang biến thành một
-# cái thẻ khổng lồ — đó là lý do không dùng `:has()` trần.
+# Quy tắc selector vẫn giữ: bám `data-testid`, KHÔNG bám class emotion hash.
+# Thẻ container dùng `dau_the()` + `:has()` selector.
 _CSS_TINH = """
-.stApp {
-  background:
-    radial-gradient(1100px 520px at 12% -18%, rgba(56,189,248,.10), transparent 60%),
-    radial-gradient(900px 420px at 96% -6%, rgba(239,68,68,.07), transparent 55%),
-    var(--p035-nen);
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ═══ Design tokens — dark theme ═══ */
+:root {
+  --bg-0: #0A0D12;
+  --bg-1: #10151C;
+  --bg-2: #171E27;
+  --bg-3: #1F2A37;
+  --bg-hover: #1A222D;
+  --border: #1F2A37;
+  --border-strong: #2D3A4A;
+  --ink-0: #E6EBF2;
+  --ink-1: #8593A6;
+  --ink-2: #556377;
+  --ink-3: #3B4757;
+  --accent: #D4A056;
+  --accent-soft: rgba(212, 160, 86, 0.12);
+  --accent-line: rgba(212, 160, 86, 0.35);
+  --p1: #E5484D;
+  --p1-soft: rgba(229, 72, 77, 0.14);
+  --p2: #F5A524;
+  --p2-soft: rgba(245, 165, 36, 0.14);
+  --p3: #4493F8;
+  --p3-soft: rgba(68, 147, 248, 0.14);
+  --ok: #52B788;
+  --ok-soft: rgba(82, 183, 136, 0.14);
+  --ok-line: rgba(82, 183, 136, 0.35);
+  --signal: #6BB6C7;
+  --pending: #9C6ADE;
+
+  --btn-primary-bg: #E6EBF2;
+  --btn-primary-fg: #0A0D12;
+
+  --code-bg: #06090D;
+  --code-head-bg: #0D1218;
+  --code-border: #1A2028;
+  --code-k: #C792EA;
+  --code-fn: #D4A056;
+  --code-s: #A3D5AA;
+  --code-n: #6BB6C7;
+  --code-cm: #556377;
+  --code-p: #8593A6;
+
+  --font-display: 'Newsreader', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 }
-[data-testid="stHeader"] { background: transparent; }
-.block-container { padding-top: 2.4rem; padding-bottom: 4rem; max-width: 1560px; }
 
-h1 { font-weight: 760; letter-spacing: -.03em; }
-h2, h3, h4 { letter-spacing: -.02em; }
+/* ═══ Base ═══ */
+.stApp {
+  background: var(--bg-0) !important;
+  font-family: var(--font-body) !important;
+  font-size: 13.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+[data-testid="stHeader"] { background: var(--bg-1) !important; border-bottom: 1px solid var(--border); }
+.block-container { padding-top: 1.2rem !important; padding-bottom: 4rem; max-width: 1560px; }
 
-/* ---- Thẻ (xem chú thích dài bên trên) ---- */
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ═══ Typography — Newsreader for display, Inter for body, JetBrains Mono for code ═══ */
+h1 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: 22px !important;
+  letter-spacing: -0.01em;
+}
+h2, h3, h4 {
+  font-family: var(--font-body) !important;
+  letter-spacing: -0.02em;
+}
+
+/* ═══ Thẻ container (card) ═══ */
 .p035-dau { display: none; }
 [data-testid="stElementContainer"]:has(.p035-dau) { display: none; }
 
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .p035-the),
 [data-testid="stVerticalBlock"]:has(.p035-the):not(:has([data-testid="stVerticalBlock"] .p035-the)) {
-  background: var(--p035-the);
-  border: 1px solid var(--p035-vien);
-  border-radius: 14px;
-  padding: 1.05rem 1.2rem;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  transition: border-color 0.15s ease;
 }
 
-/* Đang chờ duyệt hoặc P1 còn đang diễn ra → viền đỏ neon, thở nhẹ.
-   Chỉ dành cho thứ cần người làm gì đó NGAY; dùng rộng ra là mất tác dụng. */
+/* ═══ Sidebar card đang chọn ═══ */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .p035-active),
+[data-testid="stVerticalBlock"]:has(.p035-active):not(:has([data-testid="stVerticalBlock"] .p035-active)) {
+  border-color: var(--border-strong);
+  background: var(--bg-2);
+}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .p035-active)::before,
+[data-testid="stVerticalBlock"]:has(.p035-active):not(:has([data-testid="stVerticalBlock"] .p035-active))::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* ═══ Neon alert card (P1 hoặc Awaiting Approval) ═══ */
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .p035-neon),
 [data-testid="stVerticalBlock"]:has(.p035-neon):not(:has([data-testid="stVerticalBlock"] .p035-neon)) {
-  border-color: rgba(239,68,68,.62);
-  animation: p035-tho 2.6s ease-in-out infinite;
-}
-@keyframes p035-tho {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,.20), 0 0 14px rgba(239,68,68,.18), 0 0 44px rgba(239,68,68,.10); }
-  50%      { box-shadow: 0 0 0 1px rgba(239,68,68,.42), 0 0 26px rgba(239,68,68,.36), 0 0 72px rgba(239,68,68,.20); }
+  border-color: rgba(229,72,77,.45);
 }
 @media (prefers-reduced-motion: reduce) {
   [data-testid="stVerticalBlock"]:has(.p035-neon) {
-    animation: none;
-    box-shadow: 0 0 0 1px rgba(239,68,68,.34), 0 0 22px rgba(239,68,68,.28);
+    border-color: rgba(229,72,77,.55);
   }
 }
 
-/* ---- Badge pill ---- */
+/* ═══ Badge pill — severity, status ═══ */
 .p035-pill {
-  display: inline-flex; align-items: center; gap: .35rem;
-  padding: .16rem .62rem; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: 1px 8px; border-radius: 999px;
   border: 1px solid transparent;
-  font-size: .76rem; font-weight: 650; line-height: 1.55;
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 500; line-height: 1.6;
   white-space: nowrap; vertical-align: middle;
 }
-.p035-hang-pill { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .55rem; }
+.p035-hang-pill { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin-bottom: .5rem; }
 
-/* ---- Đầu trang sự cố ---- */
+/* ═══ Section header (eyebrow + serif title) ═══ */
+.p035-sec-head {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.p035-sec-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  font-weight: 500;
+}
+.p035-sec-eyebrow.done { color: var(--ok); }
+.p035-sec-title {
+  font-family: var(--font-display) !important;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ink-0);
+  flex: 1;
+}
+.p035-sec-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+.p035-sec-aside {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* ═══ Đầu trang sự cố (case header) ═══ */
 .p035-dau-trang {
-  background: var(--p035-the);
-  border: 1px solid var(--p035-vien);
-  border-radius: 16px;
-  padding: 1.1rem 1.25rem;
-  margin-bottom: .9rem;
+  margin-bottom: 1.2rem;
 }
-.p035-dau-trang .ma { font-size: .82rem; color: var(--p035-mo); letter-spacing: .06em; font-weight: 650; }
-.p035-dau-trang .tieu-de { font-size: 1.22rem; font-weight: 700; line-height: 1.45; margin: .35rem 0 .5rem; }
-.p035-dau-trang .meta { font-size: .82rem; color: var(--p035-mo); line-height: 1.85; }
-.p035-dau-trang code { font-size: .78rem; }
-
-/* ---- Tiêu đề mục ---- */
-.p035-muc { display: flex; align-items: center; gap: .6rem; margin: 1.6rem 0 .35rem; }
-.p035-muc .so {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 1.65rem; height: 1.65rem; border-radius: 8px;
-  background: rgba(56,189,248,.13); border: 1px solid rgba(56,189,248,.32);
-  color: var(--p035-nhan); font-size: .9rem; font-weight: 700;
+.p035-crumb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
 }
-.p035-muc .chu { font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em; }
+.p035-crumb .sep { color: var(--ink-3); margin: 0 4px; }
+.p035-status-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.p035-status-pill.live {
+  background: var(--p1-soft);
+  color: var(--p1);
+}
+.p035-status-pill.live::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--p1);
+  animation: p035-blink 1.5s ease-in-out infinite;
+}
+@keyframes p035-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.p035-status-pill.done {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.p035-case-title {
+  font-family: var(--font-display) !important;
+  font-size: 28px !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  margin: 6px 0 10px !important;
+  color: var(--ink-0);
+}
+.p035-case-title .sev {
+  font-style: italic;
+  font-weight: 300;
+  margin-right: 6px;
+}
+.p035-case-title .sev.p1 { color: var(--p1); }
+.p035-case-title .sev.p2 { color: var(--p2); }
+.p035-case-title .sev.p3 { color: var(--p3); }
+.p035-case-title .sev.done { color: var(--ok); }
+.p035-case-title .service {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+.p035-case-meta {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 18px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--ink-1);
+}
+.p035-case-meta .val { color: var(--ink-0); font-weight: 500; }
+.p035-meta-actions { margin-left: auto; display: flex; gap: 6px; }
 
-/* ---- Ô số (metric breakdown) ---- */
-.p035-luoi { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .6rem; margin: .55rem 0 .35rem; }
-.p035-so { background: rgba(2,6,23,.55); border: 1px solid var(--p035-vien); border-radius: 12px; padding: .65rem .8rem; }
-.p035-so .nhan { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--p035-mo); font-weight: 650; }
-.p035-so .gia-tri { font-size: 1.35rem; font-weight: 700; line-height: 1.5; font-variant-numeric: tabular-nums; }
-.p035-so .phu { font-size: .74rem; color: var(--p035-mo); line-height: 1.4; }
+/* ═══ Vitals strip — 4 metric cards in a row ═══ */
+.p035-vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 10px 0 14px;
+}
+.p035-vital {
+  background: var(--bg-1);
+  padding: 14px 16px;
+}
+.p035-vital.alert {
+  background: linear-gradient(180deg, var(--p1-soft) 0%, var(--bg-1) 60%);
+}
+.p035-vital.ok-state {
+  background: linear-gradient(180deg, var(--ok-soft) 0%, var(--bg-1) 60%);
+}
+.p035-vital-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 4px;
+}
+.p035-vital-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.p035-vital.alert .p035-vital-value { color: var(--p1); }
+.p035-vital.ok-state .p035-vital-value { color: var(--ok); }
+.p035-vital-unit {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-1);
+  margin-left: 2px;
+}
+.p035-vital-sub {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+.p035-delta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+.p035-delta.bad { color: var(--p1); background: var(--p1-soft); }
+.p035-delta.good { color: var(--ok); background: var(--ok-soft); }
 
-/* ---- Khối log dạng terminal ---- */
-.p035-terminal {
-  background: #000000;
-  border: 1px solid var(--p035-vien);
+/* ═══ Reasoning timeline ═══ */
+.p035-reasoning {
+  padding-left: 24px;
+  border-left: 1px solid var(--accent-line);
+  margin-left: 4px;
+  position: relative;
+}
+.p035-reasoning.done { border-left-color: var(--ok-line); }
+.p035-reasoning-item {
+  position: relative;
+  padding-bottom: 20px;
+}
+.p035-reasoning-item::before {
+  content: '';
+  position: absolute;
+  left: -29px; top: 5px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--bg-0);
+  border: 1.5px solid var(--accent);
+}
+.p035-reasoning.done .p035-reasoning-item::before { border-color: var(--ok); }
+.p035-reasoning-item.conclusion::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.p035-reasoning.done .p035-reasoning-item.conclusion::before {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px var(--ok-soft);
+}
+.p035-r-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.p035-reasoning.done .p035-r-label { color: var(--ok); }
+.p035-r-body {
+  font-size: 13.5px;
+  color: var(--ink-0);
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+.p035-r-body strong { font-weight: 600; }
+.p035-r-evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-1);
+  margin-right: 6px;
+  margin-bottom: 4px;
+}
+.p035-r-evidence .val { font-weight: 500; }
+.p035-r-evidence.warn .val { color: var(--p1); }
+.p035-r-evidence.ok .val { color: var(--ok); }
+
+/* ═══ Proposal card ═══ */
+.p035-proposal {
+  background: linear-gradient(180deg, var(--accent-soft) 0%, transparent 40%), var(--bg-1);
+  border: 1px solid var(--accent-line);
   border-radius: 12px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+.p035-proposal.executed {
+  background: linear-gradient(180deg, var(--ok-soft) 0%, transparent 40%), var(--bg-1);
+  border-color: var(--ok-line);
+}
+.p035-proposal-head { padding: 16px 18px 12px; }
+.p035-proposal-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px;
+}
+.p035-proposal.executed .p035-proposal-tag { color: var(--ok); }
+.p035-proposal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.p035-proposal-title code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--accent);
+}
+.p035-proposal.executed .p035-proposal-title code { color: var(--ok); }
+.p035-proposal-target {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-1);
+}
+.p035-proposal-body { padding: 0 18px 16px; }
+.p035-proposal-body p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-0);
+  margin-bottom: 10px;
+}
+.p035-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+.p035-impact {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.p035-impact .lb {
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-bottom: 3px;
+}
+.p035-impact .vl {
+  font-size: 14px;
+  font-weight: 500;
+}
+.p035-impact .vl small { font-size: 11.5px; color: var(--ink-1); font-weight: 400; }
+.p035-confirm-strip {
+  display: flex; align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+}
+.p035-confirm-strip .who {
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-1);
+}
+.p035-confirm-strip .who strong { color: var(--ink-0); }
+.p035-confirm-strip .who .a {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4A5F7A 0%, #2C3E52 100%);
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 600; color: #fff;
+}
+.p035-confirm-strip .check-icon {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--ok);
+  display: grid; place-items: center;
+  font-size: 11px; color: #fff;
+}
+
+/* ═══ Activity timeline ═══ */
+.p035-activity {
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+  margin-left: 4px;
+}
+.p035-act {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 8px;
+  padding-bottom: 16px;
+  position: relative;
+}
+.p035-act::before {
+  content: '';
+  position: absolute;
+  left: -28px; top: 5px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.p035-act.agent::before { background: var(--accent); }
+.p035-act.human::before { background: var(--signal); }
+.p035-act.system::before { background: var(--ink-3); }
+.p035-act.ok-act::before { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.p035-act-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.p035-act-text {
+  font-size: 13px;
+  color: var(--ink-0);
+  line-height: 1.5;
+}
+.p035-who { font-weight: 500; }
+.p035-who.agent { color: var(--accent); }
+.p035-who.ok { color: var(--ok); }
+
+/* ═══ Inline code ═══ */
+.p035-inline-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 1px 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* ═══ Code block ═══ */
+.p035-code-block {
+  border: 1px solid var(--code-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.p035-code-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px;
+  background: var(--code-head-bg);
+  border-bottom: 1px solid var(--code-border);
+}
+.p035-code-lang {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  letter-spacing: 0.06em;
+}
+.p035-code-body {
+  background: var(--code-bg);
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.p035-code-body .k { color: var(--code-k); }
+.p035-code-body .fn { color: var(--code-fn); }
+.p035-code-body .s { color: var(--code-s); }
+.p035-code-body .n { color: var(--code-n); }
+.p035-code-body .p { color: var(--code-p); }
+
+/* ═══ Related incidents grid ═══ */
+.p035-related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+.p035-rel-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+.p035-rel-card:hover { border-color: var(--border-strong); }
+.p035-rel-head {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+}
+.p035-rel-sev {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 300;
+  margin-right: 6px;
+}
+.p035-rel-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-0);
+  margin-bottom: 4px;
+}
+.p035-rel-meta { font-size: 12px; color: var(--ink-2); }
+
+/* ═══ Checklist ═══ */
+.p035-checklist-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+}
+.p035-check-box {
+  width: 18px; height: 18px; min-width: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+}
+.p035-checklist-item.done .p035-check-box {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+  display: grid; place-items: center;
+  font-size: 11px;
+}
+.p035-checklist-item.done .p035-check-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-3);
+  color: var(--ink-1);
+}
+.p035-check-text { flex: 1; font-size: 13px; }
+.p035-check-assignee { font-size: 11.5px; color: var(--ink-2); }
+.p035-check-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--bg-3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--ink-1);
+}
+
+/* ═══ Link row ═══ */
+.p035-link-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  color: var(--ink-0);
+  text-decoration: none;
+  transition: border-color 0.15s;
+  margin: 6px 0;
+}
+.p035-link-row:hover { border-color: var(--border-strong); }
+.p035-link-row .url {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+}
+
+/* ═══ Ô số (vitals grid, metric breakdown) ═══ */
+.p035-luoi { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--border); border-radius: 10px; overflow: hidden; margin: .55rem 0 .35rem; }
+.p035-so { background: var(--bg-1); padding: 14px 16px; }
+.p035-so .nhan { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.p035-so .gia-tri { font-family: var(--font-display); font-size: 28px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.2; }
+.p035-so .phu { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+
+/* ═══ Khối log terminal ═══ */
+.p035-terminal {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 8px;
   padding: .8rem 1rem;
   overflow-x: auto;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: .78rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
   line-height: 1.7;
 }
 .p035-terminal .dong { white-space: pre-wrap; word-break: break-word; }
 .p035-terminal .chinh {
-  background: rgba(239,68,68,.10);
-  border-left: 3px solid var(--p035-do);
+  background: var(--p1-soft);
+  border-left: 3px solid var(--p1);
   margin: .15rem -1rem; padding: .1rem 1rem .1rem calc(1rem - 3px);
 }
-.p035-terminal .ts { color: #64748b; }
+.p035-terminal .ts { color: var(--ink-2); }
 .p035-terminal .lv { font-weight: 700; }
-.p035-terminal .src { color: #7dd3fc; }
-.p035-terminal .msg { color: #cbd5e1; }
-.p035-terminal .pat { color: var(--p035-tim); }
+.p035-terminal .src { color: var(--signal); }
+.p035-terminal .msg { color: var(--ink-0); }
+.p035-terminal .pat { color: var(--pending); }
 
-/* ---- Khối rủi ro / HITL trong thẻ đề xuất ---- */
-.p035-hanh-dong { font-size: 1.1rem; font-weight: 700; line-height: 1.6; }
-.p035-hanh-dong .mui { color: var(--p035-mo); margin: 0 .3rem; }
+/* ═══ Khối rủi ro / HITL ═══ */
+.p035-hanh-dong {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.p035-hanh-dong .mui { color: var(--ink-2); margin: 0 .3rem; }
 .p035-rui-ro {
-  background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.42);
-  border-left: 4px solid var(--p035-cam);
-  border-radius: 10px; padding: .7rem .9rem; margin: .7rem 0;
-  font-size: .9rem; line-height: 1.6;
+  background: var(--p2-soft); border: 1px solid rgba(245,165,36,.35);
+  border-left: 3px solid var(--p2);
+  border-radius: 8px; padding: .7rem .9rem; margin: .7rem 0;
+  font-size: 13px; line-height: 1.6;
 }
-.p035-rui-ro .dau-de { color: #fcd34d; font-weight: 700; display: block; margin-bottom: .15rem; }
+.p035-rui-ro .dau-de { color: var(--p2); font-weight: 600; display: block; margin-bottom: .15rem; }
 .p035-hitl {
-  background: rgba(239,68,68,.10); border: 1px solid rgba(239,68,68,.42);
-  border-radius: 10px; padding: .7rem .9rem; margin: .7rem 0;
-  font-size: .9rem; line-height: 1.6;
+  background: var(--p1-soft); border: 1px solid rgba(229,72,77,.35);
+  border-radius: 8px; padding: .7rem .9rem; margin: .7rem 0;
+  font-size: 13px; line-height: 1.6;
 }
 
-/* ---- Widget Streamlit ---- */
+/* ═══ Section header — eyebrow + title + aside ═══ */
+.p035-sec-head {
+  display: flex; align-items: baseline; gap: 12px;
+  margin: 2.2rem 0 1.1rem;
+}
+.p035-sec-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.p035-sec-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--ink-0);
+}
+.p035-sec-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+.p035-sec-aside {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ═══ Vitals strip — 4-col grid ═══ */
+.p035-vitals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.p035-vital { background: var(--bg-1); padding: 16px 18px; }
+.p035-vital-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+  margin-bottom: 10px;
+}
+.p035-vital-value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink-0);
+  display: flex; align-items: baseline; gap: 6px;
+  margin-bottom: 4px;
+}
+.p035-vital-value .unit {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-1);
+  font-weight: 400;
+}
+.p035-vital-value .delta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+.p035-vital-value .delta.bad { color: var(--p1); background: var(--p1-soft); }
+.p035-vital-value .delta.good { color: var(--ok); background: var(--ok-soft); }
+.p035-vital-sub { font-size: 11.5px; color: var(--ink-2); font-family: var(--font-mono); }
+.p035-vital.alert { background: linear-gradient(180deg, var(--p1-soft) 0%, var(--bg-1) 60%); }
+.p035-vital.alert .p035-vital-value { color: var(--p1); }
+.p035-vital.ok { background: linear-gradient(180deg, var(--ok-soft) 0%, var(--bg-1) 60%); }
+.p035-vital.ok .p035-vital-value { color: var(--ok); }
+
+/* ═══ Reasoning timeline ═══ */
+.p035-reasoning {
+  padding-left: 24px;
+  border-left: 1px solid var(--accent-line);
+  margin-left: 4px;
+  position: relative;
+}
+.p035-reasoning.done { border-left-color: var(--ok-line); }
+.p035-reasoning-item { position: relative; padding-bottom: 20px; }
+.p035-reasoning-item:last-child { padding-bottom: 0; }
+.p035-reasoning-item::before {
+  content: '';
+  position: absolute;
+  left: -29px; top: 5px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--bg-0);
+  border: 1.5px solid var(--accent);
+}
+.p035-reasoning.done .p035-reasoning-item::before { border-color: var(--ok); }
+.p035-reasoning-item.conclusion::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.p035-reasoning.done .p035-reasoning-item.conclusion::before {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px var(--ok-soft);
+}
+.p035-r-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.p035-reasoning.done .p035-r-label { color: var(--ok); }
+.p035-r-body { color: var(--ink-0); font-size: 13.5px; margin-bottom: 8px; }
+.p035-r-body strong { font-weight: 600; }
+.p035-r-evidence {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-1);
+  margin-right: 6px;
+  margin-bottom: 4px;
+}
+.p035-r-evidence .val { color: var(--ink-0); font-weight: 500; }
+.p035-r-evidence.warn .val { color: var(--p1); }
+.p035-r-evidence.ok .val { color: var(--ok); }
+
+/* ═══ Activity timeline ═══ */
+.p035-activity { padding-left: 24px; border-left: 1px solid var(--border); margin-left: 4px; }
+.p035-act {
+  position: relative;
+  padding-bottom: 18px;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 14px;
+  align-items: baseline;
+}
+.p035-act::before {
+  content: '';
+  position: absolute;
+  left: -28px; top: 6px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.p035-act.agent::before { background: var(--accent); }
+.p035-act.human::before { background: var(--signal); }
+.p035-act.system::before { background: var(--ink-3); }
+.p035-act.ok::before { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.p035-act .time { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
+.p035-act .text { font-size: 13px; color: var(--ink-0); }
+.p035-act .text .who { color: var(--ink-1); font-weight: 500; }
+.p035-act .text .who.agent { color: var(--accent); }
+.p035-act .text .who.ok { color: var(--ok); font-weight: 600; }
+
+/* ═══ Impact grid (inside proposal) ═══ */
+.p035-impact-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin: 14px 0;
+}
+.p035-impact {
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.p035-impact .lb {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+  margin-bottom: 5px;
+}
+.p035-impact .vl {
+  font-size: 15px; font-weight: 500;
+  color: var(--ink-0);
+  display: flex; align-items: baseline; gap: 4px;
+}
+.p035-impact .vl small { font-size: 11px; color: var(--ink-1); font-weight: 400; }
+
+/* ═══ Confirm strip (inside proposal) ═══ */
+.p035-confirm-strip {
+  display: flex; align-items: center;
+  padding: 14px 22px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--ink-1);
+}
+.p035-confirm-strip strong { color: var(--ink-0); font-weight: 500; }
+
+/* ── keep old p035-muc as alias ── */
+.p035-muc { display: flex; align-items: baseline; gap: 10px; margin: 1.6rem 0 .35rem; }
+.p035-muc .so {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.p035-muc .chu {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.p035-muc .chu em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+
+/* ═══ Case header — breadcrumb + title + meta ═══ */
+.p035-dau-trang { margin-bottom: 1.2rem; }
+.p035-crumb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.p035-crumb .sep { color: var(--ink-3); margin: 0 2px; }
+.p035-status-pill {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 500;
+}
+.p035-status-pill.live {
+  background: var(--p1-soft);
+  color: var(--p1);
+}
+.p035-status-pill.live::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--p1); display: inline-block;
+  animation: p035-blink 1.5s ease-in-out infinite;
+}
+.p035-status-pill.done {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.p035-status-pill.done::before { content: '\2713'; font-size: 10px; line-height: 1; }
+@keyframes p035-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+.p035-case-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 14px;
+  color: var(--ink-0);
+}
+.p035-case-title .sev {
+  font-style: italic;
+  font-weight: 300;
+  margin-right: 6px;
+}
+.p035-case-title .sev.p1 { color: var(--p1); }
+.p035-case-title .sev.p2 { color: var(--p2); }
+.p035-case-title .sev.p3 { color: var(--p3); }
+.p035-case-title .sev.done { color: var(--ok); }
+.p035-case-title .service {
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+.p035-case-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 22px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+  font-size: 12.5px;
+  color: var(--ink-1);
+}
+.p035-case-meta .val {
+  color: var(--ink-0);
+  font-weight: 500;
+}
+
+/* ═══ Sidebar branding ═══ */
+.p035-sidebar-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.p035-sidebar-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.p035-sidebar-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-1);
+}
+
+/* ═══ Streamlit widgets override ═══ */
 [data-testid="stButton"] > button, .stButton > button,
 [data-testid="stLinkButton"] > a, .stLinkButton > a {
-  border-radius: 10px;
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: all .15s ease;
 }
 [data-testid="stButton"] > button:hover, .stButton > button:hover,
 [data-testid="stLinkButton"] > a:hover, .stLinkButton > a:hover {
   transform: translateY(-1px);
-  border-color: var(--p035-nhan);
-  box-shadow: 0 6px 18px rgba(56,189,248,.20);
 }
 [data-testid="stExpander"] details {
-  border: 1px solid var(--p035-vien);
-  border-radius: 12px;
-  background: rgba(2,6,23,.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-1);
 }
 [data-testid="stMetric"] {
-  background: rgba(2,6,23,.55); border: 1px solid var(--p035-vien);
-  border-radius: 12px; padding: .7rem .9rem;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: .85rem 1rem;
 }
 [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
 [data-testid="stCaptionContainer"] { line-height: 1.65; }
-[data-testid="stAlert"] { border-radius: 12px; }
+[data-testid="stAlert"] { border-radius: 8px; }
+
+/* ── Buttons: Approve/Reject ── */
+.p035-btn-duyet > [data-testid="stButton"] > button,
+.p035-btn-duyet > [data-testid="stLinkButton"] > a {
+  background-color: var(--btn-primary-bg) !important;
+  border-color: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-fg) !important;
+  font-weight: 500;
+}
+.p035-btn-duyet > [data-testid="stButton"] > button:hover,
+.p035-btn-duyet > [data-testid="stLinkButton"] > a:hover {
+  filter: brightness(1.05);
+}
+.p035-btn-tu-choi > [data-testid="stButton"] > button,
+.p035-btn-tu-choi > [data-testid="stLinkButton"] > a {
+  background: transparent !important;
+  color: var(--ink-1) !important;
+  border: 1px solid var(--border-strong) !important;
+}
+.p035-btn-tu-choi > [data-testid="stButton"] > button:hover,
+.p035-btn-tu-choi > [data-testid="stLinkButton"] > a:hover {
+  color: var(--ink-0) !important;
+  background: var(--bg-3) !important;
+}
+
+/* ═══ Sidebar incident cards ═══ */
+.p035-inc-card {
+  padding: 10px 12px 10px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  margin-bottom: 4px;
+}
+.p035-inc-card:hover { background: var(--bg-hover); }
+.p035-inc-card.active {
+  background: var(--bg-2);
+  border-color: var(--border-strong);
+  position: relative;
+}
+.p035-inc-card.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 10px; bottom: 10px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.p035-inc-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.p035-inc-sev {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 300;
+}
+.p035-inc-sev.p1 { color: var(--p1); }
+.p035-inc-sev.p2 { color: var(--p2); }
+.p035-inc-sev.p3 { color: var(--p3); }
+.p035-inc-sev.done { color: var(--ok); }
+.p035-inc-id {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.p035-inc-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-left: auto;
+}
+.p035-inc-dot.active { background: var(--p1); box-shadow: 0 0 0 3px var(--p1-soft); }
+.p035-inc-dot.pending { background: var(--pending); }
+.p035-inc-dot.resolving { background: var(--p2); }
+.p035-inc-dot.resolved { background: var(--ok); }
+.p035-inc-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-0);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.p035-inc-meta {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.p035-inc-meta .dot-sep { color: var(--ink-3); }
+.p035-sparkline { margin-left: auto; opacity: 0.85; }
+
+/* ═══ Sidebar card selection button — minimal ═══ */
+.p035-card-btn {
+  margin-top: 4px;
+}
+.p035-card-btn button {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 5px !important;
+  color: var(--ink-2) !important;
+  font-size: 11px !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  min-height: 0 !important;
+  transition: all 0.15s !important;
+}
+.p035-card-btn button:hover {
+  background: var(--bg-3) !important;
+  color: var(--ink-0) !important;
+  border-color: var(--border-strong) !important;
+}
+.p035-card-btn-selected button {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent-line) !important;
+  color: var(--accent) !important;
+  font-size: 11px !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  min-height: 0 !important;
+}
+
+/* ═══ Evidence card ═══ */
+.p035-evidence {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 8px 0;
+}
+.p035-evidence p {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* ═══ War room page title in sidebar ═══ */
+.p035-sidebar-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin-bottom: 14px;
+}
+.p035-sidebar-title em { font-style: italic; font-weight: 300; color: var(--ink-1); }
+.p035-sidebar-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+/* ═══ Tabs ═══ */
+.p035-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 10px; padding: 0 4px; }
+.p035-tab {
+  padding: 8px 12px 10px;
+  font-size: 12.5px;
+  color: var(--ink-1);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: color 0.15s;
+}
+.p035-tab:hover { color: var(--ink-0); }
+.p035-tab.active {
+  color: var(--ink-0);
+  border-bottom-color: var(--accent);
+}
+.p035-tab .count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--bg-3);
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--ink-1);
+}
+.p035-tab.active .count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ═══ Chart panel ═══ */
+.p035-chart-panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px 12px;
+  margin-bottom: 22px;
+}
+.p035-chart-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 14px;
+}
+.p035-chart-title {
+  font-size: 13px; font-weight: 500; color: var(--ink-0);
+}
+.p035-chart-title .code {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 400;
+}
+.p035-chart-legend {
+  margin-left: auto;
+  display: flex; gap: 14px;
+  font-size: 11.5px;
+  color: var(--ink-1);
+}
+.p035-chart-legend .item { display: flex; align-items: center; gap: 6px; }
+.p035-chart-legend .swatch { width: 10px; height: 2px; border-radius: 1px; }
+.p035-chart-svg { width: 100%; height: 200px; }
+.p035-chart-foot {
+  display: flex; justify-content: space-between;
+  padding-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* ═══ Awaiting pill in sidebar ═══ */
+.p035-await-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 4px;
+}
 """
 
-CSS = "<style>:root{" + "".join(f"--p035-{t}:{m};" for t, m in labels.MAU.items()) + "}" + _CSS_TINH + "</style>"
+CSS = "<style>" + _CSS_TINH + "</style>"
 
 # `set_page_config` phải chạy trước mọi lệnh Streamlit khác.
-st.set_page_config(page_title="War room", page_icon="🚨", layout="wide")
+st.set_page_config(page_title="War room", page_icon="P035", layout="wide")
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -455,31 +1586,36 @@ def pill(chu: str, mau: str, *, icon: str = "") -> str:
 
 
 def pill_severity(muc: str) -> str:
-    """Badge P1–P4 — icon/tên đọc từ `labels.SEVERITY`, màu từ `labels.SEVERITY_MAU`.
+    """Badge P1–P4 — tên đọc từ `labels.SEVERITY`, màu từ `labels.SEVERITY_MAU`.
 
     Giữ mã gốc ("P1") ngay trong badge: đó là chữ người trực trao đổi với nhau.
+    Không dùng emoji icon — chỉ text.
     """
-    icon, ten, _ = labels.SEVERITY.get(muc, ("⚪", muc, ""))
-    return pill(f"{ten} · {muc}", labels.mau_severity(muc), icon=icon)
+    _, ten, _ = labels.SEVERITY.get(muc, ("", muc, ""))
+    return pill(f"{ten} · {muc}", labels.mau_severity(muc))
 
 
 def pill_state(trang_thai: str) -> str:
-    """Badge trạng thái — đọc từ `labels.STATE`."""
-    icon, ten = labels.STATE.get(trang_thai, ("•", trang_thai))
+    """Badge trạng thái — đọc từ `labels.STATE`. Không dùng emoji."""
+    _, ten = labels.STATE.get(trang_thai, ("", trang_thai))
     if trang_thai == "Awaiting Approval":
         mau = labels.MAU["cam"]
     elif trang_thai == "Resolved":
         mau = labels.MAU["xanh"]
     else:
         mau = labels.MAU["nhan"]
-    return pill(ten, mau, icon=icon)
+    return pill(ten, mau)
 
 
-def muc(so: str, tieu_de: str) -> None:
-    """Tiêu đề một mục lớn, có chip số dẫn mắt."""
+def muc(eyebrow: str, tieu_de: str, *, aside: str = "") -> None:
+    """Tiêu đề section theo reference HTML: eyebrow + serif title + aside."""
+    aside_html = f'<span class="p035-sec-aside">{html.escape(aside)}</span>' if aside else ""
     st.markdown(
-        f'<div class="p035-muc"><span class="so">{html.escape(so)}</span>'
-        f'<span class="chu">{html.escape(tieu_de)}</span></div>',
+        f'<div class="p035-sec-head">'
+        f'<span class="p035-sec-eyebrow">{html.escape(eyebrow)}</span>'
+        f'<span class="p035-sec-title">{tieu_de}</span>'
+        f'{aside_html}'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -561,7 +1697,7 @@ def the_bang_chung(ev: dict, signal: dict | None, luc_phat_hien: str | None) -> 
     la_kich_hoat = bool(signal) and ev["name"] == signal.get("metric_name")
 
     if la_kich_hoat:
-        st.markdown(f"{pill('chỉ số kích hoạt', labels.MAU['do'], icon='⚡')} **{dong.plain}**", unsafe_allow_html=True)
+        st.markdown(f"{pill('chỉ số kích hoạt', labels.MAU['do'])} **{dong.plain}**", unsafe_allow_html=True)
     else:
         st.markdown(f"**{dong.plain}**")
 
@@ -602,7 +1738,7 @@ def khoi_log(hypotheses: list[dict]) -> None:
     st.markdown("**Log gốc quanh lúc sự cố**")
     st.caption(
         "Do chính dịch vụ ghi ra, Agent chỉ cắt đoạn quanh thời điểm sự cố chứ không viết lại. "
-        "🔴 `ERROR` = lỗi · 🟡 `WARNING` = cảnh báo · 🟢 `INFO` = thông tin."
+        "ERROR = lỗi · WARNING = cảnh báo · INFO = thông tin."
     )
 
     dong_html: list[str] = []
@@ -908,7 +2044,7 @@ def bieu_do_realtime(jira_key: str, signal: dict, luc_phat_hien: str, dich_vu_ch
     with cot_nut:
         st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
         # `on_click` xoá cache trước khi khối này vẽ lại — xem `_dat_co()`.
-        st.button("🔄 Làm mới", key=f"lam-moi-{jira_key}", on_click=truy_van_range.clear, use_container_width=True)
+        st.button("Làm mới", key=f"lam-moi-{jira_key}", on_click=truy_van_range.clear, use_container_width=False)
 
     # Làm tròn mốc kết thúc xuống bội số `LAM_MOI_GIAY` để cache còn dùng được:
     # để nguyên giây hiện tại thì mỗi lần vẽ là một khoá cache mới.
@@ -966,8 +2102,6 @@ def bieu_do_realtime(jira_key: str, signal: dict, luc_phat_hien: str, dich_vu_ch
     la_kich_hoat = ev["name"] == ten_kich_hoat
     nguong = float(signal["threshold"]) if la_kich_hoat else None
     baseline = float(ev["baseline"]) if ev.get("baseline") is not None else None
-    # Hướng vượt suy ra từ chính dữ liệu: `up` vượt ngưỡng khi TỤT xuống 0, còn
-    # p95 hay tỷ lệ lỗi thì vượt khi tăng lên. Đoán theo tên metric là sai sớm.
     vuot_len = la_kich_hoat and float(signal["metric_value"]) >= float(signal["threshold"])
 
     fig = dung_bieu_do(
@@ -995,76 +2129,327 @@ def bieu_do_realtime(jira_key: str, signal: dict, luc_phat_hien: str, dich_vu_ch
     )
 
 
+def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
+    """Chart panel matching reference HTML — renders inline SVG.
+
+    Uses Prometheus data when available, falls back to a visual placeholder.
+    Format: .chart-panel > .chart-head (title + legend) + SVG + .chart-foot
+    """
+    ten_metric = signal.get("metric_name", "metric")
+    nguong = float(signal.get("threshold", 0))
+    bang_chung = [ev for ev in (signal.get("evidence") or []) if ev.get("promql")]
+
+    # Get main evidence promql
+    main_ev = next(
+        (ev for ev in bang_chung if ev["name"] == ten_metric),
+        bang_chung[0] if bang_chung else None,
+    )
+
+    baseline = float(main_ev["baseline"]) if main_ev and main_ev.get("baseline") is not None else None
+
+    # Try to query Prometheus
+    ket_thuc = int(datetime.now(UTC).timestamp() // LAM_MOI_GIAY * LAM_MOI_GIAY)
+    do_dai = CUA_SO_GIAY[CUA_SO_MAC_DINH]  # 15 min default
+    bat_dau = ket_thuc - do_dai
+    buoc = max(15, -(-do_dai // SO_DIEM_TOI_DA))
+
+    data_points: list[tuple[float, float]] = []  # (timestamp, value)
+    if main_ev:
+        ket_qua = truy_van_range(main_ev["promql"], bat_dau, ket_thuc, buoc)
+        if ket_qua["ok"] and ket_qua["chuoi"]:
+            # Extract first time series
+            chuoi = ket_qua["chuoi"][0]
+            values = chuoi.get("values") or chuoi.get("dps") or []
+            for ts_val in values:
+                if isinstance(ts_val, (list, tuple)) and len(ts_val) >= 2:
+                    data_points.append((float(ts_val[0]), float(ts_val[1])))
+
+    # Convert to SVG coordinates
+    W, H = 800, 200
+    if data_points:
+        timestamps = [p[0] for p in data_points]
+        values = [p[1] for p in data_points]
+        t_min, t_max = min(timestamps), max(timestamps)
+        v_min = min(min(values), (nguong * 0.5 if nguong else 0), (baseline * 0.5 if baseline else 0))
+        v_max = max(max(values), (nguong * 1.3 if nguong else max(values)), (baseline * 1.2 if baseline else max(values)))
+        if v_max == v_min:
+            v_max = v_min + 1
+
+        def _x(t: float) -> float:
+            return (t - t_min) / (t_max - t_min) * W if t_max != t_min else W / 2
+
+        def _y(v: float) -> float:
+            return H - ((v - v_min) / (v_max - v_min) * (H - 20) + 10)
+
+        # Data path
+        path_parts = []
+        for i, (t, v) in enumerate(data_points):
+            cmd = "M" if i == 0 else "L"
+            path_parts.append(f"{cmd}{_x(t):.0f} {_y(v):.0f}")
+        data_path = " ".join(path_parts)
+
+        # Area fill path
+        area_path = data_path + f" L{W} {H} L0 {H} Z"
+
+        # Threshold Y
+        nguong_y = _y(nguong) if nguong else None
+
+        # Baseline path
+        baseline_path = ""
+        if baseline is not None:
+            bl_y = _y(baseline)
+            baseline_path = (
+                f'<line x1="0" y1="{bl_y:.0f}" x2="{W}" y2="{bl_y:.0f}" '
+                f'stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" opacity="0.65"/>'
+            )
+
+        # Last point (current value dot)
+        last_x, last_y = _x(data_points[-1][0]), _y(data_points[-1][1])
+        breach = data_points[-1][1] >= nguong if nguong else False
+        dot_color = "var(--p1)" if breach else "var(--signal)"
+
+        # Grid lines
+        grid = ""
+        for frac in [0.2, 0.4, 0.6, 0.8]:
+            gy = H * frac
+            grid += f'<line x1="0" y1="{gy:.0f}" x2="{W}" y2="{gy:.0f}" stroke="var(--border)" stroke-dasharray="2 4"/>'
+
+        # Threshold line
+        threshold_line = ""
+        if nguong_y is not None:
+            threshold_line = (
+                f'<line x1="0" y1="{nguong_y:.0f}" x2="{W}" y2="{nguong_y:.0f}" '
+                f'stroke="var(--p1)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>'
+                f'<text x="6" y="{nguong_y - 4:.0f}" font-family="JetBrains Mono" font-size="9" '
+                f'fill="var(--p1)" opacity="0.85">ngưỡng {_so_doc_duoc(nguong, "")}</text>'
+            )
+
+        # Time labels
+        time_labels: list[str] = []
+        n_labels = 5
+        for i in range(n_labels):
+            t = t_min + (t_max - t_min) * i / (n_labels - 1)
+            dt = datetime.fromtimestamp(t, tz=UTC).astimezone(tz=None)
+            time_labels.append(dt.strftime("%H:%M"))
+        time_labels[-1] = "Bây giờ"
+
+        svg_content = (
+            f'{grid}'
+            f'{threshold_line}'
+            f'{baseline_path}'
+            f'<defs><linearGradient id="area-g" x1="0" x2="0" y1="0" y2="1">'
+            f'<stop offset="0%" stop-color="var(--signal)" stop-opacity="0.28"/>'
+            f'<stop offset="100%" stop-color="var(--signal)" stop-opacity="0"/>'
+            f'</linearGradient></defs>'
+            f'<path d="{area_path}" fill="url(#area-g)"/>'
+            f'<path d="{data_path}" fill="none" stroke="var(--signal)" stroke-width="1.75"/>'
+            f'<circle cx="{last_x:.0f}" cy="{last_y:.0f}" r="4" fill="{dot_color}"/>'
+            f'<circle cx="{last_x:.0f}" cy="{last_y:.0f}" r="8" fill="{dot_color}" opacity="0.2"/>'
+        )
+
+        foot_html = "".join(f'<span>{html.escape(l)}</span>' for l in time_labels)
+    else:
+        # No data — render placeholder
+        svg_content = (
+            '<line x1="0" y1="40" x2="800" y2="40" stroke="var(--border)" stroke-dasharray="2 4"/>'
+            '<line x1="0" y1="80" x2="800" y2="80" stroke="var(--border)" stroke-dasharray="2 4"/>'
+            '<line x1="0" y1="120" x2="800" y2="120" stroke="var(--border)" stroke-dasharray="2 4"/>'
+            '<line x1="0" y1="160" x2="800" y2="160" stroke="var(--border)" stroke-dasharray="2 4"/>'
+            '<text x="400" y="105" font-family="Inter" font-size="12" fill="var(--ink-2)" '
+            'text-anchor="middle">Prometheus không khả dụng</text>'
+        )
+        if nguong:
+            svg_content += (
+                f'<line x1="0" y1="100" x2="800" y2="100" '
+                f'stroke="var(--p1)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>'
+                f'<text x="6" y="96" font-family="JetBrains Mono" font-size="9" '
+                f'fill="var(--p1)" opacity="0.85">ngưỡng {_so_doc_duoc(nguong, "")}</text>'
+            )
+        foot_html = "<span>—</span><span>—</span><span>—</span><span>—</span><span>—</span>"
+
+    # Legend
+    legend = (
+        '<div class="p035-chart-legend">'
+        '<span class="item"><span class="swatch" style="background: var(--signal)"></span>Giá trị</span>'
+        + ('<span class="item"><span class="swatch" style="background: var(--ink-2)"></span>baseline</span>' if baseline is not None else "")
+        + '<span class="item"><span class="swatch" style="background: var(--p1)"></span>ngưỡng</span>'
+        + '</div>'
+    )
+
+    st.markdown(
+        f'<div class="p035-chart-panel">'
+        f'<div class="p035-chart-head">'
+        f'<div class="p035-chart-title"><span class="code">{html.escape(ten_metric)}</span></div>'
+        f'{legend}'
+        f'</div>'
+        f'<svg class="p035-chart-svg" viewBox="0 0 {W} {H}" preserveAspectRatio="none">'
+        f'{svg_content}'
+        f'</svg>'
+        f'<div class="p035-chart-foot">{foot_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Khối lớn của trang
 # ---------------------------------------------------------------------------
 
 
+def _sparkline_svg(inc: dict) -> str:
+    """Generate a 52×16 sparkline SVG showing trend direction.
+
+    For active incidents: rising trend (bad). For resolved: peak-then-fall (recovered).
+    Color follows severity for active, --ok for resolved.
+    """
+    da_xong = inc["state"] not in DANG_XAY_RA
+    sev = inc["severity"]
+    if da_xong:
+        # Mountain shape: went up then came back down
+        points = "M0 12 L8 10 L16 4 L22 2 L28 5 L36 9 L44 12 L52 13"
+        color = "var(--ok)"
+    elif sev == "P1":
+        points = "M0 12 L6 11 L12 12 L18 10 L24 9 L30 7 L36 5 L42 4 L48 2 L52 3"
+        color = "var(--p1)"
+    elif sev == "P2":
+        points = "M0 13 L8 13 L16 12 L24 10 L32 8 L40 6 L48 4 L52 3"
+        color = "var(--p2)"
+    else:
+        points = "M0 10 L8 9 L16 8 L24 7 L32 6 L40 5 L48 5 L52 4"
+        color = "var(--p3)"
+    return (
+        f'<svg width="52" height="16" viewBox="0 0 52 16" class="p035-sparkline">'
+        f'<path d="{points}" fill="none" stroke="{color}" stroke-width="1.5"/>'
+        f'</svg>'
+    )
+
+
 def the_incident(inc: dict) -> None:
-    """Một thẻ trong danh sách bên trái."""
+    """Một thẻ trong danh sách bên trái — redesign theo reference HTML.
+
+    Render toàn bộ card dưới dạng 1 khối HTML: inc-row1 (sev + id + status dot),
+    inc-title (line-clamp 2), inc-meta (duration + sparkline SVG).
+    Button giữ lại cho Streamlit rerun nhưng style tối giản.
+    """
     is_selected = inc["jira_key"] == st.session_state["selected_key"]
-    # Neon chỉ dành cho thứ đang cháy. Sự cố đã đóng thì dù từng là P1 cũng
-    # không phát sáng — cùng lý do với đoạn "đã đóng thì trạng thái đứng trước
-    # mức nghiêm trọng" ở phần chi tiết: đỏ rực trên một sự cố đã xử lý xong làm
-    # người xem hiểu ngược mất một hai giây, đủ để hoảng.
-    khan = inc["state"] in DANG_XAY_RA and (inc["state"] == "Awaiting Approval" or inc["severity"] == "P1")
-    with st.container():
-        dau_the("p035-neon" if khan else "")
-        st.markdown(
-            f'<div class="p035-hang-pill">{pill_severity(inc["severity"])}{pill_state(inc["state"])}</div>',
-            unsafe_allow_html=True,
+    da_xong = inc["state"] not in DANG_XAY_RA
+
+    # Severity class for italic serif display
+    sev = inc["severity"]
+    sev_class = "done" if da_xong else sev.lower()
+
+    # Status dot class
+    if inc["state"] == "Awaiting Approval":
+        dot_class = "pending"
+    elif inc["state"] == "Remediating":
+        dot_class = "resolving"
+    elif da_xong:
+        dot_class = "resolved"
+    else:
+        dot_class = "active"
+
+    # Duration text
+    if inc.get("resolved_at"):
+        thoi_luong = fmt_duration(inc["detected_at"], inc["resolved_at"])
+    else:
+        thoi_luong = fmt_duration(inc["detected_at"])
+
+    # Service
+    dich_vu = (inc["affected_services"] or [""])[0]
+    dich_vu_vn = labels.service(dich_vu)
+
+    # Sparkline
+    spark = _sparkline_svg(inc)
+
+    # Awaiting approval indicator
+    await_html = ""
+    if inc["state"] == "Awaiting Approval":
+        await_html = (
+            f'<div class="p035-await-pill" '
+            f'style="color:{labels.MAU["cam"]};background:{_rgba(labels.MAU["cam"], 0.14)}">'
+            f'Chờ duyệt</div>'
         )
-        st.markdown(f"**{inc['jira_key']}**")
-        if inc.get("resolved_at"):
-            st.caption(f"Đã kéo dài {fmt_duration(inc['detected_at'], inc['resolved_at'])}")
-        else:
-            st.caption(f"Đang kéo dài {fmt_duration(inc['detected_at'])}")
-        if inc["state"] == "Awaiting Approval":
-            st.error("⏸ **CẦN NGƯỜI DUYỆT**")
-        if st.button(
-            "📂 Đang xem" if is_selected else "Xem chi tiết",
-            key=f"sel-{inc['jira_key']}",
-            type="primary" if is_selected else "secondary",
-            use_container_width=True,
-        ):
-            st.session_state["selected_key"] = inc["jira_key"]
-            st.rerun()
+
+    # Active class
+    card_class = "p035-inc-card active" if is_selected else "p035-inc-card"
+
+    st.markdown(
+        f'<div class="{card_class}">'
+        f'<div class="p035-inc-row1">'
+        f'<span class="p035-inc-sev {sev_class}">{html.escape(sev)}</span>'
+        f'<span class="p035-inc-id">{html.escape(inc["jira_key"])}</span>'
+        f'<span class="p035-inc-dot {dot_class}"></span>'
+        f'</div>'
+        f'<div class="p035-inc-title">{html.escape(inc["title"])}</div>'
+        f'<div class="p035-inc-meta">'
+        f'<span>{html.escape(thoi_luong)}</span>'
+        + (f'<span>·</span><span>{html.escape(dich_vu_vn)}</span>' if dich_vu_vn else "")
+        + spark
+        + '</div>'
+        + await_html
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+    btn_cls = "p035-card-btn-selected" if is_selected else "p035-card-btn"
+    st.markdown(f'<div class="{btn_cls}">', unsafe_allow_html=True)
+    if st.button(
+        "Đang xem" if is_selected else "Xem →",
+        key=f"sel-{inc['jira_key']}",
+        type="secondary",
+        use_container_width=True,
+    ):
+        st.session_state["selected_key"] = inc["jira_key"]
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def dau_trang_incident(incident: dict) -> None:
-    """Đầu trang chi tiết: hậu quả với người dùng trước, số liệu sau."""
-    # Sự cố ĐÃ ĐÓNG thì trạng thái phải đứng trước mức nghiêm trọng.
-    #
-    # Bản cũ luôn dựng "🔴 Nghiêm trọng — nhiều khách hàng bị ảnh hưởng (P1)" ở
-    # dòng to nhất, kể cả khi sự cố đã xử lý xong từ lâu. Người xem đọc dòng to
-    # màu đỏ trước rồi mới thấy dòng "Đã xử lý xong" nhỏ hơn bên dưới — tức hiểu
-    # ngược trong khoảng một hai giây, đủ để hoảng.
+    """Đầu trang chi tiết — redesign: breadcrumb, serif title, meta strip."""
     da_xong_roi = bool(incident.get("resolved_at"))
+    sev = incident["severity"]
+    icon_s, ten_s, giai_thich = labels.SEVERITY.get(sev, ("⚪", sev, ""))
+    sev_class = "done" if da_xong_roi else sev.lower()
+
+    # Status pill
     if da_xong_roi:
-        hang = pill_state(incident["state"]) + pill_severity(incident["severity"])
-        ghi_chu = f"Mức lúc xảy ra: {html.escape(labels.severity(incident['severity']))}"
+        icon_st, ten_st = labels.STATE.get("Resolved", ("✅", "Đã xử lý xong"))
+        status_pill = f'<span class="p035-status-pill done">{html.escape(icon_st)} {html.escape(ten_st)}</span>'
     else:
-        hang = pill_severity(incident["severity"]) + pill_state(incident["state"])
-        _, _, giai_thich = labels.SEVERITY.get(incident["severity"], ("", "", ""))
-        ghi_chu = html.escape(giai_thich)
+        icon_st, ten_st = labels.STATE.get(incident["state"], ("•", incident["state"]))
+        status_pill = f'<span class="p035-status-pill live">{html.escape(ten_st)}</span>'
 
     dich_vu = " · ".join(
-        f"{html.escape(labels.service(s))} (<code>{html.escape(s)}</code>)" for s in incident["affected_services"]
+        f"{html.escape(labels.service(s))}" for s in incident["affected_services"]
     )
-    thoi_gian = f"Phát hiện {fmt_time_vn(incident['detected_at'])}"
+
+    thoi_gian_items: list[str] = []
+    thoi_gian_items.append(f'Phát hiện <span class="val">{html.escape(fmt_time_vn(incident["detected_at"]))}</span>')
     if incident.get("resolved_at"):
-        thoi_gian += f" · Đã xử lý {fmt_time_vn(incident['resolved_at'])}"
-        thoi_gian += f" · Kéo dài {fmt_duration(incident['detected_at'], incident['resolved_at'])}"
+        thoi_gian_items.append(f'Xử lý <span class="val">{html.escape(fmt_time_vn(incident["resolved_at"]))}</span>')
+        thoi_gian_items.append(f'Kéo dài <span class="val">{html.escape(fmt_duration(incident["detected_at"], incident["resolved_at"]))}</span>')
     else:
-        thoi_gian += f" · Đang kéo dài {fmt_duration(incident['detected_at'])}"
+        thoi_gian_items.append(f'Đang kéo dài <span class="val">{html.escape(fmt_duration(incident["detected_at"]))}</span>')
+
+    meta_html = " · ".join(thoi_gian_items)
 
     st.markdown(
         '<div class="p035-dau-trang">'
-        f'<div class="p035-hang-pill">{hang}</div>'
-        f'<div class="ma">{html.escape(incident["jira_key"])}</div>'
-        f'<div class="tieu-de">{html.escape(incident["title"])}</div>'
-        f'<div class="meta">{ghi_chu}<br>Dịch vụ ảnh hưởng: {dich_vu}<br>{html.escape(thoi_gian)}</div>'
-        "</div>",
+        f'<div class="p035-crumb">'
+        f'War Room<span class="sep">›</span>'
+        f'{html.escape(incident["jira_key"])}'
+        f' {status_pill}'
+        f'</div>'
+        f'<div class="p035-case-title">'
+        f'<span class="sev {sev_class}">{html.escape(sev)}</span>'
+        f'{html.escape(incident["title"])}'
+        f' <span class="service">'
+        f'— {html.escape(dich_vu)}'
+        f'</span>'
+        f'</div>'
+        f'<div class="p035-case-meta">'
+        f'{meta_html}'
+        f'</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -1085,30 +2470,69 @@ def bang_dieu_tra(incident: dict, signal: dict | None) -> None:
         None,
     )
 
-    # ── (a) Lỗi gì
-    with st.container():
-        dau_the()
-        st.markdown(f"#### ⚠️ {html.escape(cau)} vượt ngưỡng")
-        st.markdown(
-            f"**{cau}** đang ở mức **{_so_doc_duoc(float(signal['metric_value']), don_vi)}**, "
-            f"trong khi ngưỡng cảnh báo là **{_so_doc_duoc(float(signal['threshold']), don_vi)}**."
-        )
-        # Dòng `↳` giữ nguyên văn tên metric — người trực grep đúng chữ này.
-        st.caption(
-            f"↳ `{signal['metric_name']} = {signal['metric_value']:g}` "
-            f"(ngưỡng `{signal['threshold']:g}`, dịch vụ `{signal.get('affected_service', '')}`)"
-        )
-        st.info(f"⏱ Đã kéo dài {labels.keo_dai(signal['breached_for_seconds'])}")
-        if kich_hoat is not None:
-            khoi_promql(kich_hoat.get("promql", ""), luc, gap=False)
+    # ── (a) Vitals strip
+    gia_tri = float(signal["metric_value"])
+    nguong = float(signal["threshold"])
+    lech = gia_tri / nguong if nguong else 0
+    lech_str = f"{lech:.1f}×"
+    keo_dai_str = labels.keo_dai(signal["breached_for_seconds"])
 
-        st.markdown("**Diễn biến chỉ số theo thời gian**")
-        bieu_do_realtime(
-            incident["jira_key"],
-            signal,
-            luc,
-            signal.get("affected_service") or (incident["affected_services"] or [""])[0],
+    vital_1 = (
+        f'<div class="p035-vital alert">'
+        f'<div class="p035-vital-label">{html.escape(cau)}</div>'
+        f'<div class="p035-vital-value">{html.escape(_so_doc_duoc(gia_tri, don_vi))}'
+        f'<span class="delta bad">{html.escape(lech_str)}</span></div>'
+        f'<div class="p035-vital-sub">Giá trị hiện tại</div>'
+        f'</div>'
+    )
+    vital_2 = (
+        f'<div class="p035-vital">'
+        f'<div class="p035-vital-label">Ngưỡng cảnh báo</div>'
+        f'<div class="p035-vital-value">{html.escape(_so_doc_duoc(nguong, don_vi))}</div>'
+        f'<div class="p035-vital-sub">Mức bắt đầu coi là sự cố</div>'
+        f'</div>'
+    )
+    vital_3 = (
+        f'<div class="p035-vital alert">'
+        f'<div class="p035-vital-label">Kéo dài</div>'
+        f'<div class="p035-vital-value">{html.escape(keo_dai_str)}</div>'
+        f'<div class="p035-vital-sub">Từ lúc vượt ngưỡng</div>'
+        f'</div>'
+    )
+    baseline_ev = kich_hoat.get("baseline") if kich_hoat else None
+    if baseline_ev is not None:
+        bl = float(baseline_ev)
+        lech_bl = f"{gia_tri / bl:.1f}×" if bl else "—"
+        vital_4 = (
+            f'<div class="p035-vital">'
+            f'<div class="p035-vital-label">Mức thường ngày</div>'
+            f'<div class="p035-vital-value">{html.escape(_so_doc_duoc(bl, don_vi))}'
+            f'<span class="delta bad">{html.escape(lech_bl)}</span></div>'
+            f'<div class="p035-vital-sub">Baseline đo được</div>'
+            f'</div>'
         )
+    else:
+        vital_4 = (
+            f'<div class="p035-vital">'
+            f'<div class="p035-vital-label">Dịch vụ</div>'
+            f'<div class="p035-vital-value" style="font-size:18px">{html.escape(signal.get("affected_service", ""))}</div>'
+            f'<div class="p035-vital-sub">Dịch vụ bị ảnh hưởng</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div class="p035-vitals">{vital_1}{vital_2}{vital_3}{vital_4}</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"↳ `{signal['metric_name']} = {signal['metric_value']:g}` "
+        f"(ngưỡng `{signal['threshold']:g}`, dịch vụ `{signal.get('affected_service', '')}`)"
+    )
+    if kich_hoat is not None:
+        khoi_promql(kich_hoat.get("promql", ""), luc, gap=False)
+
+    # SVG chart panel matching reference HTML
+    khoi_bieu_do_svg(signal, luc)
 
     # ── (b) Metric breakdown
     st.markdown("##### Số liệu chi tiết")
@@ -1127,31 +2551,38 @@ def bang_dieu_tra(incident: dict, signal: dict | None) -> None:
 
 def the_de_xuat(incident: dict, proposal: dict) -> None:
     """AI Agent Recommendation — hành động, rủi ro, và chỗ duyệt thật."""
+    da_thuc_hien = incident["state"] == "Resolved"
+    executed_class = " executed" if da_thuc_hien else ""
+
+    st.markdown(
+        f'<div class="p035-proposal{executed_class}">'
+        f'<div class="p035-proposal-head">'
+        f'<div class="p035-proposal-tag">{"Đã thực hiện" if da_thuc_hien else "Đề xuất của AI"}</div>'
+        f'<div class="p035-proposal-title">'
+        f'{html.escape(labels.action(proposal["action"]))}'
+        f' <span class="mui">→</span> '
+        f'<code>{html.escape(str(proposal["target"]))}</code>'
+        f'</div>'
+        + (f'<div class="p035-proposal-target">Tham số: {html.escape(str(proposal["params"]))}</div>' if proposal.get("params") else "")
+        + f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
     with st.container():
         dau_the("p035-neon" if incident["state"] == "Awaiting Approval" else "")
-
-        # (1) Hành động
-        st.markdown(
-            '<div class="p035-hanh-dong">🛠 '
-            f"{html.escape(labels.action(proposal['action']))}"
-            '<span class="mui">→</span>'
-            f"<code>{html.escape(str(proposal['target']))}</code></div>",
-            unsafe_allow_html=True,
-        )
-        if proposal.get("params"):
-            st.caption(f"↳ tham số: `{proposal['params']}`")
 
         # (2) Rủi ro
         if proposal.get("risk"):
             st.markdown(
-                '<div class="p035-rui-ro"><span class="dau-de">⚠️ Đánh đổi cần cân nhắc</span>'
+                '<div class="p035-rui-ro"><span class="dau-de">Đánh đổi cần cân nhắc</span>'
                 f"{html.escape(proposal['risk'])}</div>",
                 unsafe_allow_html=True,
             )
 
         if proposal.get("requires_approval"):
             st.markdown(
-                '<div class="p035-hitl">🔒 <b>AI KHÔNG tự thực hiện hành động này.</b> '
+                '<div class="p035-hitl"><b>AI KHÔNG tự thực hiện hành động này.</b> '
                 "Phải có người xem xét rồi duyệt — đây là điểm human-in-the-loop của hệ thống. "
                 "Agent chỉ được phép đề xuất và chờ.</div>",
                 unsafe_allow_html=True,
@@ -1165,18 +2596,26 @@ def the_de_xuat(incident: dict, proposal: dict) -> None:
         if JIRA_URL:
             phieu = f"{JIRA_URL}/browse/{incident['jira_key']}"
             with cot_duyet:
-                st.link_button("✅ Duyệt trên Jira", phieu, type="primary", use_container_width=True)
+                st.markdown('<div class="p035-btn-duyet">', unsafe_allow_html=True)
+                st.link_button("Duyệt trên Jira", phieu, type="primary", use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             with cot_tu_choi:
-                st.link_button("✖ Từ chối trên Jira", phieu, use_container_width=True)
+                st.markdown('<div class="p035-btn-tu-choi">', unsafe_allow_html=True)
+                st.link_button("Từ chối trên Jira", phieu, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             st.caption(
                 f"↳ Hai nút này **mở phiếu Jira** `{incident['jira_key']}`. Thao tác duyệt/từ chối "
                 "xảy ra ở đó — trang này chỉ hiển thị, không thi hành hành động nào."
             )
         else:
             with cot_duyet:
-                duyet = st.button("✅ Duyệt", type="primary", use_container_width=True, key=f"duyet-{incident['jira_key']}")
+                st.markdown('<div class="p035-btn-duyet">', unsafe_allow_html=True)
+                duyet = st.button("Duyệt", type="primary", use_container_width=True, key=f"duyet-{incident['jira_key']}")
+                st.markdown('</div>', unsafe_allow_html=True)
             with cot_tu_choi:
-                tu_choi = st.button("✖ Từ chối", use_container_width=True, key=f"tu-choi-{incident['jira_key']}")
+                st.markdown('<div class="p035-btn-tu-choi">', unsafe_allow_html=True)
+                tu_choi = st.button("Từ chối", use_container_width=True, key=f"tu-choi-{incident['jira_key']}")
+                st.markdown('</div>', unsafe_allow_html=True)
             if duyet or tu_choi:
                 st.warning(
                     "**Trang này không thi hành hành động.** Việc duyệt/từ chối diễn ra trên phiếu "
@@ -1196,19 +2635,11 @@ def the_de_xuat(incident: dict, proposal: dict) -> None:
 # Trang
 # ---------------------------------------------------------------------------
 
-st.title("🚨 War Room — sự cố đang xảy ra")
 st.markdown(
-    """
-**Trang này theo dõi sự cố của hệ thống.**
-AI tự phát hiện sự cố từ số liệu đo được, tìm nguyên nhân **kèm bằng chứng**,
-rồi đề xuất cách sửa. **Nó không tự sửa** — mọi hành động ảnh hưởng hệ thống
-thật đều phải có người duyệt.
-"""
+    '<div class="p035-sidebar-eyebrow">Bảng theo dõi</div>'
+    '<div class="p035-sidebar-title">Sự cố <em>của hệ thống</em></div>',
+    unsafe_allow_html=True,
 )
-# Nói rõ đang đọc môi trường nào. Runbook demo đã vấp đúng chỗ này: quên
-# `API_URL=http://localhost:8000` là màn hình hiện dữ liệu của Render.
-st.caption(f"↳ API `{API}` · Prometheus `{PROM_URL}`")
-
 
 @st.cache_data(ttl=10)
 def load_incidents(only_open: bool = False) -> list[dict]:
@@ -1236,36 +2667,30 @@ dang_xay_ra = [i for i in incidents if i["state"] in DANG_XAY_RA]
 da_xong = [i for i in incidents if i["state"] not in DANG_XAY_RA]
 
 if "selected_key" not in st.session_state:
-    # Ưu tiên cái đang chờ duyệt: đó là cái duy nhất cần người làm gì ngay.
     cho_duyet = next((i for i in dang_xay_ra if i["state"] == "Awaiting Approval"), None)
-    # KHÔNG rơi về `incidents[0]` khi mọi thứ đã xử lý xong.
-    #
-    # Bản cũ chọn sự cố gần nhất kể cả khi nó đã đóng, nên trang mở ra tự mâu
-    # thuẫn: cột trái ghi "✅ Không có sự cố nào đang diễn ra" trong khi cột phải
-    # dựng nguyên chuông đỏ "🔴 Nghiêm trọng — nhiều khách hàng bị ảnh hưởng
-    # (P1)". Ai nhìn vào cũng đọc cái to màu đỏ trước.
-    #
-    # Đây là màn hình MỞ ĐẦU của buổi demo, lúc chưa có sự cố nào — nên nó phải
-    # nói được đúng một điều: hệ thống đang bình thường.
     default = cho_duyet or (dang_xay_ra[0] if dang_xay_ra else None)
     st.session_state["selected_key"] = default["jira_key"] if default else None
 
 col_list, col_detail = st.columns([1, 2], gap="large")
 
 with col_list:
-    # Tách "đang xảy ra" khỏi "đã xong", và gấp phần đã xong lại.
-    #
-    # Trước 06/08 trang này đổ cả 9 incident vào một danh sách, mà 8 cái là sự
-    # cố cũ đã xử lý xong — nhìn vào chỉ thấy một bức tường những dòng gần giống
-    # hệt nhau. Thứ người xem cần biết là "bây giờ có gì đang cháy".
-    st.markdown(f"### Đang xảy ra ({len(dang_xay_ra)})")
+    # Tabs header matching reference HTML
+    tab_active_cls = "p035-tab active"
+    tab_resolved_cls = "p035-tab"
+    st.markdown(
+        f'<div class="p035-tabs">'
+        f'<div class="{tab_active_cls}">Đang xảy ra <span class="count">{len(dang_xay_ra)}</span></div>'
+        f'<div class="{tab_resolved_cls}">Đã xử lí <span class="count">{len(da_xong)}</span></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     if not dang_xay_ra:
-        st.success("✅ Không có sự cố nào đang diễn ra.")
+        st.success("Không có sự cố nào đang diễn ra.")
     for inc in dang_xay_ra:
         the_incident(inc)
 
     if da_xong:
-        with st.expander(f"Đã xử lý xong ({len(da_xong)})", expanded=False):
+        with st.expander(f"Đã xử lý ({len(da_xong)})", expanded=False):
             for inc in da_xong:
                 the_incident(inc)
 
@@ -1277,7 +2702,7 @@ with col_detail:
         else:
             # Không có gì đang cháy. Nói thẳng điều đó, và nói AI vẫn đang trực —
             # màn hình trống dễ bị hiểu là hệ thống hỏng hoặc chưa chạy.
-            st.success("### ✅ Hệ thống đang bình thường\n\nKhông có sự cố nào đang diễn ra.")
+            st.success("### Hệ thống đang bình thường\n\nKhông có sự cố nào đang diễn ra.")
             st.markdown(
                 "**AI vẫn đang theo dõi liên tục.** Cứ vài giây nó đọc lại số liệu đo "
                 "của từng dịch vụ. Khi một chỉ số vượt ngưỡng **và giữ nguyên đủ lâu** "
@@ -1308,73 +2733,121 @@ with col_detail:
             dau_trang_incident(incident)
 
             if incident["state"] == "Awaiting Approval":
-                st.error(
-                    "### ⏸ ĐANG CHỜ NGƯỜI DUYỆT\n\n"
-                    "AI đã chẩn đoán xong và đề xuất cách sửa bên dưới, nhưng **nó không tự "
-                    "thực hiện**. Cần một người xem xét rồi bấm duyệt trên Jira."
+                st.markdown(
+                    '<div class="p035-hitl"><b>CẦN NGƯỜI DUYỆT</b> — '
+                    'AI đã chẩn đoán xong và đề xuất cách sửa bên dưới. '
+                    'Cần người xem xét rồi bấm duyệt trên Jira.</div>',
+                    unsafe_allow_html=True,
                 )
 
-            # ── ① Tín hiệu phát hiện: bằng chứng gốc, trước mọi suy luận.
-            muc("①", "AI thấy gì")
+            muc("01 · Bằng chứng", "Agent <em>thấy gì</em>")
             bang_dieu_tra(incident, signal)
 
-            # ── ② Giả thuyết: chỗ phân biệt TRIỆU CHỨNG với NGUYÊN NHÂN.
-            muc("②", "AI nghĩ vì sao")
+            muc("02 · Lập luận", "Agent <em>nghĩ vì sao</em>")
             hypotheses = incident.get("hypotheses") or []
             if hypotheses:
-                for h in hypotheses:
-                    with st.container():
-                        dau_the()
-                        st.markdown(f"**{h['statement']}**")
-                        st.progress(
-                            h["confidence"],
-                            text=f"Độ tin cậy {h['confidence'] * 100:.0f}% — do luật tính theo bằng chứng, không phải AI tự nhận",
+                da_xong_h = incident["state"] == "Resolved"
+                done_cls = " done" if da_xong_h else ""
+                items_html: list[str] = []
+                for idx, h in enumerate(hypotheses):
+                    is_last = idx == len(hypotheses) - 1
+                    item_cls = "conclusion" if is_last else ""
+                    # Confidence tag
+                    conf = h["confidence"]
+                    conf_pct = f"{conf * 100:.0f}%"
+                    # Evidence tags
+                    ev_tags = ""
+                    for ev in (h.get("evidence") or []):
+                        dong = labels.bang_chung(
+                            ev["name"], ev["value"],
+                            baseline=ev.get("baseline"),
+                            unit=ev.get("unit", ""),
+                            promql=ev.get("promql", ""),
                         )
-                        if h.get("reasoning"):
-                            st.caption(h["reasoning"])
-                        if h.get("evidence"):
-                            st.markdown("**Dựa trên:**")
-                            ve_bang_chung(h["evidence"], incident["detected_at"])
-                        if h.get("log_evidence"):
-                            st.caption(
-                                f"↳ kèm {len(h['log_evidence'])} dòng log gốc — xem khối "
-                                'log đen ở mục ① "AI thấy gì".'
-                            )
-                        deploy = h.get("related_deploy")
-                        if deploy:
-                            st.warning(
-                                f"🚀 **Trùng thời gian với một lần deploy:** phiên bản "
-                                f"`{deploy['version']}` lên lúc {fmt_time_vn(deploy['deployed_at'])} "
-                                f"bởi {deploy['deployed_by']}. Trùng thời gian **chưa phải** bằng "
-                                "chứng nhân quả, nhưng đủ để thử hạ phiên bản trước."
-                            )
+                        warn_cls = "warn" if float(ev["value"]) > float(ev.get("baseline") or ev["value"]) else "ok"
+                        ev_tags += (
+                            f'<span class="p035-r-evidence {warn_cls}">'
+                            f'{html.escape(dong.plain[:60])}'
+                            f'</span>'
+                        )
+                    # Deploy tag
+                    deploy_html = ""
+                    deploy = h.get("related_deploy")
+                    if deploy:
+                        deploy_html = (
+                            f'<div style="margin-top:8px;font-size:12px;color:var(--p2)">'
+                            f'Trùng deploy: <code>{html.escape(deploy["version"])}</code> '
+                            f'lúc {html.escape(fmt_time_vn(deploy["deployed_at"]))}'
+                            f'</div>'
+                        )
+                    # Log tag
+                    log_html = ""
+                    if h.get("log_evidence"):
+                        log_html = (
+                            f'<div style="margin-top:4px;font-size:11px;color:var(--ink-2)">'
+                            f'Kèm {len(h["log_evidence"])} dòng log gốc'
+                            f'</div>'
+                        )
+                    items_html.append(
+                        f'<div class="p035-reasoning-item {item_cls}">'
+                        f'<div class="p035-r-label">Giả thuyết · {conf_pct}</div>'
+                        f'<div class="p035-r-body"><strong>{html.escape(h["statement"])}</strong></div>'
+                        + (f'<div class="p035-r-body">{html.escape(h.get("reasoning", ""))}</div>' if h.get("reasoning") else "")
+                        + ev_tags
+                        + deploy_html
+                        + log_html
+                        + '</div>'
+                    )
+                st.markdown(
+                    f'<div class="p035-reasoning{done_cls}">{"".join(items_html)}</div>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.caption("Chưa có giả thuyết — sự cố này tạo trước khi Agent biết chẩn đoán.")
 
-            # ── ③ Đề xuất: luôn phải qua người duyệt.
-            muc("③", "AI đề xuất làm gì")
+            muc("03 · Đề xuất", "Agent <em>muốn làm gì</em>")
             proposal = incident.get("proposal")
             if proposal:
                 the_de_xuat(incident, proposal)
             else:
                 st.caption("Chưa có đề xuất khắc phục.")
 
-            # ── Timeline: dữ liệu Jira tự ghi, Agent không giả mạo được.
-            with st.expander("🕒 Diễn biến theo thời gian", expanded=False):
-                timeline = incident.get("timeline") or []
-                if timeline:
-                    st.caption("Đọc từ changelog Jira — Jira tự ghi khi có thao tác.")
-                    for t in sorted(timeline, key=lambda t: t["at"]):
-                        st.write(
-                            f"`{fmt_time_vn(t['at'])}` **[{t['actor']}]** {t['action']}"
-                            f" — {t.get('detail', '')}"
-                        )
-                else:
-                    st.caption("Chưa có diễn biến nào.")
+            muc("04 · Diễn biến", "Timeline")
+            timeline = incident.get("timeline") or []
+            if timeline:
+                st.caption("Đọc từ changelog Jira — Jira tự ghi khi có thao tác.")
+                acts: list[str] = []
+                for t in sorted(timeline, key=lambda t: t["at"]):
+                    actor = (t.get("actor") or "System").lower()
+                    if actor == "agent":
+                        act_cls = "agent"
+                    elif actor in ("system", "jira"):
+                        act_cls = "system"
+                    else:
+                        act_cls = "human"
+                    moc = _unix(t["at"])
+                    hien_ts = _gio_vn(moc).strftime("%H:%M:%S") if moc else ""
+                    who_cls = "agent" if actor == "agent" else ""
+                    acts.append(
+                        f'<div class="p035-act {act_cls}">'
+                        f'<div class="time">{html.escape(hien_ts)}</div>'
+                        f'<div class="text"><span class="who {who_cls}">[{html.escape(t.get("actor", "System"))}]</span> '
+                        f'{html.escape(t["action"])}'
+                        + (f' — {html.escape(t.get("detail", ""))}' if t.get("detail") else "")
+                        + '</div></div>'
+                    )
+                st.markdown(
+                    '<div class="p035-activity">' + ''.join(acts) + '</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("Chưa có diễn biến nào.")
 
             postmortem = incident.get("postmortem")
             if postmortem:
-                with st.expander("📋 Báo cáo sau sự cố", expanded=False):
+                muc("05 · Báo cáo", "Postmortem")
+                with st.container():
+                    dau_the()
                     st.write(f"**Tóm tắt:** {postmortem['summary']}")
                     st.write(f"**Nguyên nhân gốc:** {postmortem['root_cause']}")
                     st.write(f"**Tác động:** {postmortem['impact']}")
@@ -1389,7 +2862,7 @@ with col_detail:
 
             related = incident.get("related_incidents") or []
             if related:
-                st.markdown("#### 🔗 Sự cố liên quan")
+                muc("06 · Ngữ cảnh", "Sự cố <em>liên quan</em>")
                 st.caption("Cùng một nguyên nhân lan sang dịch vụ khác.")
                 for col, key in zip(st.columns(len(related)), related):
                     with col:

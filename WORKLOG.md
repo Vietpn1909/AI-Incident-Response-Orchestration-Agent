@@ -809,4 +809,40 @@ Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại
 
 ---
 
+## 2026-08-13
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Chặn `OPENAI_API_KEY` và `LLM_BASE_URL` trong conftest — test đang gọi DashScope thật, tốn quota và chậm 46× | ✅ Done | `327ca18`, test 146s → 3s |
+| Trương Công Thái Đức | Fix CI: cài `ui/requirements.txt` + thêm test khói import 3 trang UI — `plotly` thiếu làm war room chết | ✅ Done | `869086a`, 505 test |
+| Trương Công Thái Đức | Tách THIẾT KẾ khỏi HIỆN TRẠNG trong `docs/pipeline.md` — 3 chỗ mô tả thiết kế như thể đã có | ✅ Done | `c459e8d` |
+| Trương Công Thái Đức | Sửa test khói UI: test gọi mạng thật ra Render, mock trả sai kiểu → dựng mock từ model thật | ✅ Done | `c152e03`, 505 test, 4s ổn định |
+| Trung | Implement bộ đánh giá recall sự cố — `eval/case_suite.py` + 30 test case + 107 test | ✅ Done | `c284453`, 7 file, 2639 dòng |
+
+**Tổng kết ngày:** Đức dọn nợ kỹ thuật: chặn LLM thật trong test (nhanh 46×), fix lỗ hổng CI khiến war room chết mà không ai biết, sửa tài liệu pipeline đang mô tả cái chưa có. Trung hoàn thành bộ đánh giá recall — framework eval đầu tiên của đội.
+
+**Test toàn bộ:** 505 test pass.
+
+---
+
+## 2026-08-15
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Fix Jira: subtask postmortem bị đếm là sự cố — board báo 5 đang mở thay vì 2 | ✅ Done | `3c56c17`, 508 test |
+| Trương Công Thái Đức | Fix endpoint sức khoẻ: thiếu 2 node (`analyze_logs`, `link_incidents`) + `ready=false` trên Render vì đòi Prometheus | ✅ Done | `bf7ca92`, 510 test |
+| Trương Công Thái Đức | Rollback UC-4 thi hành THẬT — `SIMULATE_MISSING_MIGRATION` off → restart container → lỗi 100% → 0% | ✅ Done | `330be75`, 530 test (+20), 4 lớp chặn an toàn |
+| Trương Công Thái Đức | Cập nhật `docs/pipeline.md` + `docs/demo-runbook.md` — Automation Rule #1 đã chạy, thêm màn ⑥ demo rollback thật | ✅ Done | Nằm trong `bf7ca92` và `330be75` |
+| Việt | Đo recall trên bộ case mở rộng — tăng từ 30 → 50 test case enterprise-grade | ✅ Done | `796c602`, `bf3dfb3` |
+| Việt | Commit Gate02 — cập nhật README, architecture diagram, viết `eval/EVIDENCE.md`, thêm `scripts/run_agent.py` | ✅ Done | `b73fbd9`, 518 dòng mới |
+| Việt | Implement idempotency guard — `is_already_remediated()` chống thi hành trùng qua marker trong Jira comment | ✅ Done | `94dd6fd` |
+| Việt | Thêm `get_comment_bodies()` với ADF-to-text parser cho Jira client | ✅ Done | `94dd6fd` |
+| Việt | Viết evaluation report v3.0 — Recall 72%, Precision 72%, 50 case, confusion matrix đầy đủ | ✅ Done | `evaluation_report_v3.md`, 433 dòng |
+
+**Tổng kết ngày:** Hai bước nhảy lớn. (1) UC-4 rollback chạy thật — đo được lỗi 100% → 0%, với 4 lớp chặn an toàn (HITL, default off, whitelist cặp, lệnh cố định). (2) Evaluation report v3 hoàn chỉnh: 50 case enterprise-grade, Recall 72%, Precision 72%, Severity Accuracy 89%. Jira board dọn sạch subtask bị đếm nhầm (5 → 2 đang mở). Endpoint sức khoẻ fix đúng.
+
+**Test toàn bộ:** 530 test pass (tăng 29 test từ 501 → 530).
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

@@ -64,9 +64,9 @@ SEVERITY: dict[str, tuple[str, str, str]] = {
 #: đó (test đang đọc nó), nhưng luôn đi cùng nhau: badge phải lấy icon/tên từ
 #: `SEVERITY` và màu từ đây, KHÔNG hardcode màu theo chữ "P1" ở từng chỗ vẽ.
 SEVERITY_MAU: dict[str, str] = {
-    "P1": "#ef4444",
-    "P2": "#f97316",
-    "P3": "#eab308",
+    "P1": "#E5484D",
+    "P2": "#F5A524",
+    "P3": "#4493F8",
     "P4": "#94a3b8",
 }
 
@@ -339,14 +339,20 @@ def mau_log(muc: str) -> str:
 #: chuỗi CSS của mình, vì war room cần hiệu ứng riêng (viền neon, khối log đen)
 #: mà status page công khai không dùng tới.
 MAU: dict[str, str] = {
-    "nen": "#090d16",
-    "the": "#111827",
-    "vien": "#1f2937",
-    "chu": "#e5e7eb",
-    "mo": "#94a3b8",
-    "nhan": "#38bdf8",
-    "do": "#ef4444",
-    "cam": "#f59e0b",
-    "xanh": "#22c55e",
-    "tim": "#a78bfa",
+    "nen": "#0A0D12",
+    "the": "#10151C",
+    "the2": "#171E27",
+    "vien": "#1F2A37",
+    "vien_dam": "#2D3A4A",
+    "chu": "#E6EBF2",
+    "mo": "#8593A6",
+    "mo2": "#556377",
+    "mo3": "#3B4757",
+    "nhan": "#D4A056",
+    "do": "#E5484D",
+    "cam": "#F5A524",
+    "xanh": "#52B788",
+    "tim": "#9C6ADE",
+    "xanh_duong": "#4493F8",
+    "tin_hieu": "#6BB6C7",
 }
