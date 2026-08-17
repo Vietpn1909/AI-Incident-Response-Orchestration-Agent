@@ -62,5 +62,10 @@ out/
 # File nháp khi dựng UI — không phải deliverable, đừng commit
 scratch_*
 
-# Symlink Streamlit tự tạo, trỏ vào .venv của từng máy — không commit
+# Symlink Streamlit tự tạo, trỏ vào .venv của từng máy — không commit.
+#
+# Streamlit đặt ở HAI chỗ, dễ dọn một mà sót một (đã sót ngày 17/08). Và link trỏ
+# vào `.venv/Lib/...` — chữ `Lib` hoa là bố cục Windows, nên trên macOS/Linux nó
+# chết hẳn.
 .claude/skills/
+.agents/
