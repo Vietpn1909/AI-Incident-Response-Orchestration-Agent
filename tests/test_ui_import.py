@@ -132,3 +132,26 @@ def test_deps_cua_ui_deu_cai_duoc():
 
     for goi in khai_bao:
         importlib.import_module(ten_import.get(goi, goi))
+
+
+def test_khong_mo_san_su_co_da_dong():
+    """Board sạch thì màn mở đầu phải là "hệ thống bình thường", không phải phiếu cũ.
+
+    `war_room.py` chọn phiếu mở sẵn theo thứ tự: đang chờ duyệt → đang diễn ra →
+    (trước 17/08) phiếu gần nhất bất kể trạng thái. Nhánh cuối làm trang tự mâu
+    thuẫn: cột trái ghi "không có sự cố nào đang diễn ra" trong khi khung chính
+    dựng nguyên một phiếu P1 màu đỏ đã đóng từ lâu.
+
+    Đây là màn hình MỞ ĐẦU buổi demo, lúc board vừa dọn sạch — nên nó là thứ đầu
+    tiên người xem nhìn thấy.
+
+    Vá lần đầu 12/08, **mất khi dựng lại UI ngày 17/08**. Test này đọc thẳng mã
+    nguồn vì logic chọn nằm ở cấp module, chạy lúc import, không gói trong hàm
+    nào để gọi lại được.
+    """
+    nguon = (GOC_REPO / "ui" / "war_room.py").read_text(encoding="utf-8")
+
+    assert "dau_tien = cho_duyet or dang_mo" in nguon, "không tìm thấy logic chọn phiếu mở sẵn"
+    assert "or (ds[0] if ds else None)" not in nguon, (
+        "war_room.py lại rơi về `ds[0]` — sẽ mở sẵn một sự cố ĐÃ ĐÓNG khi board sạch"
+    )

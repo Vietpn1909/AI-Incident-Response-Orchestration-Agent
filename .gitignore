@@ -61,3 +61,6 @@ out/
 
 # File nháp khi dựng UI — không phải deliverable, đừng commit
 scratch_*
+
+# Symlink Streamlit tự tạo, trỏ vào .venv của từng máy — không commit
+.claude/skills/

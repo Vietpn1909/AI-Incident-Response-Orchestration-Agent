@@ -2967,7 +2967,19 @@ dang_chon = _tham_so("key")
 if dang_chon not in khoa_hop_le:
     cho_duyet = next((i for i in ds if i.get("state") == "Awaiting Approval"), None)
     dang_mo = next((i for i in ds if i.get("state") in DANG_XAY_RA), None)
-    dau_tien = cho_duyet or dang_mo or (ds[0] if ds else None)
+    # KHÔNG rơi về `ds[0]` khi mọi sự cố đã đóng.
+    #
+    # `ds[0]` là phiếu gần nhất KỂ CẢ đã Resolved, nên trang mở ra tự mâu thuẫn:
+    # cột trái ghi "không có sự cố nào đang diễn ra" trong khi khung chính dựng
+    # nguyên một phiếu P1 màu đỏ. Ai nhìn vào cũng đọc cái to màu đỏ trước.
+    #
+    # Đây là màn hình MỞ ĐẦU buổi demo, lúc board đã dọn sạch — nên nó phải nói
+    # đúng một điều, và `view_trong()` đã viết sẵn điều đó: hệ thống bình thường,
+    # Agent vẫn đang trực, và nó canh ba thứ gì.
+    #
+    # Đã vá lần đầu ngày 12/08, mất khi dựng lại UI ngày 17/08. Có test khoá lại
+    # ở `tests/test_ui_import.py` để không mất lần thứ ba.
+    dau_tien = cho_duyet or dang_mo
     dang_chon = dau_tien.get("jira_key", "") if dau_tien else ""
 
 theme = _tham_so("theme", "dark")
