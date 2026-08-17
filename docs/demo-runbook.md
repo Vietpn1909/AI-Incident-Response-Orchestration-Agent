@@ -145,7 +145,7 @@ Ba mục: **① AI thấy gì → ② AI nghĩ vì sao → ③ AI đề nghị l
 
 ---
 
-## ⑤ Màn chốt · 90 giây — phần mạnh nhất
+## ⑤ Cổng phê duyệt · 90 giây — chứng minh AI không tự ý hành động
 
 Mở phiếu gốc trên Jira, cuộn tới comment **ĐỀ XUẤT KHẮC PHỤC**, đọc to phần Rủi ro:
 
@@ -204,6 +204,133 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 
 ---
 
+## ⑥ Màn mạnh nhất — UC-4: đọc log · sửa THẬT · tự xác nhận
+
+Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ 0,048s và pool
+0%. Agent đọc log để chẩn đoán, sửa thật, rồi **tự đo lại** để xác nhận đã khỏi.
+
+### Chuẩn bị — cờ phải đặt trên BACKEND
+
+```bash
+pkill -f "uvicorn src.main"
+REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000 &
+sleep 8
+API_URL=http://localhost:8000 streamlit run ui/war_room.py &
+```
+
+> ⚠️ Đây là chỗ dễ sai nhất. `duyet.py` chỉ gửi HTTP; `executors` chạy trong tiến
+> trình **backend**. Đặt cờ cho `duyet.py` thì kết quả trả về `simulated=true` mà
+> **không báo lỗi gì** — đã vấp 17/08, mất ~15 phút để hiểu. Giờ `duyet.py` tự
+> cảnh báo nếu thấy đặt sai chỗ.
+>
+> ⚠️ Sửa code Python xong **phải khởi động lại backend**. Python không tự nạp lại,
+> và tiến trình cũ giữ code cũ — đã tưởng một bản vá bị hỏng vì lý do này.
+
+### ① Gây sự cố · 90 giây
+
+```bash
+SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
+  docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
+sleep 10 && python eval/run_measurements.py payment-load --seconds 80 --concurrency 3 --pause 0.05
+```
+
+Kết quả: `{"500": 2202, "502": 735}` — **0 request thành công**.
+
+> "Deploy `v1.4.3` thêm tính năng chống trùng giao dịch, nhưng **quên chạy
+> migration** — cột `idempotency_key` chưa tồn tại trong database. Giờ không ai
+> thanh toán được."
+
+### ② Cho xem số đo MÙ · 30 giây
+
+```bash
+curl -s -G localhost:9090/api/v1/query --data-urlencode \
+ 'query=histogram_quantile(0.95, sum by (service,le) (rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])))'
+```
+
+> "Lỗi 100%, nhưng **p95 chỉ 0,048 giây** — còn nhanh hơn bình thường, vì request
+> chết ngay ở câu lệnh đầu. Pool rảnh 0%. Nhìn ba con số này mà đoán nguyên nhân
+> là **không thể**."
+
+### ③ Agent vào cuộc · 60 giây — phần chính
+
+```bash
+python scripts/run_agent.py --once
+```
+
+Dừng ở hai dòng:
+
+| Dòng log | Nói gì |
+|---|---|
+| `giả thuyết (tin cậy 30%) — Chưa đủ bằng chứng để nêu nguyên nhân gốc` | "Bộ luật **thừa nhận không biết**. Nó không bịa." |
+| `log đổi kết luận, post lại lên war room (30% → 70%)` | "Nó đọc log service và tìm ra **cột `idempotency_key` không tồn tại**. Không con số nào chứa thông tin đó." |
+
+### ④ War room · 60 giây
+
+F5 http://localhost:8501 — ba mục ①②③, đọc to ô đỏ *"nó không tự thực hiện"*.
+
+### ⑤ Người duyệt + sửa THẬT · 60 giây
+
+Kéo phiếu sang **Remediating** *(tài khoản `thaiduc200427`)*, rồi:
+
+```bash
+python scripts/duyet.py KAN-xx
+```
+
+Phải thấy — và **không** có dòng `simulated`:
+
+```
+✅ QUA CỔNG — người duyệt: 712020:fd2ca790…
+   hành động : rollback → service-thanh-toan
+   kết quả   : thành công=True
+```
+
+> Thứ tự kéo/gõ **không quan trọng** từ 17/08: nếu Jira Automation bắn trước và
+> Render ghi một bản *mô phỏng*, lệnh local vẫn ghi đè được, vì bản mô phỏng chưa
+> sửa gì nên không được coi là "đã xong".
+
+### ⑥ Agent TỰ XÁC NHẬN đã khỏi · 60 giây
+
+```bash
+python eval/run_measurements.py payment-load --seconds 45 --concurrency 2 --pause 0.05
+sleep 12
+python scripts/run_agent.py --once
+```
+
+Agent tự in, và tự comment lên Jira:
+
+```
+verify service-thanh-toan: không còn tín hiệu sự cố — đã hồi phục
+KAN-xx: verify → ĐÃ HỒI PHỤC
+```
+
+> "Nó tự đo lại bằng **đúng những truy vấn đã phát hiện sự cố** — nên 'đã hồi
+> phục' cùng một định nghĩa với 'phát hiện'. Trước: 0 request thành công. Sau:
+> 326/326."
+
+> ⚠️ Bước này **phải có tải** mới đo được. Không request nào thì PromQL trả rỗng
+> và Agent không kết luận gì — cố ý, vì "không đo được" khác "đã hồi phục".
+
+### Dọn sau demo
+
+```bash
+SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
+  docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
+```
+
+### Nếu `verify` báo CHƯA ĐỠ hoặc TỆ HƠN
+
+Không phải hỏng — đó là hai nhánh có thật:
+
+| Agent nói | Nghĩa |
+|---|---|
+| ⚠️ **CHƯA ĐỠ** | *"chẩn đoán ban đầu có thể sai, đừng thi hành lại cùng hành động"* — đúng bước 4 runbook nó tự viết |
+| 🔴 **TỆ HƠN** | mức nặng hơn lúc mở phiếu → *"cần người vào ngay, đừng thi hành thêm"* |
+
+Gặp thì cứ đọc to ra. Một hệ thống dám nói "tôi có thể đã sai" đáng tin hơn một
+hệ thống lúc nào cũng báo thành công.
+
+---
+
 ## Câu hỏi chắc chắn bị hỏi
 
 **"Sau khi duyệt thì có sửa thật không?"**
@@ -213,7 +340,22 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 >
 > Ba hành động còn lại vẫn mô phỏng vì chúng cần đổi cấu hình hoặc dựng thêm
 > instance, không đảo được bằng một lệnh. Bọn em ưu tiên làm đúng phần khó trước:
-> chẩn đoán chính xác, và cái khoá không cho AI tự ý hành động."
+> chẩn đoán chính xác, và cái khoá không cho AI tự ý hành động.
+>
+> Và hệ thống **tự biết** cái nào nó sửa thật được: trước khi hành động nó kiểm
+> điều kiện thật của hạ tầng, chứ không tin vào tên hành động. Không đúng việc thì
+> nó thà không làm và ghi rõ là mô phỏng."
+
+**"Làm sao biết nó sửa đúng?"**
+
+> "Nó tự đo lại. Vòng quét sau, nó chạy **đúng những truy vấn đã phát hiện sự cố**
+> rồi ghi kết luận lên phiếu — nên 'đã hồi phục' cùng một định nghĩa với 'phát hiện'.
+>
+> Và nếu chưa đỡ thì nó nói thẳng: *'chẩn đoán ban đầu có thể sai, đừng thi hành
+> lại cùng hành động'*. Đó chính là bước 4 trong runbook nó tự viết.
+>
+> Nếu Prometheus lỗi thì nó **không kết luận gì** — 'không đo được' khác 'đã hồi
+> phục', và ghi nhầm là người trực đọc thấy đã khỏi rồi đi ngủ."
 
 **"Vậy có phải AI Agent thật không?"**
 
@@ -258,90 +400,6 @@ python scripts/duyet.py KAN-25      # ✅ QUA CỔNG
 
 ---
 
-## ⑥ Màn mạnh nhất — UC-4 sửa THẬT
-
-Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ 0,048s và pool
-0%. Rồi Agent sửa thật, và hệ thống hồi phục đo được.
-
-```bash
-# ① gây sự cố
-SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
-  docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
-sleep 10 && python eval/run_measurements.py payment-load --seconds 70 --concurrency 3 --pause 0.05
-```
-
-> "Bây giờ không ai thanh toán được. 100% giao dịch thất bại."
-
-```bash
-# ② Agent chẩn đoán — số đo mù, chỉ log nói được
-python scripts/run_agent.py --once
-```
-
-> "Số đo chỉ biết mọi thứ đang hỏng rất nhanh. Nó không nói được vì sao. Agent
-> phải đi đọc log của service mới tìm ra **tên cột còn thiếu**."
-
-**→ Sang Jira, kéo phiếu sang `Remediating`** *(account NGƯỜI)*
-
-```bash
-# ③ thi hành THẬT — cờ phải đặt trên BACKEND, không phải trên duyet.py
-#
-# `duyet.py` chỉ gửi HTTP; `executors` chạy trong tiến trình backend. Đặt cờ sai
-# chỗ thì kết quả trả về `simulated=true` mà không báo lỗi gì — đã vấp 17/08,
-# mất ~15 phút để hiểu. Giờ `duyet.py` tự cảnh báo nếu thấy đặt sai chỗ.
-pkill -f "uvicorn src.main"
-REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000 &
-sleep 8
-python scripts/duyet.py KAN-xx
-```
-
-> Thứ tự **không còn quan trọng** từ 17/08. Nếu Jira Automation bắn trước và
-> Render ghi một bản **mô phỏng**, lệnh local vẫn ghi đè được — vì bản mô phỏng
-> chưa sửa gì nên không được coi là "đã xong". Đã có test khoá.
-
-Chờ 20 giây rồi đo lại:
-
-```bash
-for i in $(seq 1 60); do curl -s -o /dev/null -X POST localhost:8001/pay \
-  -H 'Content-Type: application/json' -d "{\"order_id\":\"x-$i\",\"amount\":100}"; done
-```
-
-> "Trước khi duyệt: 100% lỗi. Sau khi duyệt: 0%. Đây không phải mô phỏng — Agent
-> vừa khởi động lại service với cấu hình đã đảo lại."
-
-Đo ngày 15/08: **120/120 request thành công**, Prometheus ghi 125 request toàn
-2xx, cờ trong container đi từ `1` về `0`.
-
-⚠️ `REMEDIATION_REAL` mặc định **TẮT**. Không bật thì mọi hành động vẫn mô phỏng
-— an toàn khi tập, và chỉ bật đúng lúc muốn diễn màn này.
-
----
-
-## Màn dự phòng nếu còn thời gian — UC-4 (chỉ chẩn đoán)
-
-Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ 0,048s và pool 0%.
-
-```bash
-SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
-  docker compose -f docker-compose.demo.yml up -d service-thanh-toan
-# chờ ~75 giây rồi chạy Agent
-python scripts/run_agent.py --once
-```
-
-Agent nêu đúng: *thiếu cột `idempotency_key` trong bảng `payments`* — chỉ log nói
-được điều đó, số đo hoàn toàn không.
-
-> "Ở kịch bản này số đo chỉ biết 'mọi thứ đang hỏng rất nhanh'. Nó không nói được
-> vì sao. Agent phải đi đọc log của service mới tìm ra tên cột còn thiếu."
-
-Tắt đi sau khi demo xong:
-
-```bash
-SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
-  docker compose -f docker-compose.demo.yml up -d service-thanh-toan
-```
-
----
-
 ## Việc còn tồn — nói ra nếu được hỏi "còn thiếu gì"
 
 - **Thi hành thật**: `rollback` trên `service-thanh-toan` **đã chạy thật** từ
@@ -352,4 +410,8 @@ SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
 - ⚠️ **Render free tier ngủ sau 15 phút**, tỉnh lại mất 30–60s, và rule gọi lúc
   nó ngủ sẽ **fail im lặng**. Trước demo phải đánh thức:
   `curl https://p-035-incident-agent.onrender.com/health`
-- **Node `verify`** — đo lại sau khi sửa để biết có đỡ không — chưa có.
+- **Node `verify`** ✅ **đã có** từ 17/08 — Agent tự đo lại và tự comment kết luận.
+- ⚠️ `awaiting_keys` chỉ nhớ phiếu mở TRONG tiến trình đó, nên khởi động lại Agent
+  là nó quên phiếu đang chờ duyệt — cả `poll_jira_approvals` lẫn `verify` đều
+  không chạm tới. Đo được 17/08: KAN-48 duyệt trước khi Agent khởi động thì không
+  ai xử, và Agent còn mở KAN-50 mới cho cùng service. Cần seed từ Jira lúc bắt đầu.
