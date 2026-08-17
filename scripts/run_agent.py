@@ -32,6 +32,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from src.agents.detection_loop import run_cycle  # noqa: E402
+from src.agents.nodes.verify import verify  # noqa: E402
 from src.agents.war_room_registry import WarRoomRegistry  # noqa: E402
 from src.config import configure_logging, force_utf8_console, get_settings  # noqa: E402
 from src.models.incident import IncidentState  # noqa: E402
@@ -122,6 +123,57 @@ def build_alert(no_mail: bool) -> IncidentAlerter | None:
 # Poll Jira: tự phát hiện khi người duyệt chuyển ticket sang Remediating
 # ---------------------------------------------------------------------------
 
+def _verify_da_thi_hanh(
+    prometheus_client: PrometheusClient,
+    jira: JiraClient,
+    da_thi_hanh: set[str],
+    da_verify: set[str],
+) -> None:
+    """Đo lại các war room đã thi hành khắc phục, post kết luận lên Jira.
+
+    Chỉ kết luận MỘT LẦN cho mỗi issue. Không đo được (Prometheus lỗi) thì không
+    thêm vào `da_verify`, để vòng sau thử lại — khác với "đã kết luận là chưa đỡ".
+
+    Nuốt lỗi từng issue, cùng lý do như `_xet_nang_muc()`: một lần Jira đáp 429
+    không được giết cả tiến trình Agent, kể cả khi những issue khác vẫn xử lý
+    bình thường được.
+    """
+    for jira_key in sorted(da_thi_hanh - da_verify):
+        try:
+            incident = jira.get_incident(jira_key)
+        except Exception as loi:
+            logger.debug("%s: chưa đọc được để verify (%s)", jira_key, loi)
+            continue
+        if incident is None or not incident.affected_services:
+            da_verify.add(jira_key)  # không có service để đo, đừng thử lại mãi
+            continue
+
+        service = incident.affected_services[0]
+        ket_qua = verify(
+            prometheus_client, service, muc_luc_phat_hien=incident.severity
+        )
+        if ket_qua is None:
+            continue  # chưa đo được — vòng sau thử lại
+
+        logger.info(
+            "%s: verify %s → %s",
+            jira_key, service,
+            "ĐÃ HỒI PHỤC" if ket_qua.hoi_phuc else ("TỆ HƠN" if ket_qua.te_hon else "CHƯA ĐỠ"),
+        )
+        try:
+            jira.add_comment(jira_key, ket_qua.ket_luan)
+        except Exception as loi:
+            logger.warning("%s: không post được kết luận verify (%s)", jira_key, loi)
+
+        # KHÔNG tự chuyển sang Resolved dù đã hồi phục.
+        #
+        # Đóng issue là một quyết định của người trực: họ có thể còn muốn điều tra
+        # nguyên nhân, mở việc cần làm, hoặc viết postmortem trước khi đóng. Agent
+        # tự đóng là lấy đi bước đó, và cùng tinh thần với cổng HITL — nó báo cáo,
+        # người quyết định.
+        da_verify.add(jira_key)
+
+
 def poll_jira_approvals(
     jira: JiraClient,
     awaiting_keys: set[str],
@@ -184,8 +236,6 @@ def _execute_approved(jira: JiraClient, jira_key: str, approved_by: str) -> None
     Luồng giống hệt `POST /webhooks/jira` nhưng chạy bên trong agent loop thay
     vì qua HTTP.
     """
-    settings = get_settings()
-
     # 1. Đọc incident và proposal
     try:
         incident = jira.get_incident(jira_key)
@@ -340,6 +390,9 @@ def main() -> int:
     # `already_executed`: các ticket đã execute rồi, tránh chạy lặp.
     awaiting_keys: set[str] = set()
     already_executed: set[str] = set()
+    #: Đã đo lại và ĐÃ KẾT LUẬN — không đo nữa. Chưa đo được (Prometheus lỗi) thì
+    #: không thêm vào, để vòng sau thử lại.
+    da_verify: set[str] = set()
 
     logger.info("Bắt đầu quét %s mỗi %.0fs. Ctrl+C để dừng.", args.prometheus, args.interval)
     cycles = 0
@@ -372,6 +425,19 @@ def main() -> int:
             # Poll Jira: kiểm tra xem có ticket nào được người duyệt chưa
             if awaiting_keys - already_executed:
                 poll_jira_approvals(jira, awaiting_keys, already_executed)
+
+            # Đo lại những ticket đã thi hành khắc phục — xem có thật sự đỡ không.
+            #
+            # Chạy ở VÒNG SAU chứ không ngay sau khi thi hành: hệ thống cần thời
+            # gian hồi phục, và cửa sổ PromQL `[1m]` còn chứa dữ liệu lúc đang
+            # hỏng. Đo ngay là luôn ra "chưa đỡ".
+            #
+            # Cũng vì thế không đặt trong webhook: chờ 60 giây trong đó thì webhook
+            # timeout, mà Jira Automation lại bỏ cuộc trước.
+            if already_executed - da_verify:
+                _verify_da_thi_hanh(
+                    prometheus_client, jira, already_executed, da_verify
+                )
 
             if args.once:
                 break
