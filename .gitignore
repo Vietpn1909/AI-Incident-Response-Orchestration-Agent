@@ -58,3 +58,6 @@ out/
 # AI logs — tracked structure, ignored content
 .ai-log/*.jsonl
 .ai-log/archive/
+
+# File nháp khi dựng UI — không phải deliverable, đừng commit
+scratch_*
