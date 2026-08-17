@@ -2165,7 +2165,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
                     data_points.append((float(ts_val[0]), float(ts_val[1])))
 
     # Convert to SVG coordinates
-    W, H = 800, 200
+    rong, cao = 800, 200
     if data_points:
         timestamps = [p[0] for p in data_points]
         values = [p[1] for p in data_points]
@@ -2176,10 +2176,10 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
             v_max = v_min + 1
 
         def _x(t: float) -> float:
-            return (t - t_min) / (t_max - t_min) * W if t_max != t_min else W / 2
+            return (t - t_min) / (t_max - t_min) * rong if t_max != t_min else rong / 2
 
         def _y(v: float) -> float:
-            return H - ((v - v_min) / (v_max - v_min) * (H - 20) + 10)
+            return cao - ((v - v_min) / (v_max - v_min) * (cao - 20) + 10)
 
         # Data path
         path_parts = []
@@ -2189,7 +2189,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
         data_path = " ".join(path_parts)
 
         # Area fill path
-        area_path = data_path + f" L{W} {H} L0 {H} Z"
+        area_path = data_path + f" L{rong} {cao} L0 {cao} Z"
 
         # Threshold Y
         nguong_y = _y(nguong) if nguong else None
@@ -2199,7 +2199,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
         if baseline is not None:
             bl_y = _y(baseline)
             baseline_path = (
-                f'<line x1="0" y1="{bl_y:.0f}" x2="{W}" y2="{bl_y:.0f}" '
+                f'<line x1="0" y1="{bl_y:.0f}" x2="{rong}" y2="{bl_y:.0f}" '
                 f'stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" opacity="0.65"/>'
             )
 
@@ -2211,14 +2211,14 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
         # Grid lines
         grid = ""
         for frac in [0.2, 0.4, 0.6, 0.8]:
-            gy = H * frac
-            grid += f'<line x1="0" y1="{gy:.0f}" x2="{W}" y2="{gy:.0f}" stroke="var(--border)" stroke-dasharray="2 4"/>'
+            gy = cao * frac
+            grid += f'<line x1="0" y1="{gy:.0f}" x2="{rong}" y2="{gy:.0f}" stroke="var(--border)" stroke-dasharray="2 4"/>'
 
         # Threshold line
         threshold_line = ""
         if nguong_y is not None:
             threshold_line = (
-                f'<line x1="0" y1="{nguong_y:.0f}" x2="{W}" y2="{nguong_y:.0f}" '
+                f'<line x1="0" y1="{nguong_y:.0f}" x2="{rong}" y2="{nguong_y:.0f}" '
                 f'stroke="var(--p1)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>'
                 f'<text x="6" y="{nguong_y - 4:.0f}" font-family="JetBrains Mono" font-size="9" '
                 f'fill="var(--p1)" opacity="0.85">ngưỡng {_so_doc_duoc(nguong, "")}</text>'
@@ -2230,7 +2230,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
         for i in range(n_labels):
             t = t_min + (t_max - t_min) * i / (n_labels - 1)
             dt = datetime.fromtimestamp(t, tz=UTC).astimezone(tz=None)
-            time_labels.append(dt.strftime("%H:%M"))
+            time_labels.append(dt.strftime("%cao:%M"))
         time_labels[-1] = "Bây giờ"
 
         svg_content = (
@@ -2247,7 +2247,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
             f'<circle cx="{last_x:.0f}" cy="{last_y:.0f}" r="8" fill="{dot_color}" opacity="0.2"/>'
         )
 
-        foot_html = "".join(f'<span>{html.escape(l)}</span>' for l in time_labels)
+        foot_html = "".join(f'<span>{html.escape(nhan)}</span>' for nhan in time_labels)
     else:
         # No data — render placeholder
         svg_content = (
@@ -2282,7 +2282,7 @@ def khoi_bieu_do_svg(signal: dict, luc_phat_hien: str) -> None:
         f'<div class="p035-chart-title"><span class="code">{html.escape(ten_metric)}</span></div>'
         f'{legend}'
         f'</div>'
-        f'<svg class="p035-chart-svg" viewBox="0 0 {W} {H}" preserveAspectRatio="none">'
+        f'<svg class="p035-chart-svg" viewBox="0 0 {rong} {cao}" preserveAspectRatio="none">'
         f'{svg_content}'
         f'</svg>'
         f'<div class="p035-chart-foot">{foot_html}</div>'
@@ -2564,8 +2564,8 @@ def the_de_xuat(incident: dict, proposal: dict) -> None:
         f'<code>{html.escape(str(proposal["target"]))}</code>'
         f'</div>'
         + (f'<div class="p035-proposal-target">Tham số: {html.escape(str(proposal["params"]))}</div>' if proposal.get("params") else "")
-        + f'</div>'
-        f'</div>',
+        + '</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
