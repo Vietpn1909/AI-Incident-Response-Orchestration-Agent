@@ -6,7 +6,7 @@ CHỦ SỞ HỮU: Đức
 bắt buộc có `approved_by`, trả kết quả thống nhất. Module này là lớp **thi
 hành**: chỗ duy nhất trong repo thật sự chạm vào hệ thống.
 
-## Bốn lớp chặn, và vì sao cần cả bốn
+## Năm lớp chặn, và vì sao cần cả năm
 
 Đây là chỗ một AI Agent chạy lệnh `docker` trên máy thật. Một lớp là không đủ.
 
@@ -21,6 +21,19 @@ hành**: chỗ duy nhất trong repo thật sự chạm vào hệ thống.
 4. **Lệnh cố định, KHÔNG dựng chuỗi shell** — tham số truyền dạng list, không
    `shell=True`, và không có giá trị nào từ LLM hay Jira lọt vào dòng lệnh. Kể cả
    `target` cũng chỉ dùng để TRA trong bảng, không nối vào lệnh.
+5. **Kiểm điều kiện THẬT của hệ thống** — chỉ thi hành khi container đang bật
+   `SIMULATE_MISSING_MIGRATION`, tức đúng là sự cố UC-4.
+
+   Bốn lớp đầu lo **an toàn**; lớp này lo **đúng việc**. Chúng khác nhau, và
+   thiếu lớp 5 là bug: danh sách trắng khớp theo cặp `(hành động, đối tượng)` nên
+   nó không biết đang xử sự cố nào, mà UC-1 (pool cạn do tải) CŨNG đề xuất
+   `rollback → service-thanh-toan` khi có deploy trùng thời gian — đã thấy trên
+   KAN-19 và KAN-25 lúc chạy live.
+
+   Không có lớp 5 thì UC-1 bị "sửa" bằng cách tắt một cờ vốn đã tắt rồi restart,
+   và báo "thành công" KHÔNG kèm "(mô phỏng)". Restart không chữa được pool cạn.
+   **Báo cáo sai sự thật tệ hơn thừa nhận mô phỏng** — người trực đọc "đã sửa"
+   rồi đi ngủ, trong khi sự cố vẫn đang diễn ra.
 
 ## Vì sao chỉ làm UC-4
 
@@ -66,6 +79,28 @@ def co_bat_thi_hanh_that() -> bool:
     return os.getenv(_BIEN_BAT, "").strip() == "1"
 
 
+def _co_dang_bat_co_loi(container: str) -> bool:
+    """Container có đang chạy với `SIMULATE_MISSING_MIGRATION=1` không.
+
+    Đây là dấu hiệu duy nhất phân biệt "sự cố UC-4, rollback là cách sửa đúng"
+    với "một sự cố khác cũng tình cờ đề xuất rollback".
+
+    Đọc hỏng thì trả `False` — thà giữ mô phỏng còn hơn chạy một hành động không
+    biết có đúng việc hay không.
+    """
+    try:
+        out = subprocess.run(  # noqa: S603
+            ["docker", "exec", container, "printenv", "SIMULATE_MISSING_MIGRATION"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except Exception:
+        return False
+    return out.returncode == 0 and out.stdout.strip() == "1"
+
+
 def thi_hanh_that(action: str, target: str) -> tuple[bool, str] | None:
     """Thi hành thật nếu cặp `(action, target)` nằm trong danh sách trắng.
 
@@ -90,6 +125,27 @@ def thi_hanh_that(action: str, target: str) -> tuple[bool, str] | None:
 
     if not _COMPOSE.is_file():
         return False, f"Không tìm thấy {_COMPOSE.name} — không thi hành được."
+
+    # Kiểm ĐIỀU KIỆN THẬT của hệ thống, không tin vào tên hành động.
+    #
+    # Danh sách trắng khớp theo cặp `(hành động, đối tượng)` nên nó **không biết
+    # đang xử sự cố nào**. Mà UC-1 (pool cạn do tải) CŨNG đề xuất
+    # `rollback → service-thanh-toan` khi có deploy trùng thời gian — đã đo ngày
+    # 17/08 và trên chính KAN-19, KAN-25 lúc chạy live.
+    #
+    # Không có bước kiểm này thì UC-1 bị "sửa" bằng cách tắt một cờ vốn đã tắt
+    # rồi restart container, và báo "thành công" KHÔNG kèm "(mô phỏng)". Restart
+    # không chữa được pool cạn: tải còn thì pool lại cạn sau vài giây.
+    #
+    # Báo cáo sai sự thật tệ hơn thừa nhận mô phỏng — người trực đọc "đã sửa"
+    # rồi đi ngủ, trong khi sự cố vẫn đang diễn ra.
+    if not _co_dang_bat_co_loi(container):
+        logger.info(
+            "%s không đang bật SIMULATE_MISSING_MIGRATION — hành động %s KHÔNG phải "
+            "cách sửa đúng cho sự cố này, giữ mô phỏng",
+            container, action,
+        )
+        return None
 
     # Tắt cờ mô phỏng deploy hỏng rồi dựng lại container. Đây chính là nội dung
     # của "rollback v1.4.3 → v1.4.2" trên stack demo.

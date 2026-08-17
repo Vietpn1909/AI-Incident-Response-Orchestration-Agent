@@ -22,7 +22,18 @@ def tat_theo_mac_dinh(monkeypatch: pytest.MonkeyPatch):
 
 
 def _docker_ok() -> MagicMock:
-    return MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+    """Docker giả cho trạng thái UC-4: cờ đang BẬT, và `compose up` thành công.
+
+    Phải trả `"1"` cho `docker exec printenv` — lớp 5 đọc giá trị đó để biết có
+    đúng là sự cố UC-4 hay không. Mock trả chuỗi rỗng thì `thi_hanh_that()` giữ
+    mô phỏng, và mọi test bên dưới sẽ đỏ vì lý do không liên quan tới điều nó đo.
+    """
+    def _run(lenh, **kw):
+        if lenh[:2] == ["docker", "exec"]:
+            return MagicMock(returncode=0, stdout="1\n", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    return MagicMock(side_effect=_run)
 
 
 # ── Lớp 2: tắt theo mặc định ────────────────────────────────────────────────
@@ -84,7 +95,11 @@ def test_dung_cap_thi_moi_chay(monkeypatch: pytest.MonkeyPatch):
     thanh_cong, mo_ta = ket_qua
     assert thanh_cong is True
     assert "v1.4.2" in mo_ta
-    chay.assert_called_once()
+    # Hai lời gọi: `docker exec printenv` (lớp 5) rồi `docker compose up`.
+    assert [c.args[0][:2] for c in chay.call_args_list] == [
+        ["docker", "exec"],
+        ["docker", "compose"],
+    ]
 
 
 # ── Lớp 4: lệnh cố định, không dựng chuỗi shell ─────────────────────────────
@@ -114,8 +129,15 @@ def test_lenh_khong_dung_shell_va_khong_noi_target_vao(monkeypatch: pytest.Monke
 
 def test_docker_tra_ma_loi_thi_bao_that_bai(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(executors._BIEN_BAT, "1")
-    hong = MagicMock(return_value=MagicMock(returncode=1, stdout="", stderr="no such service"))
-    with patch("subprocess.run", hong):
+
+    # `printenv` phải THÀNH CÔNG (cờ đang bật) để đi qua lớp 5 — test này đo
+    # đường lỗi của `docker compose`, không phải của lớp 5.
+    def _run(lenh, **kw):
+        if lenh[:2] == ["docker", "exec"]:
+            return MagicMock(returncode=0, stdout="1\n", stderr="")
+        return MagicMock(returncode=1, stdout="", stderr="no such service")
+
+    with patch("subprocess.run", MagicMock(side_effect=_run)):
         thanh_cong, mo_ta = executors.thi_hanh_that("rollback", "service-thanh-toan")
 
     assert thanh_cong is False
@@ -135,7 +157,13 @@ def test_docker_khong_chay_duoc_thi_khong_nem_ra_ngoai(
     docker, hay hành động đã chạy một nửa.
     """
     monkeypatch.setenv(executors._BIEN_BAT, "1")
-    with patch("subprocess.run", MagicMock(side_effect=loi)):
+
+    def _run(lenh, **kw):
+        if lenh[:2] == ["docker", "exec"]:
+            return MagicMock(returncode=0, stdout="1\n", stderr="")
+        raise loi
+
+    with patch("subprocess.run", MagicMock(side_effect=_run)):
         thanh_cong, mo_ta = executors.thi_hanh_that("rollback", "service-thanh-toan")
 
     assert thanh_cong is False
@@ -244,3 +272,51 @@ def test_doc_comment_hong_thi_van_chan():
             raise RuntimeError("429")
 
     assert is_already_remediated(Hong(), "KAN-1", cho_phep_nang_cap=True) is True
+
+
+# ── Lớp 5: kiểm điều kiện thật, không tin tên hành động ─────────────────────
+
+
+def _docker_co(gia_tri: str):
+    """Giả `docker exec printenv` trả `gia_tri`, và `docker compose` thành công."""
+    def _run(lenh, **kw):
+        if lenh[:2] == ["docker", "exec"]:
+            return MagicMock(returncode=0, stdout=gia_tri + "\n", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+    return MagicMock(side_effect=_run)
+
+
+def test_co_khong_bat_thi_giu_mo_phong(monkeypatch: pytest.MonkeyPatch):
+    """UC-1 cũng đề xuất `rollback → service-thanh-toan`, nhưng rollback KHÔNG
+    chữa được pool cạn.
+
+    Danh sách trắng khớp theo cặp `(hành động, đối tượng)` nên nó không biết đang
+    xử sự cố nào. Thấy trên KAN-19 và KAN-25 lúc chạy live: UC-1 có deploy trùng
+    thời gian → đề xuất rollback.
+
+    Thiếu lớp này thì hệ thống tắt một cờ vốn đã tắt, restart container, rồi báo
+    "thành công" KHÔNG kèm "(mô phỏng)" — báo cáo sai sự thật.
+    """
+    monkeypatch.setenv(executors._BIEN_BAT, "1")
+    with patch("subprocess.run", _docker_co("0")) as chay:
+        assert executors.thi_hanh_that("rollback", "service-thanh-toan") is None
+
+    # Đã hỏi container, nhưng KHÔNG chạy `docker compose up`
+    assert all(c.args[0][:2] != ["docker", "compose"] for c in chay.call_args_list)
+
+
+def test_co_dang_bat_thi_moi_thi_hanh(monkeypatch: pytest.MonkeyPatch):
+    """Đúng UC-4 thì mới sửa thật."""
+    monkeypatch.setenv(executors._BIEN_BAT, "1")
+    with patch("subprocess.run", _docker_co("1")) as chay:
+        ket_qua = executors.thi_hanh_that("rollback", "service-thanh-toan")
+
+    assert ket_qua is not None and ket_qua[0] is True
+    assert any(c.args[0][:2] == ["docker", "compose"] for c in chay.call_args_list)
+
+
+def test_khong_doc_duoc_co_thi_giu_mo_phong(monkeypatch: pytest.MonkeyPatch):
+    """Thà giữ mô phỏng còn hơn chạy một hành động không biết có đúng việc không."""
+    monkeypatch.setenv(executors._BIEN_BAT, "1")
+    with patch("subprocess.run", MagicMock(side_effect=FileNotFoundError("docker"))):
+        assert executors.thi_hanh_that("rollback", "service-thanh-toan") is None
