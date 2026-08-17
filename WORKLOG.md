@@ -845,4 +845,39 @@ Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại
 
 ---
 
+## 2026-08-17
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Dựng lại war room theo đúng `scratch_warroom_ref.html` — cả trang thành MỘT khối HTML/CSS/JS nhúng qua `st.iframe`, bỏ hẳn widget Streamlit | ✅ Done | `ui/war_room.py` — header 52px, sidebar 340px cuộn riêng, content 920px, đo trên DOM thật |
+| Việt | Fix lỗi biểu đồ **chưa bao giờ** vẽ được dữ liệu — `khoi_bieu_do_svg()` đọc khoá `values`, trong khi `truy_van_range()` trả khoá `diem`, nên luôn rơi vào nhánh "Prometheus không khả dụng" mà không báo gì | ✅ Done | `ui/war_room.py::bang_bieu_do()` |
+| Việt | Xoá `bieu_do_realtime()` + `dung_bieu_do()` (~350 dòng plotly chết từ lần redesign 16/08, không còn chỗ nào gọi) và bỏ `plotly` khỏi `ui/requirements.txt` | ✅ Done | `ui/requirements.txt` còn 2 dep |
+| Việt | Thêm light theme đầy đủ + nút toggle sun/moon; tab, ô tìm kiếm (`⌘K`), chọn sự cố, nút sao chép PromQL đều chạy client-side không reload | ✅ Done | Trạng thái đang xem ghi vào URL `?key=&theme=` nên "Làm mới" quay lại đúng chỗ |
+| Việt | Ô "Ảnh hưởng" đo thật thay vì con số trang trí của file mẫu — sự cố lỗi lấy tỷ lệ 5xx, sự cố latency tính `1 − bucket[le=ngưỡng]/bucket[le=+Inf]` | ✅ Done | `ui/war_room.py::ty_le_anh_huong()` |
+| Việt | Ô "Agent" trên header lấy `/api/v1/agent/health` thay vì "% uptime" — không có nguồn dữ liệu cho con số đó (Prometheus không scrape Agent, endpoint chỉ trả boolean) | ✅ Done | Cố ý **không** đọc khoá `prometheus` của endpoint đó — bản Render trỏ `localhost:9090` theo thiết kế, dùng nó là báo động giả (đúng bẫy đã ghi ở `src/api/routes.py`) |
+| Việt | Chuyển `st.components.v1.html` → `st.iframe` (deprecated, hạn gỡ 2026-06-01), giữ đường lùi cho Streamlit cũ vì `ui/requirements.txt` cố ý không ghim version | ✅ Done | `ui/war_room.py` |
+
+| Việt | Sửa 3 lỗi lộ ra khi test giao diện với dữ liệu Jira thật (34 phiếu KAN) | ✅ Done | xem 3 dòng ngay dưới |
+| Việt | **Tìm kiếm không lọc được gì** — JS đặt `hidden` đúng, nhưng `.incident { display: block }` của trang đè luôn `[hidden] {display:none}` mặc định của trình duyệt | ✅ Done | Vá lần đầu bằng `.incident[hidden]`, xem dòng dưới |
+| Việt | **Màn chờ che kín trang ngay khi mở** — cùng đúng loại lỗi trên, lặp lại ở `.dang-tai { display: grid }`, và lọt qua bản kiểm cũng vì cùng một lý do: bản kiểm đọc `el.hidden` chứ không đọc `getComputedStyle(el).display` | ✅ Done | Chặn cả loại lỗi bằng `[hidden] { display: none !important; }` trong `theme.RESET_CSS`, bỏ bản vá lẻ |
+| Việt | **Bấm chọn sự cố không ăn** — iframe của Streamlit chạy sandbox **không có** `allow-top-navigation`, nên gán `window.parent.location.href` ném `SecurityError`. Đổi sang `history.replaceState()` rồi `location.reload()` — hai thứ sandbox vẫn cho | ✅ Done | `ui/war_room.py::_JS` |
+| Việt | **Tải sẵn chi tiết mọi phiếu không dùng được**: 34 phiếu mất 18,3 giây, tăng luồng không nhanh hơn (Render 1 worker, request xếp hàng ở server). Chuyển sang chỉ tải chi tiết phiếu đang xem | ✅ Done | `tai_danh_sach()` + `tai_chi_tiet()`, mỗi lần mở trang còn ~2 lời gọi |
+| Việt | Hai nút Runbooks/Postmortems `disabled` kèm lý do khi phiếu đang xem không có mục đó, thay vì bấm không phản hồi | ✅ Done | `ui/war_room.py::header_html()` |
+| Việt | Dò Prometheus **4,02s → 0,52s**: `localhost` phân giải cả `::1` lẫn `127.0.0.1` nên mọi timeout bị nhân đôi. Đổi sang bắt tay TCP (cổng có người nghe trả lời trong 0,001s) rồi mới hỏi `/-/healthy` | ✅ Done | Tách luôn `agent/health` sang cache TTL 60s |
+| Việt | Đo và ghi lại thời gian phản hồi từng chặng — mở trang 3,09s, chuyển phiếu 1,42s, trong đó 0,39s là độ trễ mạng thuần tới Render (đo bằng endpoint `/health` rỗng) | ✅ Done | Số liệu trong tổng kết ngày |
+| Việt | Tách `ui/theme.py` — token hai theme, reset, icon, nút, pill dùng chung; `labels.MAU/SEVERITY_MAU/HEALTH_MAU/LOG_MAU` lấy màu từ `theme.PALETTE` thay vì gõ lại hex | ✅ Done | `ui/theme.py` mới, hết trùng bảng màu ở 3 chỗ |
+| Việt | Dựng lại `status_page.py` theo cùng hệ thiết kế — cùng token, cùng font, cùng dòng `↳`, có light theme; bố cục vẫn một cột kiểu tờ thông báo, không bắt chước bàn làm việc của war room | ✅ Done | `ui/status_page.py` |
+
+**Tổng kết ngày:** War room dựng lại từ đầu theo file thiết kế mẫu. Lý do phải đổi kiến trúc chứ không chỉ sửa CSS: Streamlit đặt mỗi widget trong một `stElementContainer` riêng nên không có cách nào cho hai vùng cuộn độc lập cạnh nhau — mà đó là khung của thiết kế (header cố định, sidebar cuộn riêng, content cuộn riêng). Đổi lại: mỗi lần tải trang phải lấy chi tiết của **tất cả** sự cố (gọi song song, cache 15s) vì mọi sự cố đều được render sẵn thành một `.view` để JS bật/tắt. Nhân tiện lộ ra biểu đồ đã hỏng im lặng từ trước: sai tên khoá nên không lần nào vẽ được dữ liệu Prometheus, mà nhánh lỗi lại nói "Prometheus không khả dụng" nên trông hệt như đường bình thường của bản deploy. Ba ràng buộc cũ giữ nguyên: dòng `↳` hai tầng cho người trực, không bịa số khi thiếu nguồn (hiện `—` kèm lý do), và trang không thi hành hành động nào — duyệt/từ chối vẫn ở Jira.
+
+Buổi chiều test lại với **dữ liệu Jira thật** (34 phiếu KAN thay vì 3 fixture) thì lộ ra ba lỗi mà bản fixture không thể lộ: tìm kiếm không lọc được thẻ nào, bấm chọn sự cố không ăn, và tải sẵn chi tiết mọi phiếu mất 18 giây. Cả ba đều thuộc loại "chạy đúng trong lý thuyết": JS đặt `hidden` đúng nhưng CSS của chính trang đè lên; điều hướng đúng cú pháp nhưng sandbox của iframe chặn; tải song song đúng cách nhưng server chỉ có một worker nên chẳng song song được gì. Bài học ghi lại để khỏi lặp: **kiểm CSS bằng `getComputedStyle`, không bằng thuộc tính DOM** — bản kiểm đầu tiên của tìm kiếm "xanh" chỉ vì nó đọc `el.hidden` thay vì nhìn xem thẻ có biến mất thật không. Bài học này phải trả giá hai lần trong cùng một ngày: vá xong ô tìm kiếm thì đúng cái bẫy đó cắn lại ở màn chờ, và cũng lọt kiểm y hệt. Lần thứ hai mới sửa đúng chỗ — một dòng `[hidden] { display: none !important; }` trong reset dùng chung, chặn cả loại lỗi thay vì vá từng phần tử.
+
+Cuối ngày dọn nốt chỗ lệch tông giữa hai trang: tách `ui/theme.py` làm nguồn duy nhất của token rồi dựng lại status page theo đó.
+
+**Thời gian phản hồi, đo ngày 17/08 từ máy ở Việt Nam:** mở trang lần đầu **3,09s** (danh sách 0,95 + sức khoẻ 0,56 + chi tiết một phiếu 1,05 + dò Prometheus 0,53), chuyển sang phiếu khác **1,42s** (chỉ còn chi tiết phiếu 1,23 + trình duyệt dựng lại trang 0,19). Sàn cứng là **0,39s mỗi lượt gọi** — đo bằng `/health`, một endpoint không làm gì cả — nên đó thuần là độ trễ mạng tới Render, không tối ưu được từ phía UI. Phần còn lại của mỗi lượt gọi chi tiết là 3 lượt Jira REST (issue + changelog + comment) mà API phải đi thay ta. Muốn nhanh hơn nữa thì phải sửa backend, không phải sửa giao diện — xem gợi ý trong docstring `tai_chi_tiet()`.
+
+**Test toàn bộ:** 536 test pass, ruff clean.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

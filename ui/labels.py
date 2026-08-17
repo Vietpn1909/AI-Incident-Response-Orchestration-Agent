@@ -45,6 +45,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ui.theme import PALETTE
+
 # ---------------------------------------------------------------------------
 # Mức độ nghiêm trọng
 # ---------------------------------------------------------------------------
@@ -64,16 +66,16 @@ SEVERITY: dict[str, tuple[str, str, str]] = {
 #: đó (test đang đọc nó), nhưng luôn đi cùng nhau: badge phải lấy icon/tên từ
 #: `SEVERITY` và màu từ đây, KHÔNG hardcode màu theo chữ "P1" ở từng chỗ vẽ.
 SEVERITY_MAU: dict[str, str] = {
-    "P1": "#E5484D",
-    "P2": "#F5A524",
-    "P3": "#4493F8",
-    "P4": "#94a3b8",
+    "P1": PALETTE["do"],
+    "P2": PALETTE["cam"],
+    "P3": PALETTE["xanh_duong"],
+    "P4": PALETTE["mo"],
 }
 
 
 def mau_severity(muc: str) -> str:
-    """`"P1"` → `"#ef4444"`. Mức lạ trả về màu xám trung tính."""
-    return SEVERITY_MAU.get(muc, "#94a3b8")
+    """`"P1"` → mã màu P1. Mức lạ trả về màu xám trung tính."""
+    return SEVERITY_MAU.get(muc, PALETTE["mo"])
 
 # ---------------------------------------------------------------------------
 # Tên dịch vụ
@@ -101,10 +103,10 @@ HEALTH: dict[str, tuple[str, str]] = {
 
 #: Màu badge trạng thái dịch vụ — đi kèm `HEALTH`, cùng lý do với `SEVERITY_MAU`.
 HEALTH_MAU: dict[str, str] = {
-    "operational": "#22c55e",
-    "degraded": "#eab308",
-    "down": "#ef4444",
-    "maintenance": "#38bdf8",
+    "operational": PALETTE["xanh"],
+    "degraded": PALETTE["cam"],
+    "down": PALETTE["do"],
+    "maintenance": PALETTE["tin_hieu"],
 }
 
 
@@ -119,8 +121,8 @@ def health(trang_thai: str) -> tuple[str, str]:
 
 
 def mau_health(trang_thai: str) -> str:
-    """`"down"` → `"#ef4444"`. Trạng thái lạ trả về màu xám trung tính."""
-    return HEALTH_MAU.get(trang_thai, "#94a3b8")
+    """`"down"` → mã màu đỏ P1. Trạng thái lạ trả về màu xám trung tính."""
+    return HEALTH_MAU.get(trang_thai, PALETTE["mo"])
 
 
 # ---------------------------------------------------------------------------
@@ -310,11 +312,11 @@ LOG_LEVEL: dict[str, tuple[str, str]] = {
 
 #: Màu chữ của từng mức log trong khối terminal nền đen.
 LOG_MAU: dict[str, str] = {
-    "ERROR": "#f87171",
-    "WARNING": "#fbbf24",
-    "WARN": "#fbbf24",
-    "INFO": "#4ade80",
-    "DEBUG": "#94a3b8",
+    "ERROR": PALETTE["do"],
+    "WARNING": PALETTE["cam"],
+    "WARN": PALETTE["cam"],
+    "INFO": PALETTE["xanh"],
+    "DEBUG": PALETTE["mo"],
 }
 
 
@@ -324,35 +326,22 @@ def log_level(muc: str) -> tuple[str, str]:
 
 
 def mau_log(muc: str) -> str:
-    """`"ERROR"` → `"#f87171"`. Mức lạ trả về màu xám trung tính."""
-    return LOG_MAU.get(muc.upper(), "#94a3b8")
+    """`"ERROR"` → mã màu đỏ P1. Mức lạ trả về màu xám trung tính."""
+    return LOG_MAU.get(muc.upper(), PALETTE["mo"])
 
 
 # ---------------------------------------------------------------------------
 # Bảng màu chung
 # ---------------------------------------------------------------------------
 
-#: Màu nền / viền / chữ dùng chung cho hai trang.
+#: Màu nền / viền / chữ dùng chung cho hai trang — **bí danh** của
+#: `theme.PALETTE`, giữ lại để code cũ gọi `labels.MAU` không gãy.
 #:
-#: Để ở đây vì `ui/` chỉ được phép import `ui.labels` — không có module thứ ba
-#: để chứa theme. Đây là **dữ liệu màu**, không phải CSS: mỗi trang tự ghép
-#: chuỗi CSS của mình, vì war room cần hiệu ứng riêng (viền neon, khối log đen)
-#: mà status page công khai không dùng tới.
-MAU: dict[str, str] = {
-    "nen": "#0A0D12",
-    "the": "#10151C",
-    "the2": "#171E27",
-    "vien": "#1F2A37",
-    "vien_dam": "#2D3A4A",
-    "chu": "#E6EBF2",
-    "mo": "#8593A6",
-    "mo2": "#556377",
-    "mo3": "#3B4757",
-    "nhan": "#D4A056",
-    "do": "#E5484D",
-    "cam": "#F5A524",
-    "xanh": "#52B788",
-    "tim": "#9C6ADE",
-    "xanh_duong": "#4493F8",
-    "tin_hieu": "#6BB6C7",
-}
+#: Chỗ đúng để sửa màu là [theme.py](theme.py). Trước ngày 17/08 bảng màu nằm
+#: hẳn ở đây kèm lý do "không có module thứ ba để chứa theme"; giờ đã có, và có
+#: vì đúng cái đã xảy ra: war room đổi bộ token còn status page giữ bộ cũ, hai
+#: trang của cùng một sản phẩm nhìn thành hai sản phẩm.
+#:
+#: ⚠️ Đây là **dữ liệu màu** cho code Python. CSS thì dùng biến trong
+#: `theme.TOKENS_CSS` — mã hex cứng không đổi được theo light/dark.
+MAU: dict[str, str] = PALETTE

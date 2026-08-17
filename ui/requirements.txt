@@ -1,6 +1,7 @@
 # Deps của ui/ — Python thuần, không cần Node/React.
 streamlit>=1.40.0
 requests>=2.32.0
-# Biểu đồ diễn biến chỉ số trong war room. Dữ liệu lấy thẳng từ Prometheus
-# `/api/v1/query_range` bằng `requests` — plotly chỉ lo phần vẽ.
-plotly>=5.24.0
+# Bỏ plotly ngày 17/08 khi war room dựng lại theo `scratch_warroom_ref.html`:
+# biểu đồ diễn biến giờ là SVG viết tay trong `ui/war_room.py::bang_bieu_do()`,
+# nằm trong cùng khối HTML với phần còn lại của trang. Không có `import plotly`
+# nào nữa trong `ui/` — khai một dep không ai dùng chỉ làm chậm CI và deploy.
