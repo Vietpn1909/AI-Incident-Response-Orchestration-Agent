@@ -283,9 +283,20 @@ python scripts/run_agent.py --once
 **→ Sang Jira, kéo phiếu sang `Remediating`** *(account NGƯỜI)*
 
 ```bash
-# ③ thi hành THẬT — bật cờ, mặc định tắt
-REMEDIATION_REAL=1 python scripts/duyet.py KAN-xx
+# ③ thi hành THẬT — cờ phải đặt trên BACKEND, không phải trên duyet.py
+#
+# `duyet.py` chỉ gửi HTTP; `executors` chạy trong tiến trình backend. Đặt cờ sai
+# chỗ thì kết quả trả về `simulated=true` mà không báo lỗi gì — đã vấp 17/08,
+# mất ~15 phút để hiểu. Giờ `duyet.py` tự cảnh báo nếu thấy đặt sai chỗ.
+pkill -f "uvicorn src.main"
+REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000 &
+sleep 8
+python scripts/duyet.py KAN-xx
 ```
+
+> Thứ tự **không còn quan trọng** từ 17/08. Nếu Jira Automation bắn trước và
+> Render ghi một bản **mô phỏng**, lệnh local vẫn ghi đè được — vì bản mô phỏng
+> chưa sửa gì nên không được coi là "đã xong". Đã có test khoá.
 
 Chờ 20 giây rồi đo lại:
 

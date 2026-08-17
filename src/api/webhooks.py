@@ -28,6 +28,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from src.config import get_settings
 from src.models.incident import Incident, IncidentState
+from src.services import executors
 from src.services.email_client import Attachment, GmailClient
 from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
@@ -132,7 +133,12 @@ async def jira_webhook(
     # gây 2 lần remediation thật + 4 comment + 2 postmortem + 2 email.
     #
     # Jira comment là chỗ nhớ chung duy nhất cả hai cùng nhìn thấy.
-    if is_already_remediated(client, jira_key):
+    # `cho_phep_nang_cap`: chỉ tiến trình thật sự thi hành được mới được phép ghi
+    # đè một bản ghi mô phỏng. Render không có Docker nên nó luôn False ở đó, và
+    # sẽ không tự ghi đè bản ghi của chính mình.
+    if is_already_remediated(
+        client, jira_key, cho_phep_nang_cap=executors.co_bat_thi_hanh_that()
+    ):
         logger.info("%s: đã được thi hành bởi đường khác — bỏ qua", jira_key)
         return {
             "jira_key": jira_key,

@@ -90,7 +90,13 @@ def main() -> int:
     print(f"   kết quả     : thành công={data.get('succeeded')}")
     if data.get("simulated"):
         print("\n   ⚠️  simulated=true — hành động được ghi nhận nhưng KHÔNG đụng vào")
-        print("      service thật. Đây là phạm vi đã chọn của đồ án, không phải lỗi.")
+        print("      service thật.")
+        if os.getenv("REMEDIATION_REAL", "").strip() == "1":
+            # Bẫy đã vấp ngày 17/08, mất khoảng 15 phút để hiểu.
+            print("\n   ❗ Bạn đặt REMEDIATION_REAL=1 cho LỆNH NÀY, nhưng nó không có")
+            print("      tác dụng: script chỉ gửi HTTP, còn `executors` chạy trong")
+            print("      tiến trình BACKEND. Cờ phải đặt ở đó:")
+            print("\n        REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000")
     return 0
 
 

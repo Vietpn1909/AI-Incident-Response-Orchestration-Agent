@@ -28,8 +28,16 @@ logger = logging.getLogger(__name__)
 #: (tiến trình khác) cùng nhìn thấy.
 REMEDIATION_MARKER = "Đã thực thi khắc phục"
 
+#: Cụm chữ `as_comment()` thêm vào khi hành động chỉ được mô phỏng.
+#:
+#: Nhờ nó mà phân biệt được "đã ghi nhận" với "đã làm thật" chỉ bằng cách đọc
+#: comment — không cần thêm custom field hay chỗ lưu trạng thái nào khác.
+DAU_MO_PHONG = "(mô phỏng)"
 
-def is_already_remediated(client: Any, jira_key: str) -> bool:
+
+def is_already_remediated(
+    client: Any, jira_key: str, *, cho_phep_nang_cap: bool = False
+) -> bool:
     """Kiểm tra xem issue đã được thi hành remediation chưa.
 
     Đọc toàn bộ comment text trên issue, tìm marker ``REMEDIATION_MARKER``.
@@ -40,8 +48,13 @@ def is_already_remediated(client: Any, jira_key: str) -> bool:
         client: ``JiraClient`` (Protocol) — gọi ``get_comment_bodies()``.
         jira_key: Issue cần kiểm tra.
 
+    Args (tiếp):
+        cho_phep_nang_cap: `True` thì một bản ghi **chỉ mô phỏng** KHÔNG chặn nữa.
+            Dùng khi người gọi thật sự thi hành được (`REMEDIATION_REAL=1` và có
+            Docker) — xem lý do đo được ở thân hàm.
+
     Returns:
-        ``True`` nếu đã có comment chứa marker → **không được execute lại**.
+        ``True`` nếu đã thi hành rồi → **không được execute lại**.
     """
     try:
         bodies = client.get_comment_bodies(jira_key)
@@ -52,7 +65,32 @@ def is_already_remediated(client: Any, jira_key: str) -> bool:
         # sẽ thử lại.
         logger.warning("%s: không đọc được comment để kiểm idempotency — bỏ qua", jira_key)
         return True  # treat as already done to be safe
-    return any(REMEDIATION_MARKER in body for body in bodies)
+    da_thi_hanh = [b for b in bodies if REMEDIATION_MARKER in b]
+    if not da_thi_hanh:
+        return False
+
+    if not cho_phep_nang_cap:
+        return True
+
+    # Chỉ có dấu MÔ PHỎNG thì chưa có gì được sửa — không được chặn bản thật.
+    #
+    # Đo ngày 17/08 khi chạy UC-4: người trực kéo issue sang `Remediating`, Jira
+    # Automation gọi webhook trên Render, Render thi hành **mô phỏng** và post
+    # comment. Lệnh chạy local có `REMEDIATION_REAL=1` — tức đường DUY NHẤT sửa
+    # thật được, vì chỉ máy local có Docker — sau đó bị guard chặn với
+    # `already_done: true`. Sự cố vẫn nguyên, 100% request vẫn lỗi.
+    #
+    # Render không bao giờ sửa thật được: nó không thấy Docker lẫn Prometheus của
+    # người demo. Nên coi bản ghi mô phỏng của nó là "đã xong" là sai — nó chỉ
+    # ghi nhận việc phê duyệt.
+    da_lam_that = any(DAU_MO_PHONG not in b for b in da_thi_hanh)
+    if da_lam_that:
+        return True
+
+    logger.info(
+        "%s: chỉ có bản ghi MÔ PHỎNG — cho phép thi hành thật ghi đè", jira_key
+    )
+    return False
 
 #: Các hành động Agent được phép đề xuất. Hành động ngoài danh sách này bị từ
 #: chối ngay — tránh việc LLM sinh ra một `action` lạ rồi backend thi hành mù.

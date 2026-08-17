@@ -185,3 +185,62 @@ def test_execute_van_mo_phong_khi_chua_bat():
     assert ket_qua.simulated is True
     assert "(mô phỏng)" in ket_qua.as_comment()
     chay.assert_not_called()
+
+
+# ── Guard idempotency: mô phỏng KHÔNG được chặn bản thật ────────────────────
+
+
+def _jira_gia(cac_comment: list[str]):
+    class J:
+        def get_comment_bodies(self, jira_key: str) -> list[str]:
+            return cac_comment
+    return J()
+
+
+def test_ban_mo_phong_khong_chan_ban_that():
+    """Bản ghi mô phỏng chưa sửa gì, nên không được chặn đường sửa thật.
+
+    Đo ngày 17/08 khi chạy UC-4: người trực kéo issue sang `Remediating`, Jira
+    Automation gọi webhook trên Render, Render thi hành **mô phỏng** rồi post
+    comment. Lệnh chạy local có `REMEDIATION_REAL=1` — đường DUY NHẤT sửa thật
+    được, vì chỉ máy local có Docker — sau đó bị guard chặn `already_done: true`.
+    Sự cố vẫn nguyên, 100% request vẫn lỗi.
+    """
+    from src.services.remediation import is_already_remediated
+
+    jira = _jira_gia(["Đã thực thi khắc phục (mô phỏng): rollback → x — thành công."])
+
+    # Người gọi KHÔNG thi hành thật được → giữ nguyên hành vi cũ, vẫn chặn.
+    assert is_already_remediated(jira, "KAN-1") is True
+    # Người gọi thi hành thật được → cho qua để ghi đè.
+    assert is_already_remediated(jira, "KAN-1", cho_phep_nang_cap=True) is False
+
+
+def test_ban_that_thi_chan_ca_khi_cho_phep_nang_cap():
+    """Đã sửa thật rồi thì không sửa lần hai — `--force-recreate` hai lần là vô ích."""
+    from src.services.remediation import is_already_remediated
+
+    jira = _jira_gia(["Đã thực thi khắc phục: rollback → x — thành công."])
+
+    assert is_already_remediated(jira, "KAN-1") is True
+    assert is_already_remediated(jira, "KAN-1", cho_phep_nang_cap=True) is True
+
+
+def test_chua_thi_hanh_gi_thi_khong_chan():
+    from src.services.remediation import is_already_remediated
+
+    jira = _jira_gia(["🔴 PHÁT HIỆN SỰ CỐ", "⚡ ĐỀ XUẤT KHẮC PHỤC"])
+
+    assert is_already_remediated(jira, "KAN-1") is False
+    assert is_already_remediated(jira, "KAN-1", cho_phep_nang_cap=True) is False
+
+
+def test_doc_comment_hong_thi_van_chan():
+    """Đọc hỏng thì chặn — an toàn hơn là thi hành trùng."""
+    from src.services.remediation import is_already_remediated
+
+    class Hong:
+        def get_comment_bodies(self, jira_key: str) -> list[str]:
+            raise RuntimeError("429")
+
+    assert is_already_remediated(Hong(), "KAN-1", cho_phep_nang_cap=True) is True

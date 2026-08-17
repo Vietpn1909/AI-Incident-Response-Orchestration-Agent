@@ -35,6 +35,7 @@ from src.agents.detection_loop import run_cycle  # noqa: E402
 from src.agents.war_room_registry import WarRoomRegistry  # noqa: E402
 from src.config import configure_logging, force_utf8_console, get_settings  # noqa: E402
 from src.models.incident import IncidentState  # noqa: E402
+from src.services import executors  # noqa: E402
 from src.services.email_client import Attachment, GmailClient  # noqa: E402
 from src.services.hitl import ApprovalError, assert_human_approved  # noqa: E402
 from src.services.incident_alert import IncidentAlerter, build_alerter  # noqa: E402
@@ -161,7 +162,11 @@ def poll_jira_approvals(
 
         # ĐÃ ĐƯỢC DUYỆT bởi người thật
         # Kiểm idempotency: bên webhook có thể đã chạy trước rồi.
-        if is_already_remediated(jira, jira_key):
+        # Agent local có Docker nên nó LÀ đường thi hành thật được. Cho phép nó
+        # ghi đè bản ghi chỉ-mô-phỏng do webhook trên Render tạo ra.
+        if is_already_remediated(
+            jira, jira_key, cho_phep_nang_cap=executors.co_bat_thi_hanh_that()
+        ):
             logger.info("⚠️ %s: đã được thi hành bởi webhook — bỏ qua", jira_key)
             already_executed.add(jira_key)
             awaiting_keys.discard(jira_key)
