@@ -329,6 +329,53 @@ def evaluate_pipeline_case(case: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def khoang_tin_cay(k: int, n: int) -> tuple[float, float] | None:
+    """Khoảng tin cậy 95% cho một tỷ lệ `k/n`, theo xấp xỉ Wald.
+
+    Trả `None` khi `n == 0`.
+
+    ## Vì sao bắt buộc phải in ra cạnh mỗi phần trăm
+
+    Bộ này có 25 case sự cố và 25 case âm. Với cỡ mẫu đó, `recall = 72%` thật ra
+    là **"đâu đó giữa 54% và 90%"** — khoảng rộng 35 điểm phần trăm. Không phân
+    biệt được 72% với 85%.
+
+    Đo ngày 18/08, ba hệ quả:
+
+    1. Mọi cải thiện dưới ~15 điểm đều **nằm trong nhiễu**. Sửa 3 lỗ hổng đưa
+       recall từ 72% lên 80% — con số sau không phân biệt được với con số trước.
+    2. Bảng "recall theo họ sự cố" còn tệ hơn: `deployment` có **1 case**, nên
+       `0.0%` ở đó là một lần tung xu, không phải kết luận.
+    3. Muốn khoảng hẹp còn ±10 điểm cần ~78 case sự cố, tức ~150 case tổng — gấp
+       ba hiện tại.
+
+    Nên giá trị của bộ đo này **không nằm ở con số phần trăm**, mà ở phần phân
+    tích từng case bỏ lọt: 7 lỗ hổng, mỗi cái nêu rõ vì sao mù và cần gì để vá.
+    Phần đó không phụ thuộc cỡ mẫu.
+
+    In khoảng tin cậy ngay cạnh mỗi con số để chính người viết báo cáo không tự
+    lừa mình, và để người đọc không trích một con số đơn lẻ ra khỏi ngữ cảnh.
+    """
+    if n <= 0:
+        return None
+    p_hat = k / n
+    # 0.25 là phương sai lớn nhất có thể — dùng khi p_hat là 0 hoặc 1, lúc đó
+    # công thức thường cho sai số 0, nghe như "chắc chắn tuyệt đối" trong khi
+    # thật ra 0/3 chẳng nói được gì.
+    var = p_hat * (1 - p_hat) if 0 < p_hat < 1 else 0.25
+    se = math.sqrt(var / n)
+    return max(0.0, p_hat - 1.96 * se), min(1.0, p_hat + 1.96 * se)
+
+
+def _kct_fmt(k: int, n: int) -> str:
+    """`"54%–90%"`, hoặc `"—"` nếu không tính được."""
+    kct = khoang_tin_cay(k, n)
+    if kct is None:
+        return "—"
+    lo, hi = kct
+    return f"{lo * 100:.0f}%–{hi * 100:.0f}%"
+
+
 def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
@@ -465,16 +512,26 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         "## 2. Bộ chỉ số phát hiện (Detection Metrics)",
         "",
-        "| Chỉ số | Kết quả | Công thức | Ý nghĩa |",
-        "|---|---:|---|---|",
-        f"| **Recall** | **{_percent(metrics['incident_recall'])}** | TP/(TP+FN) | Khả năng không bỏ lọt incident |",
-        f"| **Precision** | **{_percent(metrics['incident_precision'])}** | TP/(TP+FP) | Tỷ lệ alert đúng |",
-        f"| **F1 Score** | **{_percent(metrics['f1_score'])}** | 2·P·R/(P+R) | Cân bằng Precision-Recall |",
-        f"| **F2 Score** | **{_percent(metrics['f2_score'])}** | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |",
-        f"| **Accuracy** | **{_percent(metrics['accuracy'])}** | (TP+TN)/All | Tổng thể đúng bao nhiêu |",
-        f"| **Specificity** | **{_percent(metrics['specificity'])}** | TN/(TN+FP) | Khả năng nhận diện normal |",
-        f"| **False Alarm Rate** | **{_percent(metrics['false_alarm_rate'])}** | FP/(FP+TN) | Tỷ lệ báo nhầm |",
-        f"| **MCC** | **{_mcc_fmt(metrics['mcc'])}** | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |",
+        "| Chỉ số | Kết quả | Khoảng tin cậy 95% | Công thức | Ý nghĩa |",
+        "|---|---:|:---:|---|---|",
+        f"| **Recall** | **{_percent(metrics['incident_recall'])}** | {_kct_fmt(confusion['TP'], confusion['TP'] + confusion['FN'])} | TP/(TP+FN) | Khả năng không bỏ lọt incident |",
+        f"| **Precision** | **{_percent(metrics['incident_precision'])}** | {_kct_fmt(confusion['TP'], confusion['TP'] + confusion['FP'])} | TP/(TP+FP) | Tỷ lệ alert đúng |",
+        f"| **F1 Score** | **{_percent(metrics['f1_score'])}** | — | 2·P·R/(P+R) | Cân bằng Precision-Recall |",
+        f"| **F2 Score** | **{_percent(metrics['f2_score'])}** | — | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |",
+        f"| **Accuracy** | **{_percent(metrics['accuracy'])}** | {_kct_fmt(confusion['TP'] + confusion['TN'], metrics['case_count'])} | (TP+TN)/All | Tổng thể đúng bao nhiêu |",
+        f"| **Specificity** | **{_percent(metrics['specificity'])}** | {_kct_fmt(confusion['TN'], confusion['TN'] + confusion['FP'])} | TN/(TN+FP) | Khả năng nhận diện normal |",
+        f"| **False Alarm Rate** | **{_percent(metrics['false_alarm_rate'])}** | {_kct_fmt(confusion['FP'], confusion['FP'] + confusion['TN'])} | FP/(FP+TN) | Tỷ lệ báo nhầm |",
+        f"| **MCC** | **{_mcc_fmt(metrics['mcc'])}** | — | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |",
+        "",
+        f"> ⚠️ **Cỡ mẫu {metrics['case_count']} case khiến mọi con số trên có sai số lớn.**",
+        f"> Recall {_percent(metrics['incident_recall'])} thật ra là "
+        f"\"đâu đó trong {_kct_fmt(confusion['TP'], confusion['TP'] + confusion['FN'])}\" — khoảng rộng vài chục",
+        "> điểm phần trăm, nên **không phân biệt được** với một con số cao hơn 10–15 điểm.",
+        ">",
+        "> Hệ quả: đừng trích một phần trăm đơn lẻ ra khỏi ngữ cảnh, và đừng coi một",
+        "> cải thiện dưới ~15 điểm là tiến bộ đo được. Giá trị của bộ đo này nằm ở",
+        "> **phần phân tích từng case bỏ lọt** ở mục 3.2.2 — mỗi lỗ hổng nêu rõ vì sao",
+        "> mù và cần gì để vá. Phần đó không phụ thuộc cỡ mẫu.",
         "",
         "## 3. Chỉ số chất lượng chẩn đoán",
         "",
@@ -516,21 +573,40 @@ def render_markdown(payload: dict[str, Any]) -> str:
     ])
 
     # --- Per-family ---
+    #
+    # In SỐ ĐẾM, không in phần trăm.
+    #
+    # Bảng này từng in `Recall`, `Precision`, `F1` theo từng họ. Bỏ đi vì cỡ mẫu
+    # mỗi họ quá nhỏ để phần trăm có nghĩa: `deployment` có ĐÚNG 1 case sự cố,
+    # nên `recall = 0.0%` ở đó là một lần tung xu chứ không phải kết luận —
+    # `UC-4` và `dependency` mỗi họ 3 case, tức sửa một case đổi 33 điểm.
+    #
+    # Phần trăm trên mẫu 1–3 case là con số **gây hiểu sai**: người đọc thấy
+    # "0.0%" sẽ kết luận hệ thống hoàn toàn bất lực với loại đó, trong khi dữ
+    # liệu chỉ đủ nói "case duy nhất bọn em thử thì trượt".
+    #
+    # Số đếm thô thì không nói quá: `0/1` tự nó cho thấy mẫu bé.
     lines.extend([
-        "## 6. Metrics theo họ sự cố",
+        "## 6. Số đếm theo họ sự cố",
         "",
-        "| Họ | TP | FN | FP | Recall | Precision | F1 |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Họ | Bắt được | Bỏ lọt | Báo nhầm | Bắt / tổng sự cố |",
+        "|---|---:|---:|---:|:---:|",
     ])
     for family, fm in metrics["per_family"].items():
         if not fm["true_incidents"] and not fm.get("false_positives", 0):
             continue
+        tp = fm["true_positives"]
+        tong = tp + fm["false_negatives"]
         lines.append(
-            f"| {family} | {fm['true_positives']} | "
-            f"{fm['false_negatives']} | {fm.get('false_positives', 0)} | "
-            f"{_percent(fm['recall'])} | {_percent(fm.get('precision'))} | "
-            f"{_percent(fm.get('f1'))} |"
+            f"| {family} | {tp} | {fm['false_negatives']} | "
+            f"{fm.get('false_positives', 0)} | **{tp}/{tong}** |"
         )
+    lines.extend([
+        "",
+        "> Cố ý **không** in phần trăm ở bảng này. Họ nhỏ nhất có 1 case sự cố, họ",
+        "> lớn nhất có 8 — phần trăm trên mẫu đó gây hiểu sai nhiều hơn là cho biết",
+        "> thêm. `0/1` tự nó đã nói rõ mẫu bé tới đâu.",
+    ])
 
     # --- Per-case results ---
     lines.extend(

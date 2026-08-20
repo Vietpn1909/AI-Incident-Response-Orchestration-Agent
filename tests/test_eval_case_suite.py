@@ -105,3 +105,52 @@ def test_runner_ghi_json_va_report_co_cong_thuc_recall(tmp_path):
     assert "TP/(TP+FN)" in report
     assert "Pipeline (detect" in report
     assert "72.00%" in report
+
+
+def test_khoang_tin_cay_rong_dung_voi_co_mau():
+    """Cỡ mẫu 25 phải cho khoảng rộng ~35 điểm, không phải một con số chắc nịch."""
+    from eval.case_suite import khoang_tin_cay
+
+    lo, hi = khoang_tin_cay(18, 25)          # recall thật của bộ hiện tại
+    assert 0.53 < lo < 0.56
+    assert 0.89 < hi < 0.91
+    assert hi - lo > 0.30, "khoảng phải rộng — đó là điểm của việc in nó ra"
+
+
+def test_ti_le_0_hoac_1_khong_duoc_bao_sai_so_bang_0():
+    """`0/3` không phải "chắc chắn 0%".
+
+    Công thức Wald cho sai số 0 khi p = 0 hoặc 1, nghe như chắc chắn tuyệt đối.
+    Với `deployment` chỉ có 1 case, đó là kết luận sai hẳn — nên dùng phương sai
+    lớn nhất (0.25) thay vì 0.
+    """
+    from eval.case_suite import khoang_tin_cay
+
+    lo, hi = khoang_tin_cay(0, 3)
+    assert hi > 0.5, "0/3 vẫn phải để ngỏ khả năng tỷ lệ thật khá cao"
+    lo1, hi1 = khoang_tin_cay(1, 1)
+    assert lo1 < 0.5, "1/1 không phải bằng chứng cho 100%"
+
+
+def test_khong_co_mau_thi_tra_none():
+    from eval.case_suite import khoang_tin_cay
+
+    assert khoang_tin_cay(0, 0) is None
+
+
+def test_bang_theo_ho_khong_in_phan_tram():
+    """Phần trăm trên mẫu 1–3 case gây hiểu sai — bảng đó chỉ được in số đếm.
+
+    `deployment` có ĐÚNG 1 case sự cố. In `0.0%` ở đó khiến người đọc kết luận hệ
+    thống bất lực hoàn toàn với loại sự cố ấy, trong khi dữ liệu chỉ đủ nói "case
+    duy nhất bọn em thử thì trượt".
+    """
+    import inspect
+
+    from eval import case_suite
+
+    nguon = inspect.getsource(case_suite.render_markdown)
+    khoi = nguon[nguon.index("Per-family") :]
+    khoi = khoi[: khoi.index("Per-case")] if "Per-case" in khoi else khoi
+    assert "_percent(fm[" not in khoi, "bảng theo họ không được in phần trăm"
+    assert "Bắt / tổng sự cố" in khoi
