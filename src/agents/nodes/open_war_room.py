@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from src.models.incident import IncidentSignal
 from src.services.jira import JiraClient
+from src.services.status_updater import ts
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,14 @@ def open_war_room(jira: JiraClient, signal: IncidentSignal) -> WarRoomResult:
 
     Returns:
         `WarRoomResult` — key của issue, và có phải vừa tạo mới không.
+
+    ⚠️ **Hàm này KHÔNG còn tự post bằng chứng lúc tạo issue.** Việc đó chuyển
+    sang `status_detected()` do `incident_graph.open_war_rooms()` gọi, để tránh
+    hai comment cùng nội dung trên một war room.
+
+    Hệ quả: gọi `open_war_room()` trực tiếp — trong script, test, hay một node
+    mới — sẽ tạo ra issue KHÔNG có dòng bằng chứng nào, và không có gì báo lỗi.
+    Ai gọi ngoài graph thì phải tự post `status_detected(signal)` kèm theo.
     """
     service = signal.affected_service
 
@@ -49,23 +58,21 @@ def open_war_room(jira: JiraClient, signal: IncidentSignal) -> WarRoomResult:
     existing = jira.find_open_incident(service)
     if existing:
         logger.info("%s đã có incident đang mở (%s) — cập nhật thay vì mở mới", service, existing)
+        # Agent auto-comment: cập nhật tín hiệu vẫn còn (cùng format status_updater)
         jira.add_comment(
             existing,
-            f"Tín hiệu vẫn còn: {signal.metric_name} = {signal.metric_value:.3f} "
-            f"(ngưỡng {signal.threshold:.3f}), đã vượt liên tục "
-            f"{signal.breached_for_seconds:.0f}s.",
+            f"🔄 [{ts(signal.detected_at)}] TÍN HIỆU VẪN CÒN\n\n"
+            f"Metric: {signal.metric_name} = {signal.metric_value:.3f} "
+            f"(ngưỡng {signal.threshold:.3f})\n"
+            f"Vượt ngưỡng liên tục: {signal.breached_for_seconds:.0f}s\n\n"
+            f"Agent tiếp tục theo dõi.",
         )
         return WarRoomResult(jira_key=existing, created=False)
 
     jira_key = jira.create_incident(signal)
     logger.info("Mở war room %s cho %s (%s)", jira_key, service, signal.severity.value)
 
-    if signal.evidence:
-        lines = ["Bối cảnh thu thập được lúc phát hiện:"]
-        for item in signal.evidence:
-            ratio = item.deviation_ratio
-            deviation = f" — lệch {ratio:.1f}× baseline" if ratio else ""
-            lines.append(f"- {item.name}: {item.value:g}{item.unit}{deviation}")
-        jira.add_comment(jira_key, "\n\n".join(lines))
+    # KHÔNG post "Bối cảnh" ở đây nữa — status_detected() trong incident_graph.py
+    # đã post đầy đủ metric evidence ngay sau khi tạo issue.
 
     return WarRoomResult(jira_key=jira_key, created=True)

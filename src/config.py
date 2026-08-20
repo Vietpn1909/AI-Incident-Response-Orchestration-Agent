@@ -83,6 +83,36 @@ class Settings(BaseSettings):
     # cố tự duyệt, và hành động bị từ chối. Xem src/services/hitl.py.
     jira_agent_account_id: str = ""
 
+    # Email — gửi báo cáo Postmortem sau khi sự cố resolved
+    #
+    # Dùng Gmail SMTP + App Password. Tạo App Password tại:
+    #   https://myaccount.google.com/apppasswords
+    # Yêu cầu: tài khoản Google đã bật 2FA.
+    smtp_email: str = ""
+    smtp_app_password: str = ""
+
+    #: Danh sách email nhận Postmortem, phân cách bằng dấu phẩy.
+    #: Ví dụ: "leader@gmail.com,oncall@gmail.com"
+    postmortem_recipients: str = ""
+
+    #: Người nhận cảnh báo lúc **PHÁT HIỆN** sự cố — khác hẳn
+    #: `postmortem_recipients` là mail gửi **sau khi xong**.
+    #:
+    #: Tách riêng vì hai nhóm người khác nhau: mail này gọi người vào phòng họp
+    #: sửa sự cố ngay lúc đó, còn postmortem là báo cáo cho quản lý đọc hôm sau.
+    #: Đánh thức nhầm nhóm vài lần là lần sau không ai mở mail của Agent nữa.
+    #:
+    #: Để TRỐNG thì tự dùng lại `postmortem_recipients` — thà gửi cho nhóm rộng
+    #: hơn còn hơn im lặng, vì im lặng ở đây trông y hệt "không có sự cố nào".
+    incident_alert_recipients: str = ""
+
+    # Phòng họp khẩn cho war room — Daily.co.
+    #
+    # ⚠️ Không dùng Google Meet: Meet REST API chỉ nhận OAuth 2.0 user auth, API key
+    # bị từ chối, và refresh token ở chế độ Testing hết hạn sau 7 ngày.
+    # Lấy key: daily.co → Dashboard → Developers
+    daily_api_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

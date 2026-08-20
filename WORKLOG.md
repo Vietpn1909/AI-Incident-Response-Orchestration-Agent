@@ -754,4 +754,130 @@ Ba mặt của cùng một chuyện: pha 2 ghi đè pha 1. Ba cửa cộng lại
 
 ---
 
+## 2026-08-10
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Pull code mới nhất từ `develop` về branch `viet`, scan và resolve conflicts | ✅ Done | Branch `viet` đồng bộ |
+| Việt | Implement `MeetingRoomClient` + `DailyMeetingRoom` — tạo phòng họp khẩn trên Daily.co khi sự cố ≥ P2 | ✅ Done | `src/services/meeting_room.py`, 20 test |
+| Việt | Implement `IncidentAlertService` — gửi email cảnh báo kèm link phòng họp khi phát hiện sự cố | ✅ Done | `src/services/incident_alert.py`, 15 test |
+| Việt | Tích hợp phòng họp + email cảnh báo vào `open_war_room` — Agent tự tạo phòng họp + gửi email khi mở incident P1/P2 | ✅ Done | `src/agents/nodes/open_war_room.py` |
+| Việt | Điểm thông minh: nếu 2 dịch vụ cùng bị lỗi → tạo **1 phòng họp dùng chung** thay vì 2 | ✅ Done | Logic `_get_or_create_shared_room()` |
+
+**Tổng kết ngày:** Tích hợp Daily.co meeting room + email cảnh báo vào pipeline. Agent giờ tự tạo phòng họp và gửi email cảnh báo khi phát hiện sự cố nghiêm trọng (P1/P2). Key Daily.co: `ec878...` đã cấu hình trong `.env`.
+
+---
+
+## 2026-08-11
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Implement `LogSearchTool` — Agent đọc log thật từ các dịch vụ | ✅ Done | `f6b58d2`, PR #25 merged |
+| Việt | Fix `_bang_chung_phan_bac()` — sửa logic phản bác bằng chứng trong chẩn đoán | ✅ Done | `0f893b7`, PR #27 merged |
+| Việt | Cấu hình Gmail SMTP (`vietpn04@gmail.com`) + App Password | ✅ Done | `8243cbf` |
+| Trương Công Thái Đức | Dọn 31 lỗi lint làm CI đỏ trên develop từ PR #25 | ✅ Done | `02ac999` |
+| Trương Công Thái Đức | Fix Jira IPv6 NAT64 — ép IPv4 vì IPv6 treo 30 giây | ✅ Done | `74e6e7a` |
+| Trương Công Thái Đức | UC-4: log là nguồn duy nhất — bỏ nhãn chẩn đoán khỏi log demo | ✅ Done | `b88c775` |
+| Trương Công Thái Đức | Vá 6 lỗi chỉ lộ ra khi chạy live trọn chuỗi | ✅ Done | `e7c4b33` |
+
+**Tổng kết ngày:** Hai PR của Việt merge vào develop (PR #25: log observability, PR #27: fix chẩn đoán). Đức fix hàng loạt lỗi phát hiện khi chạy live trọn chuỗi trước demo. Gmail SMTP đã cấu hình xong.
+
+---
+
+## 2026-08-12
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Implement `StatusUpdater` — Agent tự comment tiến trình lên Jira theo từng bước | ✅ Done | `src/services/status_updater.py` |
+| Việt | Implement `PostmortemGenerator` — Agent tự sinh báo cáo postmortem từ dữ liệu Jira thật | ✅ Done | `src/services/postmortem_generator.py` |
+| Việt | Implement `PostmortemReport` — render postmortem thành HTML (email body + report đính kèm) | ✅ Done | `src/services/postmortem_report.py` |
+| Việt | Implement `GmailClient` — gửi email postmortem qua Gmail SMTP với HTML body + attachment | ✅ Done | `src/services/email_client.py` |
+| Việt | Tích hợp postmortem + email vào webhook — sau execute thành công → tự sinh + gửi postmortem | ✅ Done | `src/api/webhooks.py` hàm `_try_send_postmortem()` |
+| Việt | Fix pipeline gap #1: Auto-transition ticket sang Resolved sau execute thành công | ✅ Done | `webhooks.py` bước 7, 2 test mới |
+| Việt | Fix pipeline gap #2: Guard chống postmortem gửi 2 lần khi cả Rule #1 + Rule #2 fire | ✅ Done | `/webhooks/jira/resolved` guard, 1 test mới |
+| Việt | Implement `POST /webhooks/jira/resolved` — xử lý manual resolution khi con người tự sửa | ✅ Done | `webhooks.py`, 9 test mới |
+| Việt | Setup Jira credentials trong `.env` — kết nối thành công tới `jibinarybro.atlassian.net` | ✅ Done | 25 incident đọc được từ Jira Cloud |
+| Việt | Viết `docs/pipeline.md` — tài liệu pipeline chi tiết cho toàn team | ✅ Done | 568 dòng, có sơ đồ Mermaid |
+| Trương Công Thái Đức | Review + vá 6 chỗ trong nhánh `viet` trước merge | ✅ Done | `751edf4` |
+| Trương Công Thái Đức | Thêm `scripts/duyet.py` — kích webhook phê duyệt cho issue có sẵn | ✅ Done | `0247edc` |
+| Trương Công Thái Đức | Fix UI: vá 3 lỗi lộ ra khi tập demo trên màn hình thật | ✅ Done | `06f7845` |
+| Trương Công Thái Đức | Viết runbook buổi demo | ✅ Done | `docs/demo-runbook.md` |
+
+**Tổng kết ngày:** Pipeline hoàn chỉnh tự động end-to-end. Toàn bộ 501 test pass. Hai khoảng trống pipeline cuối cùng được fix: (1) ticket không auto-resolve sau execute, (2) postmortem gửi 2 lần khi cả 2 rule fire. Jira Cloud kết nối thành công, 25 incident đã tồn tại. Tài liệu pipeline chi tiết viết xong cho team.
+
+**Test toàn bộ:** 501 test pass (tăng 3 test từ 498 → 501 nhờ thêm test cho 2 fix + guard).
+
+---
+
+## 2026-08-13
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Chặn `OPENAI_API_KEY` và `LLM_BASE_URL` trong conftest — test đang gọi DashScope thật, tốn quota và chậm 46× | ✅ Done | `327ca18`, test 146s → 3s |
+| Trương Công Thái Đức | Fix CI: cài `ui/requirements.txt` + thêm test khói import 3 trang UI — `plotly` thiếu làm war room chết | ✅ Done | `869086a`, 505 test |
+| Trương Công Thái Đức | Tách THIẾT KẾ khỏi HIỆN TRẠNG trong `docs/pipeline.md` — 3 chỗ mô tả thiết kế như thể đã có | ✅ Done | `c459e8d` |
+| Trương Công Thái Đức | Sửa test khói UI: test gọi mạng thật ra Render, mock trả sai kiểu → dựng mock từ model thật | ✅ Done | `c152e03`, 505 test, 4s ổn định |
+| Trung | Implement bộ đánh giá recall sự cố — `eval/case_suite.py` + 30 test case + 107 test | ✅ Done | `c284453`, 7 file, 2639 dòng |
+
+**Tổng kết ngày:** Đức dọn nợ kỹ thuật: chặn LLM thật trong test (nhanh 46×), fix lỗ hổng CI khiến war room chết mà không ai biết, sửa tài liệu pipeline đang mô tả cái chưa có. Trung hoàn thành bộ đánh giá recall — framework eval đầu tiên của đội.
+
+**Test toàn bộ:** 505 test pass.
+
+---
+
+## 2026-08-15
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Fix Jira: subtask postmortem bị đếm là sự cố — board báo 5 đang mở thay vì 2 | ✅ Done | `3c56c17`, 508 test |
+| Trương Công Thái Đức | Fix endpoint sức khoẻ: thiếu 2 node (`analyze_logs`, `link_incidents`) + `ready=false` trên Render vì đòi Prometheus | ✅ Done | `bf7ca92`, 510 test |
+| Trương Công Thái Đức | Rollback UC-4 thi hành THẬT — `SIMULATE_MISSING_MIGRATION` off → restart container → lỗi 100% → 0% | ✅ Done | `330be75`, 530 test (+20), 4 lớp chặn an toàn |
+| Trương Công Thái Đức | Cập nhật `docs/pipeline.md` + `docs/demo-runbook.md` — Automation Rule #1 đã chạy, thêm màn ⑥ demo rollback thật | ✅ Done | Nằm trong `bf7ca92` và `330be75` |
+| Việt | Đo recall trên bộ case mở rộng — tăng từ 30 → 50 test case enterprise-grade | ✅ Done | `796c602`, `bf3dfb3` |
+| Việt | Commit Gate02 — cập nhật README, architecture diagram, viết `eval/EVIDENCE.md`, thêm `scripts/run_agent.py` | ✅ Done | `b73fbd9`, 518 dòng mới |
+| Việt | Implement idempotency guard — `is_already_remediated()` chống thi hành trùng qua marker trong Jira comment | ✅ Done | `94dd6fd` |
+| Việt | Thêm `get_comment_bodies()` với ADF-to-text parser cho Jira client | ✅ Done | `94dd6fd` |
+| Việt | Viết evaluation report v3.0 — Recall 72%, Precision 72%, 50 case, confusion matrix đầy đủ | ✅ Done | `evaluation_report_v3.md`, 433 dòng |
+
+**Tổng kết ngày:** Hai bước nhảy lớn. (1) UC-4 rollback chạy thật — đo được lỗi 100% → 0%, với 4 lớp chặn an toàn (HITL, default off, whitelist cặp, lệnh cố định). (2) Evaluation report v3 hoàn chỉnh: 50 case enterprise-grade, Recall 72%, Precision 72%, Severity Accuracy 89%. Jira board dọn sạch subtask bị đếm nhầm (5 → 2 đang mở). Endpoint sức khoẻ fix đúng.
+
+**Test toàn bộ:** 530 test pass (tăng 29 test từ 501 → 530).
+
+---
+
+## 2026-08-17
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Dựng lại war room theo đúng `scratch_warroom_ref.html` — cả trang thành MỘT khối HTML/CSS/JS nhúng qua `st.iframe`, bỏ hẳn widget Streamlit | ✅ Done | `ui/war_room.py` — header 52px, sidebar 340px cuộn riêng, content 920px, đo trên DOM thật |
+| Việt | Fix lỗi biểu đồ **chưa bao giờ** vẽ được dữ liệu — `khoi_bieu_do_svg()` đọc khoá `values`, trong khi `truy_van_range()` trả khoá `diem`, nên luôn rơi vào nhánh "Prometheus không khả dụng" mà không báo gì | ✅ Done | `ui/war_room.py::bang_bieu_do()` |
+| Việt | Xoá `bieu_do_realtime()` + `dung_bieu_do()` (~350 dòng plotly chết từ lần redesign 16/08, không còn chỗ nào gọi) và bỏ `plotly` khỏi `ui/requirements.txt` | ✅ Done | `ui/requirements.txt` còn 2 dep |
+| Việt | Thêm light theme đầy đủ + nút toggle sun/moon; tab, ô tìm kiếm (`⌘K`), chọn sự cố, nút sao chép PromQL đều chạy client-side không reload | ✅ Done | Trạng thái đang xem ghi vào URL `?key=&theme=` nên "Làm mới" quay lại đúng chỗ |
+| Việt | Ô "Ảnh hưởng" đo thật thay vì con số trang trí của file mẫu — sự cố lỗi lấy tỷ lệ 5xx, sự cố latency tính `1 − bucket[le=ngưỡng]/bucket[le=+Inf]` | ✅ Done | `ui/war_room.py::ty_le_anh_huong()` |
+| Việt | Ô "Agent" trên header lấy `/api/v1/agent/health` thay vì "% uptime" — không có nguồn dữ liệu cho con số đó (Prometheus không scrape Agent, endpoint chỉ trả boolean) | ✅ Done | Cố ý **không** đọc khoá `prometheus` của endpoint đó — bản Render trỏ `localhost:9090` theo thiết kế, dùng nó là báo động giả (đúng bẫy đã ghi ở `src/api/routes.py`) |
+| Việt | Chuyển `st.components.v1.html` → `st.iframe` (deprecated, hạn gỡ 2026-06-01), giữ đường lùi cho Streamlit cũ vì `ui/requirements.txt` cố ý không ghim version | ✅ Done | `ui/war_room.py` |
+
+| Việt | Sửa 3 lỗi lộ ra khi test giao diện với dữ liệu Jira thật (34 phiếu KAN) | ✅ Done | xem 3 dòng ngay dưới |
+| Việt | **Tìm kiếm không lọc được gì** — JS đặt `hidden` đúng, nhưng `.incident { display: block }` của trang đè luôn `[hidden] {display:none}` mặc định của trình duyệt | ✅ Done | Vá lần đầu bằng `.incident[hidden]`, xem dòng dưới |
+| Việt | **Màn chờ che kín trang ngay khi mở** — cùng đúng loại lỗi trên, lặp lại ở `.dang-tai { display: grid }`, và lọt qua bản kiểm cũng vì cùng một lý do: bản kiểm đọc `el.hidden` chứ không đọc `getComputedStyle(el).display` | ✅ Done | Chặn cả loại lỗi bằng `[hidden] { display: none !important; }` trong `theme.RESET_CSS`, bỏ bản vá lẻ |
+| Việt | **Bấm chọn sự cố không ăn** — iframe của Streamlit chạy sandbox **không có** `allow-top-navigation`, nên gán `window.parent.location.href` ném `SecurityError`. Đổi sang `history.replaceState()` rồi `location.reload()` — hai thứ sandbox vẫn cho | ✅ Done | `ui/war_room.py::_JS` |
+| Việt | **Tải sẵn chi tiết mọi phiếu không dùng được**: 34 phiếu mất 18,3 giây, tăng luồng không nhanh hơn (Render 1 worker, request xếp hàng ở server). Chuyển sang chỉ tải chi tiết phiếu đang xem | ✅ Done | `tai_danh_sach()` + `tai_chi_tiet()`, mỗi lần mở trang còn ~2 lời gọi |
+| Việt | Hai nút Runbooks/Postmortems `disabled` kèm lý do khi phiếu đang xem không có mục đó, thay vì bấm không phản hồi | ✅ Done | `ui/war_room.py::header_html()` |
+| Việt | Dò Prometheus **4,02s → 0,52s**: `localhost` phân giải cả `::1` lẫn `127.0.0.1` nên mọi timeout bị nhân đôi. Đổi sang bắt tay TCP (cổng có người nghe trả lời trong 0,001s) rồi mới hỏi `/-/healthy` | ✅ Done | Tách luôn `agent/health` sang cache TTL 60s |
+| Việt | Đo và ghi lại thời gian phản hồi từng chặng — mở trang 3,09s, chuyển phiếu 1,42s, trong đó 0,39s là độ trễ mạng thuần tới Render (đo bằng endpoint `/health` rỗng) | ✅ Done | Số liệu trong tổng kết ngày |
+| Việt | Tách `ui/theme.py` — token hai theme, reset, icon, nút, pill dùng chung; `labels.MAU/SEVERITY_MAU/HEALTH_MAU/LOG_MAU` lấy màu từ `theme.PALETTE` thay vì gõ lại hex | ✅ Done | `ui/theme.py` mới, hết trùng bảng màu ở 3 chỗ |
+| Việt | Dựng lại `status_page.py` theo cùng hệ thiết kế — cùng token, cùng font, cùng dòng `↳`, có light theme; bố cục vẫn một cột kiểu tờ thông báo, không bắt chước bàn làm việc của war room | ✅ Done | `ui/status_page.py` |
+
+**Tổng kết ngày:** War room dựng lại từ đầu theo file thiết kế mẫu. Lý do phải đổi kiến trúc chứ không chỉ sửa CSS: Streamlit đặt mỗi widget trong một `stElementContainer` riêng nên không có cách nào cho hai vùng cuộn độc lập cạnh nhau — mà đó là khung của thiết kế (header cố định, sidebar cuộn riêng, content cuộn riêng). Đổi lại: mỗi lần tải trang phải lấy chi tiết của **tất cả** sự cố (gọi song song, cache 15s) vì mọi sự cố đều được render sẵn thành một `.view` để JS bật/tắt. Nhân tiện lộ ra biểu đồ đã hỏng im lặng từ trước: sai tên khoá nên không lần nào vẽ được dữ liệu Prometheus, mà nhánh lỗi lại nói "Prometheus không khả dụng" nên trông hệt như đường bình thường của bản deploy. Ba ràng buộc cũ giữ nguyên: dòng `↳` hai tầng cho người trực, không bịa số khi thiếu nguồn (hiện `—` kèm lý do), và trang không thi hành hành động nào — duyệt/từ chối vẫn ở Jira.
+
+Buổi chiều test lại với **dữ liệu Jira thật** (34 phiếu KAN thay vì 3 fixture) thì lộ ra ba lỗi mà bản fixture không thể lộ: tìm kiếm không lọc được thẻ nào, bấm chọn sự cố không ăn, và tải sẵn chi tiết mọi phiếu mất 18 giây. Cả ba đều thuộc loại "chạy đúng trong lý thuyết": JS đặt `hidden` đúng nhưng CSS của chính trang đè lên; điều hướng đúng cú pháp nhưng sandbox của iframe chặn; tải song song đúng cách nhưng server chỉ có một worker nên chẳng song song được gì. Bài học ghi lại để khỏi lặp: **kiểm CSS bằng `getComputedStyle`, không bằng thuộc tính DOM** — bản kiểm đầu tiên của tìm kiếm "xanh" chỉ vì nó đọc `el.hidden` thay vì nhìn xem thẻ có biến mất thật không. Bài học này phải trả giá hai lần trong cùng một ngày: vá xong ô tìm kiếm thì đúng cái bẫy đó cắn lại ở màn chờ, và cũng lọt kiểm y hệt. Lần thứ hai mới sửa đúng chỗ — một dòng `[hidden] { display: none !important; }` trong reset dùng chung, chặn cả loại lỗi thay vì vá từng phần tử.
+
+Cuối ngày dọn nốt chỗ lệch tông giữa hai trang: tách `ui/theme.py` làm nguồn duy nhất của token rồi dựng lại status page theo đó.
+
+**Thời gian phản hồi, đo ngày 17/08 từ máy ở Việt Nam:** mở trang lần đầu **3,09s** (danh sách 0,95 + sức khoẻ 0,56 + chi tiết một phiếu 1,05 + dò Prometheus 0,53), chuyển sang phiếu khác **1,42s** (chỉ còn chi tiết phiếu 1,23 + trình duyệt dựng lại trang 0,19). Sàn cứng là **0,39s mỗi lượt gọi** — đo bằng `/health`, một endpoint không làm gì cả — nên đó thuần là độ trễ mạng tới Render, không tối ưu được từ phía UI. Phần còn lại của mỗi lượt gọi chi tiết là 3 lượt Jira REST (issue + changelog + comment) mà API phải đi thay ta. Muốn nhanh hơn nữa thì phải sửa backend, không phải sửa giao diện — xem gợi ý trong docstring `tai_chi_tiet()`.
+
+**Test toàn bộ:** 536 test pass, ruff clean.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

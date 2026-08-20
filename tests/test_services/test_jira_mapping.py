@@ -158,3 +158,44 @@ def test_proposal_di_qua_adf_roi_ve_van_nguyen_ven():
 
     assert doc_lai == goc
     assert doc_lai.requires_approval is True
+
+
+def test_jql_loai_subtask_khoi_danh_sach_incident():
+    """Việc cần làm SAU sự cố không được đếm là sự cố.
+
+    Trước 15/08, `create_subtasks()` gắn nhãn `incident` cho mọi subtask nó tạo,
+    mà JQL tìm incident lọc đúng bằng nhãn đó. Đo trên board thật: 5 issue "đang
+    mở" nhưng 3 trong đó là "Thêm alert cho pool saturation > 80%", "Review max
+    connection pool size", "Review monitoring" — đều là việc cần làm.
+
+    War room hiện "Đang xảy ra (5)" trong khi chỉ có 2 sự cố thật, và cả ba đều
+    là P4 không có service nào, nhìn hệt dữ liệu hỏng.
+
+    Sau vá, đo lại trên chính board đó: 5 → 2 đang mở, 34 → 31 tổng.
+    """
+    from src.services.jira.mapping import jql_open_incidents
+
+    assert "issuetype != Subtask" in jql_open_incidents("KAN")
+    assert "issuetype != Subtask" in jql_open_incidents("KAN", "service-thanh-toan")
+
+
+def test_action_item_mang_nhan_khac_incident():
+    """Hai nhãn phải KHÁC nhau, nếu không cả bản vá vô nghĩa."""
+    from src.services.jira.mapping import ACTION_ITEM_LABEL, INCIDENT_LABEL
+
+    assert ACTION_ITEM_LABEL != INCIDENT_LABEL
+
+
+def test_create_subtasks_khong_gan_nhan_incident():
+    """Chốt tại nguồn: subtask sinh ra phải mang nhãn action item.
+
+    Test trên JQL ở trên chỉ chặn hậu quả. Test này chặn nguyên nhân — nếu ai đó
+    đổi lại nhãn trong `create_subtasks()`, board lại bẩn dần mà JQL che mất.
+    """
+    import inspect
+
+    from src.services.jira import real
+
+    nguon = inspect.getsource(real.RealJiraClient.create_subtasks)
+    assert "ACTION_ITEM_LABEL" in nguon
+    assert "[INCIDENT_LABEL]" not in nguon

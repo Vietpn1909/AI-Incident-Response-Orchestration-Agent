@@ -42,6 +42,7 @@ from src.models.incident import (
     TimelineEvent,
 )
 from src.services.jira.mapping import (
+    ACTION_ITEM_LABEL,
     INCIDENT_LABEL,
     jira_status_for,
     jql_open_incidents,
@@ -113,6 +114,29 @@ def _adf(text: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
             }
         )
     return {"type": "doc", "version": 1, "content": content}
+
+
+def _adf_to_text(adf: Any) -> str:
+    """Rút plain text từ ADF (Atlassian Document Format).
+
+    Duyệt đệ quy giống ``_extract_payloads()`` nhưng thu text thay vì JSON.
+    Dùng cho ``get_comment_bodies()``: chỉ cần tìm marker text trong comment,
+    không cần cấu trúc đầy đủ.
+    """
+    parts: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "text":
+                parts.append(node.get("text", ""))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(adf)
+    return " ".join(parts)
 
 
 def _extract_payloads(adf: Any) -> list[dict[str, Any]]:
@@ -284,42 +308,26 @@ class RealJiraClient:
         self._call("POST", f"/rest/api/3/issue/{jira_key}/comment", {"body": _adf(body)})
 
     def post_hypothesis(self, jira_key: str, hypothesis: Hypothesis) -> None:
-        lines = [f"Giả thuyết nguyên nhân ({hypothesis.confidence:.0%}): {hypothesis.statement}"]
-        if hypothesis.evidence:
-            lines.append("Bằng chứng:")
-            for item in hypothesis.evidence:
-                ratio = item.deviation_ratio
-                deviation = f", lệch {ratio:.1f}× baseline" if ratio else ""
-                lines.append(f"- {item.name} = {item.value:g}{item.unit}{deviation}")
-                if item.promql:
-                    lines.append(f"  PromQL: {item.promql}")
-        if hypothesis.related_deploy:
-            deploy = hypothesis.related_deploy
-            lines.append(f"Deploy liên quan: {deploy.service} {deploy.version} lúc {deploy.deployed_at:%H:%M:%S}")
-        if hypothesis.reasoning:
-            lines.append(hypothesis.reasoning)
+        from src.services.status_updater import status_diagnosed
+        # Lấy signal từ incident đã lưu để build comment format mới
+        incident = self.get_incident(jira_key)
+        signal = incident.signal if incident else None
+        if signal:
+            text = status_diagnosed(signal, hypothesis)
+        else:
+            text = f"🧠 CHẨN ĐOÁN NGUYÊN NHÂN\n\nNguyên nhân: {hypothesis.statement}\nĐộ tin cậy: {hypothesis.confidence:.0%}"
         self._comment_with_payload(
             jira_key,
-            "\n\n".join(lines),
+            text,
             {_PAYLOAD_KEY: "hypothesis", "data": hypothesis.model_dump(mode="json")},
         )
         self.transition(jira_key, IncidentState.INVESTIGATING)
 
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
-        lines = [f"Đề xuất khắc phục: {proposal.action} → {proposal.target}"]
-        if proposal.params:
-            lines.append(f"Tham số: {proposal.params}")
-        if proposal.runbook:
-            lines.append(f"Runbook: {proposal.runbook}")
-        if proposal.risk:
-            lines.append(f"Rủi ro: {proposal.risk}")
-        lines.append(
-            "CHỜ NGƯỜI DUYỆT — Agent không tự thực thi. Chuyển issue sang trạng thái "
-            f"'{jira_status_for(IncidentState.REMEDIATING)}' để phê duyệt."
-        )
+        from src.services.status_updater import status_proposed
         self._comment_with_payload(
             jira_key,
-            "\n\n".join(lines),
+            status_proposed(proposal),
             {_PAYLOAD_KEY: "proposal", "data": proposal.model_dump(mode="json")},
         )
         self.transition(jira_key, IncidentState.AWAITING_APPROVAL)
@@ -341,6 +349,23 @@ class RealJiraClient:
         for comment in data.get("comments", []):
             payloads.extend(_extract_payloads(comment.get("body")))
         return payloads
+
+    def get_comment_bodies(self, jira_key: str) -> list[str]:
+        """Trả về danh sách nội dung text (plain text) của mọi comment trên issue.
+
+        Dùng cho idempotency check: trước khi thi hành, đọc comment tìm marker
+        ``Đã thực thi khắc phục``. Nếu có thì bên kia đã chạy rồi.
+
+        ADF (Atlassian Document Format) được duyệt đệ quy để rút text, giống
+        cách ``_extract_payloads()`` duyệt tìm JSON.
+        """
+        data = self._call(
+            "GET", f"/rest/api/3/issue/{jira_key}/comment?maxResults=100&orderBy=created"
+        )
+        bodies: list[str] = []
+        for comment in data.get("comments", []):
+            bodies.append(_adf_to_text(comment.get("body")))
+        return bodies
 
     def transition(self, jira_key: str, to_state: IncidentState) -> None:
         transition_id = self._transition_id(jira_key, to_state)
@@ -369,7 +394,10 @@ class RealJiraClient:
                         "issuetype": {"name": "Subtask"},
                         "parent": {"key": jira_key},
                         "summary": item.title[:250],
-                        "labels": [INCIDENT_LABEL],
+                        # ⚠️ KHÔNG dùng INCIDENT_LABEL ở đây — xem ghi chú ở
+                        # `ACTION_ITEM_LABEL`. Đây là việc cần làm SAU sự cố,
+                        # không phải một sự cố.
+                        "labels": [ACTION_ITEM_LABEL],
                     }
                 },
             )
@@ -557,7 +585,14 @@ class RealJiraClient:
     def list_incidents(self, only_open: bool = False) -> list[Incident]:
         if only_open:
             return self._search(jql_open_incidents(self._project))
-        jql = f"project = {self._project} AND labels = \"{INCIDENT_LABEL}\" ORDER BY created DESC"
+        # `issuetype != Subtask` cùng lý do như trong `jql_open_incidents()`:
+        # subtask là việc cần làm sau sự cố, không phải sự cố. Thiếu điều kiện
+        # này thì danh sách "tất cả incident" trên war room vẫn lẫn action item
+        # cũ đã mang nhãn `incident` từ trước bản vá 15/08.
+        jql = (
+            f"project = {self._project} AND labels = \"{INCIDENT_LABEL}\" "
+            "AND issuetype != Subtask ORDER BY created DESC"
+        )
         return self._search(jql)
 
     def _timeline_from_changelog(self, jira_key: str) -> list[TimelineEvent]:

@@ -23,8 +23,14 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install backend and demo dependencies
-        run: pip install -r requirements.txt -r demo/requirements.txt
+      - name: Install backend, demo and UI dependencies
+        # ui/requirements.txt BẮT BUỘC phải có ở đây.
+        #
+        # Thiếu nó thì ngày 13/08 lặp lại: bản UI mới thêm `import plotly`, khai
+        # đúng chỗ trong ui/requirements.txt, nhưng CI không cài nên trang war
+        # room không mở nổi — mà CI vẫn xanh, vì ruff không cần import giải được
+        # và test khi đó chỉ đụng ui/labels.py. Phát hiện ra 30 phút trước giờ demo.
+        run: pip install -r requirements.txt -r demo/requirements.txt -r ui/requirements.txt
 
       - name: Lint with ruff
         run: ruff check src/ tests/ demo/ ui/

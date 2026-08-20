@@ -38,6 +38,7 @@ from datetime import UTC, datetime
 
 from src.models.incident import IncidentState, Severity
 from src.services.jira import JiraClient
+from src.services.status_updater import status_escalated, ts
 
 logger = logging.getLogger(__name__)
 
@@ -128,21 +129,18 @@ def escalate(
         # mà treo càng lâu càng cần ai đó thấy.
         jira.add_comment(
             jira_key,
-            f"⏰ Đã chờ duyệt {cho_phut:.0f} phút, vẫn chưa ai phê duyệt. "
-            f"Mức đã là {muc_cu.value} — không nâng được nữa. "
+            f"⏰ [{ts()}] VẪN CHỜ DUYỆT\n\n"
+            f"Đề xuất khắc phục đã chờ duyệt {cho_phut:.0f} phút "
+            f"(ngưỡng {nguong_phut:.0f} phút).\n"
+            f"Mức đã là {muc_cu.value} — không nâng được nữa.\n\n"
             "Agent KHÔNG tự thi hành hành động khắc phục.",
         )
         logger.warning("%s: chờ duyệt %.0f phút, đã ở mức %s", jira_key, cho_phut, muc_cu.value)
         return EscalationResult(jira_key=jira_key, cho_bao_lau_phut=cho_phut, escalated=False)
 
     jira.set_severity(jira_key, muc_moi)
-    jira.add_comment(
-        jira_key,
-        f"⏰ Đề xuất khắc phục đã chờ duyệt {cho_phut:.0f} phút (ngưỡng {nguong_phut:.0f} phút) "
-        f"mà chưa ai phê duyệt. Nâng mức {muc_cu.value} → {muc_moi.value}.\n\n"
-        "Sự cố vẫn đang diễn ra. Agent KHÔNG tự thi hành hành động khắc phục — "
-        "vẫn chờ người phê duyệt.",
-    )
+    # Agent auto-comment: status NÂNG MỨC
+    jira.add_comment(jira_key, status_escalated(muc_cu, muc_moi, cho_phut, nguong_phut))
     logger.warning(
         "%s: chờ duyệt %.0f phút, nâng %s → %s",
         jira_key,

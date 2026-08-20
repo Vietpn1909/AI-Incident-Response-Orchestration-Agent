@@ -73,6 +73,9 @@ def propose_remediation(
     history = deploys.recent_deploys(signal.affected_service)
     proposal = runbooks.choose(signal, hypothesis, history)
 
+    # post_proposal LƯU proposal data (JSON payload) vào Jira comment để webhook
+    # đọc lại được — KHÔNG bỏ. Comment text bên trong đã được status_proposed()
+    # thay thế ở incident_graph.py.
     jira.post_proposal(jira_key, proposal)
     logger.info(
         "%s: đề xuất %s → %s, params=%s",

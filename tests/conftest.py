@@ -42,6 +42,21 @@ _BIEN_GOI_RA_NGOAI = (
     "JIRA_WEBHOOK_SECRET",
     "DATABASE_URL",
     "PROMETHEUS_URL",
+    # Đường ra mạng mới từ 12/08: `build_room_client()` đọc biến này rồi đi gọi
+    # api.daily.co. Máy nào đã có key trong .env mà không chặn thì test tạo
+    # phòng họp THẬT — và đốt dần hạn mức 5 phòng đồng thời của bản free.
+    "DAILY_API_KEY",
+    # Cùng ngày: `build_alerter()` đọc ba biến này rồi đi gọi smtp.gmail.com.
+    # Đây là đường ra nguy hiểm nhất trong danh sách — Daily chỉ tốn hạn mức,
+    # còn mail thì bay thẳng vào hộp thư người thật và không lấy lại được.
+    "SMTP_EMAIL",
+    "SMTP_APP_PASSWORD",
+    "INCIDENT_ALERT_RECIPIENTS",
+    "POSTMORTEM_RECIPIENTS",
+    # Đường ra cũ nhất mà danh sách này bỏ sót. `hypothesize` gọi LLM thật qua
+    # DashScope, nên MỌI test chạy graph với tín hiệu thật đều đi ra mạng.
+    "OPENAI_API_KEY",
+    "LLM_BASE_URL",
 )
 
 

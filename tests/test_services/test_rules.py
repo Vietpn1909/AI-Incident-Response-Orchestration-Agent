@@ -302,3 +302,157 @@ def test_it_diem_khong_lam_mat_duong_nguong_cung():
 
     assert signal is not None
     assert signal.severity == Severity.P2
+
+
+# ── Đường phát hiện thứ tư: MẤT TÍN HIỆU ────────────────────────────────────
+
+
+def test_p95_bang_0_voi_baseline_dang_tin_la_su_co_p1():
+    """Service đang phục vụ thì p95 không thể bằng 0 tuyệt đối.
+
+    Đọc được đúng 0 mà có baseline đáng tin nghĩa là: hoặc service ngừng phục vụ,
+    hoặc đường đo đã hỏng. Cả hai đều là sự cố.
+
+    Case I23 (Prometheus exporter crash, mọi metric trả 0): luật cũ phân loại là
+    BÌNH THƯỜNG. Đây là kiểu bỏ lọt tệ nhất trong bộ đo — bộ luật không chỉ sai
+    mà sai **theo hướng an tâm**, tức im lặng trong lúc hệ thống đang cháy.
+    """
+    from src.services import rules
+
+    tin_hieu = rules.detect(
+        p95_now=0.0,
+        p95_baseline=0.2,
+        error_rate=0.0,
+        pool_saturation=0.0,
+        service="service-thanh-toan",
+        breached_for_seconds=300.0,
+        baseline_samples=30,
+    )
+
+    assert tin_hieu is not None, "p95 = 0 với baseline đáng tin phải là sự cố"
+    assert tin_hieu.severity is rules.Severity.P1
+    assert "mất tín hiệu" in tin_hieu.metric_name
+
+
+def test_chua_co_baseline_thi_p95_bang_0_khong_phai_su_co():
+    """Service chưa có lưu lượng thì p95 = 0 là bình thường, không phải sự cố.
+
+    Thiếu điều kiện baseline thì mọi service vừa `docker compose up`, hoặc service
+    nội bộ rảnh rỗi, đều bị mở incident. Có baseline 20+ mẫu nghĩa là "trước đây
+    nó CÓ phục vụ", nên đọc ra 0 mới là một thay đổi.
+    """
+    from src.services import rules
+
+    # Chưa có baseline
+    assert rules.detect(
+        p95_now=0.0, p95_baseline=0.0, error_rate=0.0, pool_saturation=0.0,
+        service="s", breached_for_seconds=300.0, baseline_samples=0,
+    ) is None
+
+    # Có baseline nhưng chưa đủ mẫu để tin
+    assert rules.detect(
+        p95_now=0.0, p95_baseline=0.2, error_rate=0.0, pool_saturation=0.0,
+        service="s", breached_for_seconds=300.0, baseline_samples=5,
+    ) is None
+
+
+def test_mat_tin_hieu_van_phai_qua_cua_du_lau():
+    """Một lần scrape trượt không phải mất tín hiệu — cửa 30 giây vẫn áp dụng."""
+    from src.services import rules
+
+    assert rules.detect(
+        p95_now=0.0, p95_baseline=0.2, error_rate=0.0, pool_saturation=0.0,
+        service="s", breached_for_seconds=10.0, baseline_samples=30,
+    ) is None
+
+
+def test_mat_tin_hieu_neu_ra_hai_kha_nang_khong_chon_mot():
+    """Số đo không phân biệt được exporter chết với service ngừng phục vụ.
+
+    Nêu đúng một nguyên nhân ở đây là bịa — cùng nguyên tắc với cửa chặn "nêu
+    nguyên nhân nào thì phải có bằng chứng cho nguyên nhân đó".
+    """
+    from src.services import rules
+
+    tin_hieu = rules.detect(
+        p95_now=0.0, p95_baseline=0.2, error_rate=0.0, pool_saturation=0.0,
+        service="s", breached_for_seconds=300.0, baseline_samples=30,
+    )
+    assert tin_hieu is not None
+    ten = [e.name for e in tin_hieu.evidence]
+    assert any("p95" in t for t in ten)
+    assert any("up" in t for t in ten), "phải kèm `up` để người trực soi được"
+
+
+# ── Đường auth thứ hai: DIỆN RỘNG, không theo tốc độ ────────────────────────
+
+
+def test_ne_nguong_toc_do_van_bi_bat_bang_dien_rong():
+    """Kẻ giữ tốc độ dưới ngưỡng nhưng thử hàng nghìn tài khoản vẫn phải bị bắt.
+
+    Case I19: 0,95/s — ngay dưới `AUTH_FAILURE_P3 = 1.0` — duy trì 24 giờ, thành
+    82.080 lần thử nhắm 5.000 tài khoản từ 200 IP luân phiên. Ngưỡng tốc độ thấy
+    "dưới 1 lần mỗi giây, bình thường".
+
+    Ngưỡng tức thời **luôn thua kẻ biết ngưỡng**. Diện rộng thì không né được: hạ
+    tốc độ vẫn phải thử đủ số tài khoản, nếu không thì tấn công vô nghĩa.
+    """
+    from src.services import rules
+
+    tin_hieu = rules.detect_auth_burst(
+        failures_per_second=0.95,
+        breached_for_seconds=0.0,      # sàn tốc độ cho 0 — đúng như node tính
+        service="service-thanh-toan",
+        unique_source_ips=200,
+        unique_accounts=5000,
+        accounts_sustained_seconds=86400,
+    )
+
+    assert tin_hieu is not None, "0,95/s × 24h nhắm 5.000 tài khoản phải là sự cố"
+    assert tin_hieu.severity is rules.Severity.P2
+
+
+def test_dien_rong_dung_thuoc_do_thoi_gian_rieng():
+    """Không được dùng `breached_for_seconds` cho cửa "đủ lâu" của diện rộng.
+
+    Con số đó do node `detect` tính bằng `_sustained()` với sàn `AUTH_FAILURE_P3`,
+    tức chính ngưỡng tốc độ. Dùng nó thì kẻ né ngưỡng có `breached = 0` và cửa
+    không bao giờ mở — một vòng lặp tự khoá.
+    """
+    from src.services import rules
+
+    # Diện rộng bền lâu, nhưng tốc độ chưa từng vượt sàn → vẫn phải bắt.
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=0.0, service="s",
+        unique_accounts=50, accounts_sustained_seconds=300,
+    ) is not None
+
+    # Diện rộng mới chớm, chưa bền → KHÔNG bắt.
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=0.0, service="s",
+        unique_accounts=50, accounts_sustained_seconds=10,
+    ) is None
+
+
+def test_it_tai_khoan_thi_khong_goi_la_tan_cong():
+    """Người quên mật khẩu thử lại tài khoản của chính mình.
+
+    Case N05 (bình thường): 0,8/s, 6 tài khoản, 3 phút. Dưới mốc 10 tài khoản nên
+    không được mở incident — nếu không thì mọi buổi sáng thứ Hai đều thành sự cố.
+    """
+    from src.services import rules
+
+    assert rules.detect_auth_burst(
+        failures_per_second=0.8, breached_for_seconds=0.0, service="s",
+        unique_source_ips=25, unique_accounts=6, accounts_sustained_seconds=180,
+    ) is None
+
+
+def test_khong_truyen_do_ben_thi_lui_ve_breached_for_seconds():
+    """Giữ tương thích: chỗ gọi cũ không biết tham số mới vẫn chạy đúng."""
+    from src.services import rules
+
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=300.0, service="s",
+        unique_accounts=50,
+    ) is not None

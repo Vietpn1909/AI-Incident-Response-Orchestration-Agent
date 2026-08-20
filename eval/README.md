@@ -2,6 +2,12 @@
 
 **Chủ sở hữu: Trung** · Deliverable **#10**
 
+Ngoài phép đo live cho UC-1–UC-3 bên dưới, bộ baseline offline 30 case nằm tại
+[`eval/cases/README.md`](cases/README.md). Bộ này đo cả **incident recall**,
+precision, tỷ lệ báo nhầm, severity, bằng chứng và top-1 nguyên nhân gốc mà
+không gọi Docker/Jira Cloud/LLM; đường tích hợp dừng ở `FakeJiraClient` sau khi
+node detect quyết định mở incident.
+
 Mentor đã nhấn mạnh chính chỗ này: *"khi làm bài toán AI, vấn đề đo đạc như thế nào — cần phải clear, cần đo đạc cụ thể"*. Đây là câu trả lời.
 
 ## Hai họ metric — đừng lẫn vào nhau
@@ -50,6 +56,44 @@ Cần ≥10 lần/UC để tỷ lệ phần trăm có nghĩa. 2–3 lần thì c
 Khi đọc M3, không được đánh đồng câu Agent trả về với năng lực LLM: `rule` nghĩa
 là Agent đã chặn câu LLM lỗi và giữ kết luận tất định có bằng chứng. Báo cáo phải
 ghi cả số đúng/tổng và tỷ lệ `llm`/`rule` cho từng UC.
+
+## Kết quả đã đo — hai đợt, giữ cả hai để so
+
+`eval/runs.csv` chứa **cả hai đợt**, không xoá đợt cũ: so sánh trước/sau chính là
+bằng chứng cho việc thay đổi thiết kế có tác dụng.
+
+| | UC-1 | UC-2 | UC-3 | Tổng |
+|---|:---:|:---:|:---:|:---:|
+| **Đợt 1** — 06/08 | 10/10 | 8/8 | **3/8 = 38%** | 21/26 = **81%** |
+| **Đợt 2** — 20/08 | 8/8 | 8/8 | **8/8 = 100%** | 24/24 = **100%** |
+
+### Vì sao UC-3 đi từ 38% lên 100%
+
+Không phải LLM giỏi hơn — model không đổi. Hai cơ chế cùng làm việc:
+
+1. **Ba metric hình dạng nguồn** (`số IP nguồn`, `số tài khoản bị thử`, `tỷ lệ
+   nguồn lớn nhất`). Đợt 1 LLM chỉ thấy một con số "180 lượt/giây" nên gọi đó là
+   *quá tải* — sai loại: credential-stuffing là bất thường **bảo mật**. Có ba
+   metric kia thì nó nói đúng: *"một IP duy nhất tấn công brute-force vào /login
+   với 100 tài khoản"*.
+
+2. **Ba cửa chặn trong `hypothesize`.** 2 trong 8 lượt LLM vẫn nói sai, và cửa bắt
+   được, giữ câu của bộ luật: *"vấn đề bảo mật, không phải quá tải"*. Nhìn cột
+   `statement_origin` thấy `rule` — đó là cơ chế chặn đang làm việc thật, không
+   phải lý thuyết.
+
+Tỷ lệ `rule` toàn bộ đi từ 7/26 lên **10/24**: bộ luật đang chặn nhiều hơn, không
+phải ít hơn. Con số 100% này **đo cả cơ chế chặn**, không chỉ đo LLM.
+
+### ⚠️ 100% phải nói kèm giới hạn
+
+Đây là **8 lượt trên cùng 3 ảnh chụp telemetry**. Nên nó đo **độ ổn định của LLM
+trên 3 đầu vào cố định**, KHÔNG đo khả năng xử sự cố lạ.
+
+Nói *"chẩn đoán đúng 100%"* trần trụi là hớ. Nói đúng là:
+
+> "Trên ba kịch bản đã thiết kế, đúng 24/24 lượt — tức **ổn định**, không phải
+> may. Và 10 trong 24 lượt là bộ luật giữ lại câu vì LLM nói sai."
 
 ## Giới hạn phải ghi rõ trong báo cáo
 

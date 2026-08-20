@@ -153,3 +153,68 @@ def test_graph_co_node_link_incidents():
     assert "link_incidents" in ten_node
     assert "analyze_logs" in ten_node
 
+
+
+def test_log_doi_ket_luan_thi_post_lai_len_jira():
+    """Kết luận từ log PHẢI lên tới war room, không chỉ nằm trong bộ nhớ.
+
+    Đo ngày 11/08 trên KAN-13: `analyze_logs` đã nêu đúng cơ chế lan truyền và
+    ghi ra log tiến trình, nhưng Jira chỉ có bản của bộ luật — "nguyên nhân gốc
+    chưa xác định", tin cậy 40%. Node cập nhật state trong bộ nhớ rồi thôi.
+
+    Người trực chỉ đọc war room, nên lỗi này làm Agent trông như bó tay đúng ở
+    incident mà nó chẩn đoán được.
+    """
+    from src.agents.incident_graph import _post_lai_neu_log_doi_ket_luan
+    from src.models.incident import Hypothesis
+
+    jira = FakeJiraClient(verbose=False)
+    key = jira.create_incident(_signal())
+
+    luat = Hypothesis(statement="nguyên nhân gốc chưa xác định", confidence=0.4)
+    tu_log = Hypothesis(statement="timeout HTTP khi gọi service-thanh-toan", confidence=0.8)
+
+    assert _post_lai_neu_log_doi_ket_luan(jira, key, luat, tu_log) is True
+    cac_cau = [h.statement for h in jira.get_incident(key).hypotheses]
+    assert tu_log.statement in cac_cau
+
+
+def test_log_khong_doi_ket_luan_thi_khong_post_lai():
+    """Log thường chỉ bổ sung bằng chứng cho kết luận cũ.
+
+    Post lại mọi lần sẽ nhân đôi comment trên MỌI war room, làm người trực khó
+    thấy đâu là kết luận cuối — nên chỉ post khi câu kết luận thực sự đổi.
+    """
+    from src.agents.incident_graph import _post_lai_neu_log_doi_ket_luan
+    from src.models.incident import Hypothesis
+
+    jira = FakeJiraClient(verbose=False)
+    key = jira.create_incident(_signal())
+
+    cau = "pool kết nối cạn"
+    truoc = Hypothesis(statement=cau, confidence=0.9)
+    sau = Hypothesis(statement=cau, confidence=0.95)  # chỉ tin cậy đổi
+
+    assert _post_lai_neu_log_doi_ket_luan(jira, key, truoc, sau) is False
+    assert [h.statement for h in jira.get_incident(key).hypotheses].count(cau) <= 1
+
+
+def test_post_lai_that_bai_thi_khong_lam_sap_vong_quet(monkeypatch: pytest.MonkeyPatch):
+    """Một lần Jira đáp 429 ở đây không được giết cả tiến trình Agent."""
+    from src.agents.incident_graph import _post_lai_neu_log_doi_ket_luan
+    from src.models.incident import Hypothesis
+
+    jira = FakeJiraClient(verbose=False)
+    key = jira.create_incident(_signal())
+
+    def post_hong(*args, **kwargs):
+        raise RuntimeError("429 Too Many Requests")
+
+    monkeypatch.setattr(jira, "post_hypothesis", post_hong)
+
+    assert (
+        _post_lai_neu_log_doi_ket_luan(
+            jira, key, Hypothesis(statement="a", confidence=0.4), Hypothesis(statement="b", confidence=0.8)
+        )
+        is False
+    )

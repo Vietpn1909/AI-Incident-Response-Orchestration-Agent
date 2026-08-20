@@ -210,6 +210,19 @@ def _detect_auth_bursts(client: PrometheusClient) -> dict[str, IncidentSignal]:
     tai_khoan = _samples_by_service(client, prometheus.AUTH_UNIQUE_ACCOUNTS)
     ty_le_nguon = _samples_by_service(client, prometheus.AUTH_TOP_SOURCE_RATIO)
 
+    # Độ bền của DIỆN RỘNG — thước đo riêng, không dùng sàn tốc độ.
+    #
+    # `sustained` ở trên đo bằng sàn `AUTH_FAILURE_P3`, nên kẻ giữ tốc độ dưới
+    # ngưỡng sẽ có `breached_for_seconds = 0` và cửa "đủ lâu" không bao giờ mở.
+    # Đo ngày 20/08 trên case I19: 0,95/s suốt 24 giờ, 5.000 tài khoản — sàn tốc
+    # độ cho 0 giây, tức "chưa từng bất thường".
+    #
+    # Đo độ bền của chính thứ nhận ra tấn công: số tài khoản đã ở mức dò hàng loạt
+    # bao lâu.
+    ben_dien_rong = _sustained(
+        client, prometheus.AUTH_UNIQUE_ACCOUNTS, rules.AUTH_UNIQUE_ACCOUNTS_ATTACK
+    )
+
     found: dict[str, IncidentSignal] = {}
     for service, failures in rate.items():
         signal = rules.detect_auth_burst(
@@ -219,6 +232,7 @@ def _detect_auth_bursts(client: PrometheusClient) -> dict[str, IncidentSignal]:
             unique_source_ips=nguon.get(service, 0.0),
             unique_accounts=tai_khoan.get(service, 0.0),
             top_source_ratio=ty_le_nguon.get(service, 0.0),
+            accounts_sustained_seconds=ben_dien_rong.get(service, 0.0),
         )
         if signal is None:
             continue

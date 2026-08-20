@@ -54,6 +54,8 @@ _NODE_CHAIN = (
     "classify_severity",
     "open_war_room",
     "hypothesize",
+    "analyze_logs",
+    "link_incidents",
     "propose_remediation",
     "escalate",
 )
@@ -107,7 +109,20 @@ async def agent_health() -> dict[str, Any]:
 
     return {
         "agent": "PTNT-20 — Agent Điều Phối Ứng Phó Sự Cố",
-        "ready": bool(prometheus.get("reachable")) and bool(jira.get("configured")),
+        # `ready` KHÔNG phụ thuộc Prometheus — đây là bản deploy, không phải Agent.
+        #
+        # Bản chạy trên Render chỉ phục vụ API cho war room, đọc dữ liệu từ Jira.
+        # Nó không bao giờ chạy `detect`: xem ghi chú `note` ngay bên dưới, vòng
+        # quét nằm ở `scripts/run_agent.py` chạy trên máy có Prometheus.
+        #
+        # Đòi Prometheus mới "sẵn sàng" là đặt sai điều kiện, và đo được hậu quả
+        # ngày 15/08: Render báo `ready: false` chỉ vì `PROMETHEUS_URL` trỏ
+        # `localhost:9090` — một địa chỉ mà Render không thể với tới theo đúng
+        # thiết kế. Ai mở link deploy sẽ tưởng hệ thống hỏng.
+        #
+        # Trạng thái Prometheus vẫn nằm nguyên ở khoá `prometheus` bên dưới cho
+        # người chẩn đoán đọc — chỉ là nó không còn quyết định `ready`.
+        "ready": bool(jira.get("configured")),
         "graph": {"nodes": list(_NODE_CHAIN), "count": len(_NODE_CHAIN)},
         "prometheus": prometheus,
         "jira": jira,

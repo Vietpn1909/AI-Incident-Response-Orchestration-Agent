@@ -2,12 +2,24 @@
 
 **Chủ sở hữu: Long**
 
-Hai trang Streamlit. Python thuần, không cần React, không cần biết JavaScript.
+Hai trang Streamlit.
 
-| File | Trang | Ai xem |
+| File | Vai trò | Ai xem |
 |---|---|---|
 | `status_page.py` | Status page công khai | Người dùng dịch vụ — không cần đăng nhập |
 | `war_room.py` | War-room view nội bộ | On-call / IC |
+| `labels.py` | Bảng dịch thuật ngữ kỹ thuật sang tiếng Việt | — |
+| `theme.py` | Design token, icon, mảnh CSS dùng chung | — |
+
+## Hai trang dựng thế nào
+
+Từ 17/08, cả hai trang **dựng nguyên một khối HTML/CSS/JS trong Python** rồi
+nhúng bằng `st.iframe`, chứ không ghép bằng widget Streamlit nữa. Lý do và các
+hệ quả phải biết trước khi sửa nằm trong docstring đầu mỗi file — đọc trước khi
+đụng vào, nhất là phần nói về sandbox của iframe và về việc tải chi tiết phiếu.
+
+Sửa màu, font, nút, pill thì sửa ở [theme.py](theme.py) — sửa ở một trang là hai
+trang lệch nhau, mà lệch màu thì không có test nào bắt được.
 
 ## Chạy
 
