@@ -170,6 +170,46 @@ def classify_severity(
     return Severity.P4
 
 
+def _tin_hieu_mat_do_luong(
+    service: str, p95_baseline: float, breached_for_seconds: float
+) -> IncidentSignal:
+    """Dựng tín hiệu cho trường hợp **mất tín hiệu đo lường**.
+
+    Mức **P1** vì đây là tình huống nguy hiểm nhất trong cả bộ: Agent không biết
+    chuyện gì đang xảy ra, và cái nó không biết thì nó không báo. Sự cố khác thì
+    người trực còn thấy con số xấu; ở đây họ thấy một bảng điều khiển toàn màu
+    xanh.
+
+    Câu kết luận nói ra **hai khả năng** thay vì chọn một, vì số đo không đủ để
+    phân biệt: exporter chết, hay service ngừng phục vụ. Nêu đúng một nguyên nhân
+    ở đây là bịa — cùng nguyên tắc với cửa chặn "nêu nguyên nhân nào thì phải có
+    bằng chứng cho nguyên nhân đó" ở `hypothesize.py`.
+    """
+    return IncidentSignal(
+        affected_service=service,
+        severity=Severity.P1,
+        detected_at=datetime.now(UTC),
+        metric_name="http_request_duration_seconds p95 (mất tín hiệu)",
+        metric_value=0.0,
+        threshold=0.0,
+        breached_for_seconds=breached_for_seconds,
+        evidence=[
+            MetricEvidence(
+                name="http_request_duration_seconds p95",
+                value=0.0,
+                baseline=p95_baseline,
+                unit="s",
+                promql=prometheus.P95_LATENCY,
+            ),
+            MetricEvidence(
+                name="up (service còn sống không)",
+                value=0.0,
+                promql=prometheus.SERVICE_UP,
+            ),
+        ],
+    )
+
+
 def detect(
     p95_now: float,
     p95_baseline: float,
@@ -229,6 +269,36 @@ def detect(
 
     if breached_for_seconds < SUSTAINED_SECONDS:
         return None
+
+    # ── Đường phát hiện thứ tư: MẤT TÍN HIỆU ─────────────────────────────
+    #
+    # Một service đang phục vụ request thì p95 **không thể bằng 0 tuyệt đối**.
+    # Đọc được đúng 0 mà lại có baseline đáng tin nghĩa là: hoặc service ngừng
+    # phục vụ, hoặc đường đo đã hỏng. Cả hai đều là sự cố — không cái nào là
+    # "khoẻ".
+    #
+    # Vì sao phải có đường riêng cho nó: cửa 2 chỉ hỏi "có vượt ngưỡng không" và
+    # "có lệch baseline không". Với p95 = 0 thì cả hai đều **không**:
+    #   - 0 > 1.0s  → False
+    #   - 0 / 0.2   → 0, còn xa 2.0 lần
+    # Nên số đo về 0 lọt qua như thể mọi thứ tốt đẹp. Bộ luật không chỉ sai — nó
+    # sai **theo hướng an tâm**, tức im lặng trong lúc hệ thống đang cháy.
+    #
+    # Đo trên case I23 (Prometheus exporter crash, mọi metric trả 0): luật cũ
+    # phân loại là bình thường. Đây là kiểu bỏ lọt tệ nhất trong cả bộ đo, vì
+    # người trực không có tín hiệu nào để mà nghi.
+    #
+    # ⚠️ Bắt buộc kèm điều kiện baseline đáng tin. Thiếu nó thì mọi service chưa
+    # có lưu lượng — lúc mới `docker compose up`, hoặc service nội bộ rảnh rỗi —
+    # đều bị mở incident. Có baseline 20+ mẫu nghĩa là "trước đây nó CÓ phục vụ",
+    # nên việc giờ đọc ra 0 là một thay đổi, không phải trạng thái nghỉ.
+    mat_tin_hieu = (
+        p95_now == 0.0
+        and p95_baseline > 0
+        and baseline_samples >= BASELINE_MIN_SAMPLES
+    )
+    if mat_tin_hieu:
+        return _tin_hieu_mat_do_luong(service, p95_baseline, breached_for_seconds)
 
     breached_hard = p95_now > P95_P3_SECONDS or error_rate > ERROR_RATE_P3
     # "Có baseline" phải nghĩa là ĐỦ ĐIỂM ĐỂ TIN, không chỉ là "khác 0".

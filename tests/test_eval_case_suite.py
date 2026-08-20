@@ -36,13 +36,30 @@ def test_moi_case_co_nguon_ground_truth_metric_va_guardrail():
 
 
 def test_baseline_hien_tai_co_ca_false_negative_va_false_positive():
+    """Bộ đo vẫn còn CẢ hai loại lỗi — đó là điều test này khoá, không phải con số.
+
+    Trước đây test cắm cứng `{"TP": 18, "FN": 7, ...}` và `recall == 0.72`. Cắm số
+    như thế thì mỗi lần vá một lỗ hổng là test đỏ, và người vá phải sửa test —
+    biến test thành thứ ghi lại quá khứ chứ không kiểm điều gì.
+
+    Đã xảy ra hai lần: 15/08 khi dataset đi từ 30 lên 50 case, và 18/08 khi thêm
+    đường phát hiện "mất tín hiệu" (bắt được I23, nên TP 18 → 19).
+
+    Cái đáng khoá là **tính chất**: bộ này vẫn có case bỏ lọt và case báo nhầm,
+    nên nó chưa phải bộ đo dễ dãi. Kèm chặn dưới để nếu ai làm hỏng detect thì
+    vẫn đỏ.
+    """
     suite = load_suite(DEFAULT_CASES)
     results = [evaluate_case(case) for case in suite["cases"]]
     metrics = compute_metrics(results)
+    cm = metrics["confusion_matrix"]
 
-    assert metrics["confusion_matrix"] == {"TP": 18, "FN": 7, "FP": 7, "TN": 18}
-    assert metrics["incident_recall"] == pytest.approx(0.72)
-    assert metrics["incident_precision"] == pytest.approx(0.72)
+    assert cm["FN"] > 0, "bộ đo mà không còn case bỏ lọt nào thì đã thành bộ dễ"
+    assert cm["FP"] > 0, "và vẫn phải còn case báo nhầm"
+    assert sum(cm.values()) == metrics["case_count"]
+    # Chặn dưới: hỏng detect thì đỏ, nhưng vá được lỗ hổng thì không.
+    assert metrics["incident_recall"] > 0.6
+    assert metrics["incident_precision"] > 0.6
     assert metrics["input_error_count"] == 0
 
 
@@ -54,7 +71,15 @@ def test_pipeline_prometheus_detect_jira_khop_voi_rule_truc_tiep():
     assert [item["classification"] for item in pipeline] == [
         item["classification"] for item in direct
     ]
-    assert compute_metrics(pipeline)["incident_recall"] == pytest.approx(0.72)
+    # So HAI ĐƯỜNG với nhau, không so với một con số cắm cứng.
+    #
+    # Điều test này thật sự kiểm là: chạy qua Prometheus giả + `detect` + FakeJira
+    # cho ra đúng kết quả như gọi thẳng bộ luật. Con số `0.72` chỉ là giá trị tình
+    # cờ lúc viết test, và nó đã đỏ hai lần vì lý do không liên quan — lần dataset
+    # tăng lên 50 case, lần thêm đường phát hiện "mất tín hiệu".
+    assert compute_metrics(pipeline)["incident_recall"] == pytest.approx(
+        compute_metrics(direct)["incident_recall"]
+    )
     assert all(item["execution_mode"] == "prometheus-detect-jira" for item in pipeline)
     assert all(
         item["jira_issue_count"] == int(item["predicted_incident"])
