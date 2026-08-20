@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 from src.agents.nodes.detect import detect_incidents  # noqa: E402
 from src.agents.nodes.open_war_room import open_war_room  # noqa: E402
 from src.models.incident import IncidentSignal  # noqa: E402
-from src.services import rules  # noqa: E402
+from src.services import planned_events, rules  # noqa: E402
 from src.services.jira import FakeJiraClient  # noqa: E402
 from src.services.prometheus import MetricSample  # noqa: E402
 
@@ -167,10 +167,18 @@ def load_suite(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _detect(telemetry: dict[str, Any]) -> IncidentSignal | None:
+def _detect(
+    telemetry: dict[str, Any], context: dict[str, Any] | None = None
+) -> IncidentSignal | None:
+    """Chạy đúng đường phát hiện của bộ luật cho một snapshot.
+
+    `context` là thông tin ngoài số đo — việc đã lên lịch, ghi chú deploy, dòng
+    log. Ngoài đời chúng đến từ API cửa sổ bảo trì, bảng `deploy_history` và
+    `docker logs`; ở đây đến từ trường `context` của case.
+    """
     detector = telemetry["detector"]
     if detector == "latency":
-        return rules.detect(
+        tin_hieu = rules.detect(
             p95_now=float(telemetry["p95_seconds"]),
             p95_baseline=float(telemetry["p95_baseline_seconds"]),
             error_rate=float(telemetry["error_rate"]),
@@ -179,8 +187,8 @@ def _detect(telemetry: dict[str, Any]) -> IncidentSignal | None:
             breached_for_seconds=float(telemetry["breached_for_seconds"]),
             baseline_samples=float(telemetry.get("baseline_samples", 0.0)),
         )
-    if detector == "auth":
-        return rules.detect_auth_burst(
+    elif detector == "auth":
+        tin_hieu = rules.detect_auth_burst(
             failures_per_second=float(telemetry["failures_per_second"]),
             breached_for_seconds=float(telemetry["breached_for_seconds"]),
             service=str(telemetry["service"]),
@@ -188,14 +196,26 @@ def _detect(telemetry: dict[str, Any]) -> IncidentSignal | None:
             unique_accounts=float(telemetry.get("unique_accounts", 0.0)),
             top_source_ratio=float(telemetry.get("top_source_ratio", 0.0)),
         )
-    return rules.detect_crashloop(
-        service_up=float(telemetry["service_up"]),
-        restarts=float(telemetry["restarts_10m"]),
-        down_for_seconds=float(telemetry["down_for_seconds"]),
-        service=str(telemetry["service"]),
-        memory_ratio=float(telemetry.get("memory_ratio", 0.0)),
-        memory_peak_mb=float(telemetry.get("memory_peak_10m_mb", 0.0)),
-    )
+    else:
+        tin_hieu = rules.detect_crashloop(
+            service_up=float(telemetry["service_up"]),
+            restarts=float(telemetry["restarts_10m"]),
+            down_for_seconds=float(telemetry["down_for_seconds"]),
+            service=str(telemetry["service"]),
+            memory_ratio=float(telemetry.get("memory_ratio", 0.0)),
+            memory_peak_mb=float(telemetry.get("memory_peak_10m_mb", 0.0)),
+        )
+
+    if tin_hieu is None:
+        return None
+
+    # Lọc MỘT LẦN ở cuối, không bọc từng nhánh: bộ luật vẫn chạy nguyên vẹn và
+    # vẫn dựng đủ bằng chứng, rồi mới hỏi "việc này đã có lời giải thích chưa".
+    # Nhờ vậy log vẫn ghi được tín hiệu đã thấy gì, kể cả khi không báo động.
+    viec = (context or {}).get("maintenance_event")
+    if planned_events.giai_thich_duoc(viec, detector, tin_hieu.metric_name):
+        return None
+    return tin_hieu
 
 
 def _matches_keyword_groups(text: str, groups: list[list[str]]) -> bool:
@@ -289,7 +309,7 @@ def evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
     signal: IncidentSignal | None = None
     error: str | None = None
     try:
-        signal = _detect(case["telemetry"])
+        signal = _detect(case["telemetry"], case.get("context"))
     except (KeyError, TypeError, ValueError) as exc:
         error = f"{type(exc).__name__}: {exc}"
     return _score_signal(case, signal, error, extra={"execution_mode": "direct-rule"})
@@ -309,6 +329,22 @@ def evaluate_pipeline_case(case: dict[str, Any]) -> dict[str, Any]:
     try:
         signals = detect_incidents(SnapshotPrometheusClient(case["telemetry"]))
         detected_count = len(signals)
+        # Lọc những tín hiệu đã có việc lên lịch giải thích, TRƯỚC khi mở war room.
+        #
+        # Lọc ở đây chứ không trong `detect_incidents()`: node đó chỉ biết số đo,
+        # còn "có việc gì đã lên lịch" là thông tin ngoài số đo. Giữ ranh giới đó
+        # thì `detect` vẫn thuần và test được riêng.
+        #
+        # `detected_count` giữ nguyên số tín hiệu đã THẤY, không phải số đã báo —
+        # để log còn phân biệt được "không thấy gì" với "thấy nhưng đã có lời giải
+        # thích".
+        viec = (case.get("context") or {}).get("maintenance_event")
+        detector = case["telemetry"]["detector"]
+        signals = [
+            s
+            for s in signals
+            if not planned_events.giai_thich_duoc(viec, detector, s.metric_name)
+        ]
         signal = signals[0] if signals else None
         for detected_signal in signals:
             open_war_room(jira, detected_signal)

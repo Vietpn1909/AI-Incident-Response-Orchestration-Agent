@@ -129,7 +129,15 @@ def test_runner_ghi_json_va_report_co_cong_thuc_recall(tmp_path):
     assert "**Recall**" in report
     assert "TP/(TP+FN)" in report
     assert "Pipeline (detect" in report
-    assert "72.00%" in report
+
+    # Kiểm report có IN ĐƯỢC con số hiện tại, không cắm cứng một giá trị.
+    #
+    # Trước đây dòng này là `assert "72.00%" in report` và đã đỏ hai lần vì lý do
+    # không liên quan tới điều nó đo: khi vá lỗ hổng I23, và khi thêm cơ chế việc
+    # đã lên lịch. Cắm số thì test biến thành sổ ghi quá khứ.
+    assert f"{payload['metrics']['incident_recall'] * 100:.2f}%" in report
+    # Và phải kèm khoảng tin cậy — cỡ mẫu nhỏ nên con số trần không được đứng một mình.
+    assert "Khoảng tin cậy 95%" in report
 
 
 def test_khoang_tin_cay_rong_dung_voi_co_mau():
