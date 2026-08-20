@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-15T04:21:25.337917+00:00",
+  "generated_at": "2026-08-20T06:46:57.362538+00:00",
   "dataset": "eval/cases/incident_cases.json",
-  "dataset_sha256": "e6f14ef6755fb10b207462560654a6c93b1d99adff2d9a751064e640527355be",
+  "dataset_sha256": "d5f7bb6abe7f49eadfe130808c0c7e8a1149309a4daaf3c72a7dbca74647482f",
   "distribution": {
     "normal": 15,
     "incident": 25,
@@ -12,20 +12,20 @@
     "true_incident_count": 25,
     "negative_count": 25,
     "confusion_matrix": {
-      "TP": 18,
-      "FN": 7,
-      "FP": 7,
-      "TN": 18
+      "TP": 20,
+      "FN": 5,
+      "FP": 4,
+      "TN": 21
     },
-    "incident_recall": 0.72,
-    "incident_precision": 0.72,
-    "f1_score": 0.72,
-    "f2_score": 0.72,
-    "accuracy": 0.72,
-    "specificity": 0.72,
-    "false_alarm_rate": 0.28,
-    "mcc": 0.44,
-    "severity_accuracy": 0.8889,
+    "incident_recall": 0.8,
+    "incident_precision": 0.8333,
+    "f1_score": 0.8163,
+    "f2_score": 0.8064,
+    "accuracy": 0.82,
+    "specificity": 0.84,
+    "false_alarm_rate": 0.16,
+    "mcc": 0.6405,
+    "severity_accuracy": 0.85,
     "severity_confusion_matrix": {
       "P2": {
         "P2": 5,
@@ -35,44 +35,44 @@
         "P3": 2
       },
       "P1": {
-        "P1": 7,
-        "P2": 1
+        "P1": 8,
+        "P2": 2
       },
       "P4": {
         "P4": 2
       }
     },
     "top1_root_cause_accuracy": 0.28,
-    "evidence_coverage": 0.72,
-    "noisy_rejection_rate": 0.5,
+    "evidence_coverage": 0.8,
+    "noisy_rejection_rate": 0.8,
     "input_error_count": 0,
     "per_family": {
       "UC-1": {
         "true_incidents": 8,
-        "true_positives": 6,
-        "false_negatives": 2,
+        "true_positives": 7,
+        "false_negatives": 1,
         "false_positives": 2,
-        "recall": 0.75,
-        "precision": 0.75,
-        "f1": 0.75
+        "recall": 0.875,
+        "precision": 0.7778,
+        "f1": 0.8235
       },
       "UC-2": {
         "true_incidents": 5,
         "true_positives": 4,
         "false_negatives": 1,
-        "false_positives": 2,
+        "false_positives": 1,
         "recall": 0.8,
-        "precision": 0.6667,
-        "f1": 0.7273
+        "precision": 0.8,
+        "f1": 0.8
       },
       "UC-3": {
         "true_incidents": 5,
-        "true_positives": 4,
-        "false_negatives": 1,
-        "false_positives": 2,
-        "recall": 0.8,
-        "precision": 0.6667,
-        "f1": 0.7273
+        "true_positives": 5,
+        "false_negatives": 0,
+        "false_positives": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "f1": 1.0
       },
       "UC-4": {
         "true_incidents": 3,
@@ -782,25 +782,20 @@
       "family": "UC-3",
       "title": "Load test đăng nhập đã được phê duyệt nhưng vượt ngưỡng",
       "expected_incident": false,
-      "predicted_incident": true,
-      "classification": "FP",
+      "predicted_incident": false,
+      "classification": "TN",
       "expected_severity": null,
-      "predicted_severity": "P2",
+      "predicted_severity": null,
       "severity_correct": null,
       "root_cause_correct": null,
       "evidence_complete": null,
-      "hypothesis": "service-thanh-toan đang nhận 12 lượt đăng nhập thất bại mỗi giây — vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx.",
-      "confidence": 0.25,
-      "evidence_names": [
-        "số request /login thất bại mỗi giây",
-        "số IP nguồn khác nhau (1 phút)",
-        "số tài khoản bị thử (1 phút)",
-        "tỷ lệ từ IP nguồn lớn nhất"
-      ],
+      "hypothesis": null,
+      "confidence": null,
+      "evidence_names": [],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
       "detected_signal_count": 1,
-      "jira_issue_count": 1
+      "jira_issue_count": 0
     },
     {
       "case_id": "N11",
@@ -989,20 +984,25 @@
       "family": "UC-3",
       "title": "Evasive credential stuffing: 0.95/s suốt 24h — ngay dưới mọi ngưỡng detection",
       "expected_incident": true,
-      "predicted_incident": false,
-      "classification": "FN",
+      "predicted_incident": true,
+      "classification": "TP",
       "expected_severity": "P1",
-      "predicted_severity": null,
+      "predicted_severity": "P2",
       "severity_correct": false,
       "root_cause_correct": false,
-      "evidence_complete": false,
-      "hypothesis": null,
-      "confidence": null,
-      "evidence_names": [],
+      "evidence_complete": true,
+      "hypothesis": "service-thanh-toan bất thường ở số request /login thất bại mỗi giây (0.95, ngưỡng 10.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+      "confidence": 0.0,
+      "evidence_names": [
+        "số request /login thất bại mỗi giây",
+        "số IP nguồn khác nhau (1 phút)",
+        "số tài khoản bị thử (1 phút)",
+        "tỷ lệ từ IP nguồn lớn nhất"
+      ],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
-      "detected_signal_count": 0,
-      "jira_issue_count": 0
+      "detected_signal_count": 1,
+      "jira_issue_count": 1
     },
     {
       "case_id": "I20",
@@ -1082,20 +1082,23 @@
       "family": "UC-1",
       "title": "Monitoring blind spot: Prometheus exporter crash, metric trả 0 — service thật ra đang chết",
       "expected_incident": true,
-      "predicted_incident": false,
-      "classification": "FN",
+      "predicted_incident": true,
+      "classification": "TP",
       "expected_severity": "P1",
-      "predicted_severity": null,
-      "severity_correct": false,
+      "predicted_severity": "P1",
+      "severity_correct": true,
       "root_cause_correct": false,
-      "evidence_complete": false,
-      "hypothesis": null,
-      "confidence": null,
-      "evidence_names": [],
+      "evidence_complete": true,
+      "hypothesis": "service-thanh-toan bất thường ở http_request_duration_seconds p95 (mất tín hiệu) (0.00, ngưỡng 0.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+      "confidence": 0.3,
+      "evidence_names": [
+        "http_request_duration_seconds p95",
+        "up (service còn sống không)"
+      ],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
-      "detected_signal_count": 0,
-      "jira_issue_count": 0
+      "detected_signal_count": 1,
+      "jira_issue_count": 1
     },
     {
       "case_id": "I24",
@@ -1149,25 +1152,20 @@
       "family": "UC-3",
       "title": "Pentest hợp pháp: 30 auth failures/s từ pentester đã được approve",
       "expected_incident": false,
-      "predicted_incident": true,
-      "classification": "FP",
+      "predicted_incident": false,
+      "classification": "TN",
       "expected_severity": null,
-      "predicted_severity": "P2",
+      "predicted_severity": null,
       "severity_correct": null,
       "root_cause_correct": null,
       "evidence_complete": null,
-      "hypothesis": "service-thanh-toan đang nhận 30 lượt đăng nhập thất bại mỗi giây — vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx. Hình thái credential-stuffing: 300 tài khoản bị thử từ 1 IP nguồn, trong đó một nguồn chiếm 100% số lượt — một người quên mật khẩu không tạo ra hình dạng này.",
-      "confidence": 0.25,
-      "evidence_names": [
-        "số request /login thất bại mỗi giây",
-        "số IP nguồn khác nhau (1 phút)",
-        "số tài khoản bị thử (1 phút)",
-        "tỷ lệ từ IP nguồn lớn nhất"
-      ],
+      "hypothesis": null,
+      "confidence": null,
+      "evidence_names": [],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
       "detected_signal_count": 1,
-      "jira_issue_count": 1
+      "jira_issue_count": 0
     },
     {
       "case_id": "A07",
@@ -1200,25 +1198,20 @@
       "family": "UC-2",
       "title": "Chaos engineering đã lên lịch: 3 lần restart có chủ đích trong maintenance window",
       "expected_incident": false,
-      "predicted_incident": true,
-      "classification": "FP",
+      "predicted_incident": false,
+      "classification": "TN",
       "expected_severity": null,
-      "predicted_severity": "P1",
+      "predicted_severity": null,
       "severity_correct": null,
       "root_cause_correct": null,
       "evidence_complete": null,
-      "hypothesis": "service-thanh-toan bất thường ở số lần restart trong 10 phút (3.00, ngưỡng 2.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
-      "confidence": 0.2,
-      "evidence_names": [
-        "up (service còn sống không)",
-        "số lần restart trong 10 phút",
-        "bộ nhớ đang dùng / giới hạn container",
-        "đỉnh bộ nhớ 10 phút (trần 128 MB)"
-      ],
+      "hypothesis": null,
+      "confidence": null,
+      "evidence_names": [],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
       "detected_signal_count": 1,
-      "jira_issue_count": 1
+      "jira_issue_count": 0
     },
     {
       "case_id": "A09",
@@ -1273,20 +1266,20 @@
       "true_incident_count": 25,
       "negative_count": 25,
       "confusion_matrix": {
-        "TP": 18,
-        "FN": 7,
-        "FP": 7,
-        "TN": 18
+        "TP": 20,
+        "FN": 5,
+        "FP": 4,
+        "TN": 21
       },
-      "incident_recall": 0.72,
-      "incident_precision": 0.72,
-      "f1_score": 0.72,
-      "f2_score": 0.72,
-      "accuracy": 0.72,
-      "specificity": 0.72,
-      "false_alarm_rate": 0.28,
-      "mcc": 0.44,
-      "severity_accuracy": 0.8889,
+      "incident_recall": 0.8,
+      "incident_precision": 0.8333,
+      "f1_score": 0.8163,
+      "f2_score": 0.8064,
+      "accuracy": 0.82,
+      "specificity": 0.84,
+      "false_alarm_rate": 0.16,
+      "mcc": 0.6405,
+      "severity_accuracy": 0.85,
       "severity_confusion_matrix": {
         "P2": {
           "P2": 5,
@@ -1296,44 +1289,44 @@
           "P3": 2
         },
         "P1": {
-          "P1": 7,
-          "P2": 1
+          "P1": 8,
+          "P2": 2
         },
         "P4": {
           "P4": 2
         }
       },
       "top1_root_cause_accuracy": 0.28,
-      "evidence_coverage": 0.72,
-      "noisy_rejection_rate": 0.5,
+      "evidence_coverage": 0.8,
+      "noisy_rejection_rate": 0.8,
       "input_error_count": 0,
       "per_family": {
         "UC-1": {
           "true_incidents": 8,
-          "true_positives": 6,
-          "false_negatives": 2,
+          "true_positives": 7,
+          "false_negatives": 1,
           "false_positives": 2,
-          "recall": 0.75,
-          "precision": 0.75,
-          "f1": 0.75
+          "recall": 0.875,
+          "precision": 0.7778,
+          "f1": 0.8235
         },
         "UC-2": {
           "true_incidents": 5,
           "true_positives": 4,
           "false_negatives": 1,
-          "false_positives": 2,
+          "false_positives": 1,
           "recall": 0.8,
-          "precision": 0.6667,
-          "f1": 0.7273
+          "precision": 0.8,
+          "f1": 0.8
         },
         "UC-3": {
           "true_incidents": 5,
-          "true_positives": 4,
-          "false_negatives": 1,
-          "false_positives": 2,
-          "recall": 0.8,
-          "precision": 0.6667,
-          "f1": 0.7273
+          "true_positives": 5,
+          "false_negatives": 0,
+          "false_positives": 0,
+          "recall": 1.0,
+          "precision": 1.0,
+          "f1": 1.0
         },
         "UC-4": {
           "true_incidents": 3,
@@ -1985,21 +1978,16 @@
         "family": "UC-3",
         "title": "Load test đăng nhập đã được phê duyệt nhưng vượt ngưỡng",
         "expected_incident": false,
-        "predicted_incident": true,
-        "classification": "FP",
+        "predicted_incident": false,
+        "classification": "TN",
         "expected_severity": null,
-        "predicted_severity": "P2",
+        "predicted_severity": null,
         "severity_correct": null,
         "root_cause_correct": null,
         "evidence_complete": null,
-        "hypothesis": "service-thanh-toan đang nhận 12 lượt đăng nhập thất bại mỗi giây — vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx.",
-        "confidence": 0.25,
-        "evidence_names": [
-          "số request /login thất bại mỗi giây",
-          "số IP nguồn khác nhau (1 phút)",
-          "số tài khoản bị thử (1 phút)",
-          "tỷ lệ từ IP nguồn lớn nhất"
-        ],
+        "hypothesis": null,
+        "confidence": null,
+        "evidence_names": [],
         "error": null,
         "execution_mode": "direct-rule"
       },
@@ -2174,16 +2162,21 @@
         "family": "UC-3",
         "title": "Evasive credential stuffing: 0.95/s suốt 24h — ngay dưới mọi ngưỡng detection",
         "expected_incident": true,
-        "predicted_incident": false,
-        "classification": "FN",
+        "predicted_incident": true,
+        "classification": "TP",
         "expected_severity": "P1",
-        "predicted_severity": null,
+        "predicted_severity": "P2",
         "severity_correct": false,
         "root_cause_correct": false,
-        "evidence_complete": false,
-        "hypothesis": null,
-        "confidence": null,
-        "evidence_names": [],
+        "evidence_complete": true,
+        "hypothesis": "service-thanh-toan bất thường ở số request /login thất bại mỗi giây (0.95, ngưỡng 10.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+        "confidence": 0.0,
+        "evidence_names": [
+          "số request /login thất bại mỗi giây",
+          "số IP nguồn khác nhau (1 phút)",
+          "số tài khoản bị thử (1 phút)",
+          "tỷ lệ từ IP nguồn lớn nhất"
+        ],
         "error": null,
         "execution_mode": "direct-rule"
       },
@@ -2259,16 +2252,19 @@
         "family": "UC-1",
         "title": "Monitoring blind spot: Prometheus exporter crash, metric trả 0 — service thật ra đang chết",
         "expected_incident": true,
-        "predicted_incident": false,
-        "classification": "FN",
+        "predicted_incident": true,
+        "classification": "TP",
         "expected_severity": "P1",
-        "predicted_severity": null,
-        "severity_correct": false,
+        "predicted_severity": "P1",
+        "severity_correct": true,
         "root_cause_correct": false,
-        "evidence_complete": false,
-        "hypothesis": null,
-        "confidence": null,
-        "evidence_names": [],
+        "evidence_complete": true,
+        "hypothesis": "service-thanh-toan bất thường ở http_request_duration_seconds p95 (mất tín hiệu) (0.00, ngưỡng 0.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+        "confidence": 0.3,
+        "evidence_names": [
+          "http_request_duration_seconds p95",
+          "up (service còn sống không)"
+        ],
         "error": null,
         "execution_mode": "direct-rule"
       },
@@ -2320,21 +2316,16 @@
         "family": "UC-3",
         "title": "Pentest hợp pháp: 30 auth failures/s từ pentester đã được approve",
         "expected_incident": false,
-        "predicted_incident": true,
-        "classification": "FP",
+        "predicted_incident": false,
+        "classification": "TN",
         "expected_severity": null,
-        "predicted_severity": "P2",
+        "predicted_severity": null,
         "severity_correct": null,
         "root_cause_correct": null,
         "evidence_complete": null,
-        "hypothesis": "service-thanh-toan đang nhận 30 lượt đăng nhập thất bại mỗi giây — vấn đề bảo mật, không phải quá tải. Hệ thống vẫn khoẻ: latency bình thường và không có lỗi 5xx. Hình thái credential-stuffing: 300 tài khoản bị thử từ 1 IP nguồn, trong đó một nguồn chiếm 100% số lượt — một người quên mật khẩu không tạo ra hình dạng này.",
-        "confidence": 0.25,
-        "evidence_names": [
-          "số request /login thất bại mỗi giây",
-          "số IP nguồn khác nhau (1 phút)",
-          "số tài khoản bị thử (1 phút)",
-          "tỷ lệ từ IP nguồn lớn nhất"
-        ],
+        "hypothesis": null,
+        "confidence": null,
+        "evidence_names": [],
         "error": null,
         "execution_mode": "direct-rule"
       },
@@ -2367,21 +2358,16 @@
         "family": "UC-2",
         "title": "Chaos engineering đã lên lịch: 3 lần restart có chủ đích trong maintenance window",
         "expected_incident": false,
-        "predicted_incident": true,
-        "classification": "FP",
+        "predicted_incident": false,
+        "classification": "TN",
         "expected_severity": null,
-        "predicted_severity": "P1",
+        "predicted_severity": null,
         "severity_correct": null,
         "root_cause_correct": null,
         "evidence_complete": null,
-        "hypothesis": "service-thanh-toan bất thường ở số lần restart trong 10 phút (3.00, ngưỡng 2.00). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
-        "confidence": 0.2,
-        "evidence_names": [
-          "up (service còn sống không)",
-          "số lần restart trong 10 phút",
-          "bộ nhớ đang dùng / giới hạn container",
-          "đỉnh bộ nhớ 10 phút (trần 128 MB)"
-        ],
+        "hypothesis": null,
+        "confidence": null,
+        "evidence_names": [],
         "error": null,
         "execution_mode": "direct-rule"
       },
