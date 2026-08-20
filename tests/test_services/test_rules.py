@@ -382,3 +382,77 @@ def test_mat_tin_hieu_neu_ra_hai_kha_nang_khong_chon_mot():
     ten = [e.name for e in tin_hieu.evidence]
     assert any("p95" in t for t in ten)
     assert any("up" in t for t in ten), "phải kèm `up` để người trực soi được"
+
+
+# ── Đường auth thứ hai: DIỆN RỘNG, không theo tốc độ ────────────────────────
+
+
+def test_ne_nguong_toc_do_van_bi_bat_bang_dien_rong():
+    """Kẻ giữ tốc độ dưới ngưỡng nhưng thử hàng nghìn tài khoản vẫn phải bị bắt.
+
+    Case I19: 0,95/s — ngay dưới `AUTH_FAILURE_P3 = 1.0` — duy trì 24 giờ, thành
+    82.080 lần thử nhắm 5.000 tài khoản từ 200 IP luân phiên. Ngưỡng tốc độ thấy
+    "dưới 1 lần mỗi giây, bình thường".
+
+    Ngưỡng tức thời **luôn thua kẻ biết ngưỡng**. Diện rộng thì không né được: hạ
+    tốc độ vẫn phải thử đủ số tài khoản, nếu không thì tấn công vô nghĩa.
+    """
+    from src.services import rules
+
+    tin_hieu = rules.detect_auth_burst(
+        failures_per_second=0.95,
+        breached_for_seconds=0.0,      # sàn tốc độ cho 0 — đúng như node tính
+        service="service-thanh-toan",
+        unique_source_ips=200,
+        unique_accounts=5000,
+        accounts_sustained_seconds=86400,
+    )
+
+    assert tin_hieu is not None, "0,95/s × 24h nhắm 5.000 tài khoản phải là sự cố"
+    assert tin_hieu.severity is rules.Severity.P2
+
+
+def test_dien_rong_dung_thuoc_do_thoi_gian_rieng():
+    """Không được dùng `breached_for_seconds` cho cửa "đủ lâu" của diện rộng.
+
+    Con số đó do node `detect` tính bằng `_sustained()` với sàn `AUTH_FAILURE_P3`,
+    tức chính ngưỡng tốc độ. Dùng nó thì kẻ né ngưỡng có `breached = 0` và cửa
+    không bao giờ mở — một vòng lặp tự khoá.
+    """
+    from src.services import rules
+
+    # Diện rộng bền lâu, nhưng tốc độ chưa từng vượt sàn → vẫn phải bắt.
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=0.0, service="s",
+        unique_accounts=50, accounts_sustained_seconds=300,
+    ) is not None
+
+    # Diện rộng mới chớm, chưa bền → KHÔNG bắt.
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=0.0, service="s",
+        unique_accounts=50, accounts_sustained_seconds=10,
+    ) is None
+
+
+def test_it_tai_khoan_thi_khong_goi_la_tan_cong():
+    """Người quên mật khẩu thử lại tài khoản của chính mình.
+
+    Case N05 (bình thường): 0,8/s, 6 tài khoản, 3 phút. Dưới mốc 10 tài khoản nên
+    không được mở incident — nếu không thì mọi buổi sáng thứ Hai đều thành sự cố.
+    """
+    from src.services import rules
+
+    assert rules.detect_auth_burst(
+        failures_per_second=0.8, breached_for_seconds=0.0, service="s",
+        unique_source_ips=25, unique_accounts=6, accounts_sustained_seconds=180,
+    ) is None
+
+
+def test_khong_truyen_do_ben_thi_lui_ve_breached_for_seconds():
+    """Giữ tương thích: chỗ gọi cũ không biết tham số mới vẫn chạy đúng."""
+    from src.services import rules
+
+    assert rules.detect_auth_burst(
+        failures_per_second=0.5, breached_for_seconds=300.0, service="s",
+        unique_accounts=50,
+    ) is not None

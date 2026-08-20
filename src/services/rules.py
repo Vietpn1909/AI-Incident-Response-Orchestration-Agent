@@ -60,6 +60,37 @@ AUTH_FAILURE_P2 = 10.0
 #: người dùng gõ nhầm mật khẩu không tạo ra hình thái đó.
 AUTH_FAILURE_P3 = 1.0
 
+#: Số tài khoản khác nhau bị thử — ngưỡng nhận ra **dò tài khoản hàng loạt**,
+#: bất kể tốc độ.
+#:
+#: ## Vì sao cần một ngưỡng KHÔNG theo tốc độ
+#:
+#: Ba ngưỡng trên đều là "bao nhiêu lần mỗi giây". Ngưỡng tức thời **luôn thua kẻ
+#: biết ngưỡng**: chỉ cần giữ dưới nó là đi qua, không giới hạn thời gian.
+#:
+#: Đo trên case I19: `0,95/s` — ngay dưới `AUTH_FAILURE_P3 = 1.0` — nhưng duy trì
+#: **24 giờ**, thành `0,95 × 86.400 = 82.080 lần thử`, nhắm **5.000 tài khoản** từ
+#: 200 IP luân phiên. Bộ luật thấy "dưới 1 lần mỗi giây, bình thường".
+#:
+#: ## Vì sao đo DIỆN RỘNG thì không né được
+#:
+#: Credential stuffing được định nghĩa bằng **bề rộng**, không phải tốc độ: mục
+#: đích của nó là thử nhiều tài khoản. Hạ tốc độ thì vẫn phải thử đủ số tài khoản,
+#: nếu không thì tấn công vô nghĩa. Nên đây là thứ kẻ tấn công **không thể giảm**
+#: mà vẫn đạt mục đích — khác hẳn tốc độ.
+#:
+#: ## Vì sao chọn 10
+#:
+#: Người quên mật khẩu thì thử lại **tài khoản của chính mình**. Một IP công ty
+#: dùng chung cũng chỉ vài tài khoản. Hàng chục tài khoản khác nhau cùng đăng nhập
+#: thất bại không còn là lỗi người dùng, mà là dò tài khoản.
+#:
+#: Đối chiếu với dữ liệu để chắc con số không vô lý: case bình thường cao nhất là
+#: 6 tài khoản (N05), case tấn công thấp nhất là 12 (I12). Mốc 10 nằm giữa, nhưng
+#: lý do chọn nó là lập luận ở trên chứ không phải khoảng trống trong dữ liệu —
+#: chọn theo khoảng trống thì thêm một case mới là phải chọn lại.
+AUTH_UNIQUE_ACCOUNTS_ATTACK = 10.0
+
 # Ngưỡng cho UC-2 (service chết vì OOM rồi restart liên tục).
 
 #: Số lần restart trong 10 phút để tính là crash loop.
@@ -385,6 +416,7 @@ def detect_auth_burst(
     service: str,
     unique_source_ips: float = 0.0,
     unique_accounts: float = 0.0,
+    accounts_sustained_seconds: float | None = None,
     top_source_ratio: float = 0.0,
 ) -> IncidentSignal | None:
     """Dựng tín hiệu UC-3 kèm bằng chứng. `None` nếu bình thường.
@@ -423,6 +455,41 @@ def detect_auth_burst(
     )
 
     severity = classify_auth_burst(failures_per_second, breached_for_seconds)
+
+    # ── Đường thứ hai: DIỆN RỘNG, không theo tốc độ ──────────────────────────
+    #
+    # Ngưỡng tốc độ luôn thua kẻ biết ngưỡng. Case I19 giữ `0,95/s` — ngay dưới
+    # `AUTH_FAILURE_P3` — suốt 24 giờ, thử 5.000 tài khoản từ 200 IP luân phiên.
+    # Bộ luật thấy "dưới 1 lần mỗi giây, bình thường".
+    #
+    # Diện rộng thì không né được: hạ tốc độ vẫn phải thử đủ số tài khoản, nếu
+    # không thì tấn công vô nghĩa.
+    #
+    # Vẫn phải qua cửa "đủ lâu" — một lúc đông người gõ sai cùng lúc không tính.
+    # ⚠️ Đo độ bền của DIỆN RỘNG, không dùng `breached_for_seconds`.
+    #
+    # `breached_for_seconds` do node `detect` tính bằng `_sustained()` với sàn
+    # `AUTH_FAILURE_P3`, tức chính ngưỡng tốc độ. Nên với I19 (0,95/s, dưới sàn
+    # 1,0) nó bằng **0**: kẻ né ngưỡng thì theo định nghĩa "chưa từng bất thường",
+    # và cửa "đủ lâu" không bao giờ mở.
+    #
+    # Vòng lặp đó là lý do đường diện rộng phải có thước đo thời gian RIÊNG: đo
+    # xem số tài khoản đã ở mức tấn công bao lâu, chứ không đo tốc độ.
+    ben_bao_lau = (
+        accounts_sustained_seconds
+        if accounts_sustained_seconds is not None
+        else breached_for_seconds
+    )
+    dien_rong = (
+        unique_accounts >= AUTH_UNIQUE_ACCOUNTS_ATTACK
+        and ben_bao_lau >= SUSTAINED_SECONDS
+    )
+    if severity is None and dien_rong:
+        # Mức P2: đã chắc là dò tài khoản, nhưng tốc độ thấp nên thiệt hại tức
+        # thời chưa bằng burst P1. Không hạ xuống P3 vì bề rộng 10+ tài khoản là
+        # bằng chứng mạnh hơn một tín hiệu "hơi bất thường".
+        severity = Severity.P2
+
     if severity is None:
         return None
 

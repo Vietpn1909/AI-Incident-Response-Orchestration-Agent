@@ -195,6 +195,9 @@ def _detect(
             unique_source_ips=float(telemetry.get("unique_source_ips", 0.0)),
             unique_accounts=float(telemetry.get("unique_accounts", 0.0)),
             top_source_ratio=float(telemetry.get("top_source_ratio", 0.0)),
+            # Snapshot chỉ có một trường thời gian, mô tả "điều kiện đã giữ bao
+            # lâu" — dùng chung cho cả hai thước đo.
+            accounts_sustained_seconds=float(telemetry["breached_for_seconds"]),
         )
     else:
         tin_hieu = rules.detect_crashloop(
