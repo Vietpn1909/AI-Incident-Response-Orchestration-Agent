@@ -11,10 +11,10 @@ thành rác sau vài phút.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import httpx
 import pytest
-from unittest.mock import patch
 
 from src.agents.detection_loop import run_cycle
 from src.agents.nodes.detect import detect_incidents
@@ -515,7 +515,7 @@ def test_restart_ngay_sau_deploy_thi_khong_mo_war_room():
             assert detect_incidents(client) == []
 
 
-def test_deploy_KHONG_giai_thich_duoc_mat_tin_hieu():
+def test_deploy_khong_giai_thich_duoc_mat_tin_hieu():
     """Việc đã lên lịch chỉ giải thích được thứ nó gây ra được.
 
     Deploy giải thích container restart. Nó KHÔNG giải thích được mất tín hiệu
@@ -542,7 +542,7 @@ def test_khong_co_deploy_gan_thi_van_bao_restart():
             assert detect_incidents(client)
 
 
-def test_khong_co_DATABASE_URL_thi_khong_goi_DB():
+def test_khong_co_database_url_thi_khong_goi_db():
     """Thiếu nguồn deploy thì thoát trước khi mở event loop.
 
     Không có cửa thoát này thì mỗi tín hiệu tốn một `asyncio.run()` cộng một lần
@@ -557,7 +557,7 @@ def test_khong_co_DATABASE_URL_thi_khong_goi_DB():
     goi.assert_not_called()
 
 
-def test_deploy_KHONG_giai_thich_duoc_service_CHET():
+def test_deploy_khong_giai_thich_duoc_service_chet():
     """UC-2 phải sống sót qua bộ lọc, dù luôn có deploy 3 phút trước.
 
     Rủi ro thật: `_PHAM_VI["crashloop"]` chứa từ khoá `"deploy"`, và `demo/seed.py`
