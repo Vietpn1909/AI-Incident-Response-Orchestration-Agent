@@ -307,6 +307,104 @@ def _score_signal(
     return result
 
 
+def _tong_ket_llm(ket_qua: list[dict[str, Any]]) -> dict[str, Any]:
+    """Tổng kết phần chẩn đoán có LLM, chia theo họ sự cố.
+
+    Chia theo họ vì đây là chỗ trả lời câu "gặp loại lỗi ngoài 4 use case đã dựng
+    thì sao" — con số gộp che mất đúng điều cần biết.
+    """
+    dung = sum(1 for r in ket_qua if r.get("root_cause_correct"))
+    loi = [r for r in ket_qua if r.get("error")]
+    theo_ho: dict[str, dict[str, int]] = {}
+    for r in ket_qua:
+        o = theo_ho.setdefault(r["family"], {"dung": 0, "tong": 0})
+        o["tong"] += 1
+        o["dung"] += int(bool(r.get("root_cause_correct")))
+    nguon: dict[str, int] = {}
+    for r in ket_qua:
+        if r.get("statement_origin"):
+            nguon[r["statement_origin"]] = nguon.get(r["statement_origin"], 0) + 1
+    do_tre = [r["llm_latency_seconds"] for r in ket_qua if r.get("llm_latency_seconds")]
+    return {
+        "case_count": len(ket_qua),
+        "root_cause_correct": dung,
+        "root_cause_accuracy": _ratio(dung, len(ket_qua)),
+        "per_family": theo_ho,
+        "statement_origin": nguon,
+        "llm_latency_avg_seconds": round(sum(do_tre) / len(do_tre), 2) if do_tre else None,
+        "error_count": len(loi),
+        "results": ket_qua,
+    }
+
+
+def evaluate_case_llm(case: dict[str, Any]) -> dict[str, Any] | None:
+    """Chạy `hypothesize` CÓ LLM trên một case, chấm nguyên nhân theo ground truth.
+
+    Trả `None` khi case không có tín hiệu để chẩn đoán — không phát hiện được, hoặc
+    là case bình thường/nhiễu. Không có tín hiệu thì không có gì để chẩn đoán, và
+    tính nó vào mẫu số sẽ trộn "bỏ lọt" với "chẩn đoán sai" — đúng lỗi mà chỉ số
+    `top1_root_cause_accuracy` đang mắc.
+
+    ## Vì sao cần chế độ này
+
+    Hai bộ đo cũ **không cái nào** đo được độ bao quát của phần chẩn đoán:
+
+    - `case_suite` mặc định chạy offline, không LLM → chỉ đo bộ luật.
+    - `run_measurements.py diagnose` có LLM, nhưng chỉ chạy **3 ảnh chụp** lặp lại
+      8 lượt → đo độ ỔN ĐỊNH, không đo độ BAO QUÁT.
+
+    Chỗ giao nhau — "Agent chẩn đoán đúng bao nhiêu LOẠI sự cố khác nhau" — trước
+    bản này chưa ai đo. Nhóm chỉ dựng 4 use case để demo, nhưng tài liệu vẫn cần
+    trả lời được câu "gặp loại lỗi khác thì sao".
+
+    Chế độ này chạy trên **mọi case phát hiện được**, gồm cả những loại không có
+    use case riêng: thundering herd, partial outage, config drift, dependency
+    failure, DDoS lẫn credential stuffing.
+    """
+    from src.agents.nodes.hypothesize import hypothesize_with_origin
+
+    if case.get("split") != "incident":
+        return None
+
+    try:
+        signal = _detect(case["telemetry"], case.get("context"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if signal is None:
+        return None
+
+    truth = case.get("ground_truth") or {}
+    started = datetime.now(UTC)
+    try:
+        outcome = hypothesize_with_origin(signal)
+    except Exception as loi:  # pragma: no cover - phụ thuộc mạng
+        return {
+            "case_id": case["id"],
+            "family": case["family"],
+            "error": f"{type(loi).__name__}: {loi}",
+            "root_cause_correct": False,
+        }
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+
+    h = outcome.hypothesis
+    # Chấm trên CẢ câu kết luận lẫn phần lý giải, giống `run_measurements.py`:
+    # nguyên nhân có thể nằm ở chuỗi nhân quả chứ không chỉ ở câu tóm tắt.
+    van_ban = f"{h.statement} {h.reasoning or ''}"
+    return {
+        "case_id": case["id"],
+        "family": case["family"],
+        "title": case["title"],
+        "statement": h.statement,
+        "statement_origin": outcome.statement_origin,
+        "confidence": h.confidence,
+        "root_cause_correct": _matches_keyword_groups(
+            van_ban, truth.get("accepted_hypothesis_keyword_groups", [])
+        ),
+        "llm_latency_seconds": round(elapsed, 2),
+        "error": None,
+    }
+
+
 def evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
     """Chạy một snapshot qua rule thật và trả kết quả đủ để error analysis."""
     signal: IncidentSignal | None = None
@@ -723,6 +821,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Chạy baseline offline cho 50 incident cases")
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--with-llm",
+        action="store_true",
+        help=(
+            "chạy thêm phần chẩn đoán CÓ LLM trên mọi case phát hiện được. "
+            "Mặc định tắt: nó gọi mạng, tốn quota, và kết quả dao động giữa các "
+            "lần chạy — không hợp cho một bộ đo chạy thường xuyên."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -733,6 +840,19 @@ def main() -> None:
     # làm CLI đầy nhiễu nếu in 30 lần.
     logging.getLogger("src.agents.nodes.detect").setLevel(logging.ERROR)
     payload = run_suite(args.cases, args.output_dir)
+
+    if args.with_llm:
+        suite = load_suite(args.cases)
+        ket_qua = [evaluate_case_llm(c) for c in suite["cases"]]
+        ket_qua = [r for r in ket_qua if r is not None]
+        payload["llm_diagnosis"] = _tong_ket_llm(ket_qua)
+        (args.output_dir / "summary.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (args.output_dir / "report.md").write_text(
+            render_markdown(payload), encoding="utf-8"
+        )
+
     metrics = payload["metrics"]
     cm = metrics["confusion_matrix"]
     print(f"{'='*60}")
