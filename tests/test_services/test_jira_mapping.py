@@ -199,3 +199,58 @@ def test_create_subtasks_khong_gan_nhan_incident():
     nguon = inspect.getsource(real.RealJiraClient.create_subtasks)
     assert "ACTION_ITEM_LABEL" in nguon
     assert "[INCIDENT_LABEL]" not in nguon
+
+
+def test_postmortem_ghi_len_jira_phai_doc_lai_duoc():
+    """`attach_postmortem` phải kèm khối JSON, không chỉ chữ cho người đọc.
+
+    Lỗi thật, phát hiện lúc chạy thử demo 21/08: KAN-52 đã xử lý xong nhưng nút
+    "Postmortems" trên war room vẫn xám. Nguyên nhân — `attach_postmortem()` chỉ
+    gọi `add_comment()`, nên postmortem lên Jira dưới dạng văn bản; `get_incident()`
+    dựng lại Incident từ Jira nên `incident.postmortem` luôn `None`.
+
+    Toàn bộ test cũ vẫn xanh vì client giả (`jira/client.py`) có gán
+    `incident.postmortem = postmortem` trong `attach_postmortem`. Chỉ đường THẬT
+    hỏng. Test này đo đúng đường thật: nhặt body đã POST rồi dựng lại `Postmortem`.
+
+    Cùng loại lỗi với `proposal` (xem chú thích trong `get_incident`), lặp lại.
+    """
+    from src.models.incident import Postmortem
+    from src.services.jira.real import RealJiraClient, _extract_payloads
+
+    pm = Postmortem(
+        summary="tóm tắt",
+        root_cause="pool cạn",
+        impact="13% khách chờ quá 2s",
+        actions_taken=["rollback v1.4.3 → v1.4.2"],
+    )
+
+    da_post: list[dict] = []
+    client = RealJiraClient.__new__(RealJiraClient)
+    client._call = lambda method, path, body=None: da_post.append(body) or {}  # type: ignore[method-assign]
+
+    client.attach_postmortem("KAN-52", pm)
+
+    assert da_post, "attach_postmortem không POST gì lên Jira"
+    payloads = [p for b in da_post for p in _extract_payloads(b.get("body"))]
+    khoi = [p for p in payloads if p.get("p035") == "postmortem"]
+    assert khoi, "comment thiếu khối JSON — get_incident() sẽ không dựng lại được"
+
+    doc_lai = Postmortem.model_validate(khoi[0]["data"])
+    assert doc_lai.summary == pm.summary
+    assert doc_lai.root_cause == pm.root_cause
+    assert doc_lai.actions_taken == pm.actions_taken
+
+
+def test_get_incident_co_nhanh_dung_lai_postmortem():
+    """`get_incident` phải xử lý payload `postmortem`, không chỉ ghi ra được.
+
+    Ghi được mà không đọc lại thì khối JSON chỉ là rác trong comment.
+    """
+    import inspect
+
+    from src.services.jira import real
+
+    nguon = inspect.getsource(real.RealJiraClient.get_incident)
+    assert '"postmortem"' in nguon
+    assert "incident.postmortem" in nguon

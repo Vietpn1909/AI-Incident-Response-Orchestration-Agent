@@ -269,19 +269,6 @@ def _try_send_postmortem(client: JiraClient, jira_key: str) -> bool:
     """
     settings = get_settings()
 
-    # Kiểm tra config email — thiếu thì bỏ qua im lặng
-    if not settings.smtp_email or not settings.smtp_app_password:
-        logger.info(
-            "%s: bỏ qua postmortem email — SMTP_EMAIL hoặc SMTP_APP_PASSWORD chưa cấu hình",
-            jira_key,
-        )
-        return False
-
-    recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
-    if not recipients:
-        logger.info("%s: bỏ qua postmortem email — POSTMORTEM_RECIPIENTS trống", jira_key)
-        return False
-
     try:
         # 1. Đọc incident đầy đủ
         incident = client.get_incident(jira_key)
@@ -297,7 +284,25 @@ def _try_send_postmortem(client: JiraClient, jira_key: str) -> bool:
         try:
             client.attach_postmortem(jira_key, postmortem)
         except Exception:
-            logger.exception("%s: không attach được postmortem lên Jira (vẫn gửi email)", jira_key)
+            logger.exception("%s: không attach được postmortem lên Jira", jira_key)
+
+        # ── Từ đây trở xuống chỉ là PHÁT HÀNH qua email ──
+        # Thiếu SMTP thì bỏ email, KHÔNG bỏ postmortem. Bản postmortem là sản
+        # phẩm; email chỉ là một đường đưa nó tới người đọc. Chặn từ đầu như
+        # trước là mất cả bài học chỉ vì chưa cấu hình hộp thư.
+        if not settings.smtp_email or not settings.smtp_app_password:
+            logger.info(
+                "%s: đã ghi postmortem lên Jira, bỏ qua email — SMTP chưa cấu hình", jira_key,
+            )
+            return False
+
+        recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
+        if not recipients:
+            logger.info(
+                "%s: đã ghi postmortem lên Jira, bỏ qua email — POSTMORTEM_RECIPIENTS trống",
+                jira_key,
+            )
+            return False
 
         # 5. Render HTML
         jira_base_url = settings.jira_base_url
@@ -462,17 +467,6 @@ def _try_send_postmortem_manual(
     """
     settings = get_settings()
 
-    if not settings.smtp_email or not settings.smtp_app_password:
-        logger.info(
-            "%s: bỏ qua postmortem email — SMTP chưa cấu hình", jira_key,
-        )
-        return False
-
-    recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
-    if not recipients:
-        logger.info("%s: bỏ qua postmortem email — POSTMORTEM_RECIPIENTS trống", jira_key)
-        return False
-
     try:
         # Bổ sung thông tin giải quyết thủ công vào incident trước khi sinh postmortem
         from src.models.incident import TimelineEvent
@@ -505,7 +499,24 @@ def _try_send_postmortem_manual(
         try:
             client.attach_postmortem(jira_key, postmortem)
         except Exception:
-            logger.exception("%s: không attach được postmortem (vẫn gửi email)", jira_key)
+            logger.exception("%s: không attach được postmortem", jira_key)
+
+        # ── Từ đây trở xuống chỉ là PHÁT HÀNH qua email — cùng lý do như
+        # `_try_send_postmortem()`: thiếu hộp thư thì mất email, không mất
+        # postmortem.
+        if not settings.smtp_email or not settings.smtp_app_password:
+            logger.info(
+                "%s: đã ghi postmortem lên Jira, bỏ qua email — SMTP chưa cấu hình", jira_key,
+            )
+            return False
+
+        recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
+        if not recipients:
+            logger.info(
+                "%s: đã ghi postmortem lên Jira, bỏ qua email — POSTMORTEM_RECIPIENTS trống",
+                jira_key,
+            )
+            return False
 
         # Render + gửi email
         jira_base_url = settings.jira_base_url

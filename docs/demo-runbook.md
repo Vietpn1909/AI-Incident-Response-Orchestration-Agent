@@ -431,6 +431,10 @@ hệ thống lúc nào cũng báo thành công.
   nó ngủ sẽ **fail im lặng**. Trước demo phải đánh thức:
   `curl https://p-035-incident-agent.onrender.com/health`
 - **Node `verify`** ✅ **đã có** từ 17/08 — Agent tự đo lại và tự comment kết luận.
+- **Postmortem không cần email**: từ 21/08, postmortem được sinh và ghi lên Jira
+  kể cả khi chưa cấu hình `SMTP_EMAIL` — email chỉ là một đường phát hành. Trước
+  bản vá, thiếu hộp thư là **mất luôn bài học**, và nút "Postmortems" trên war
+  room không bao giờ sáng.
 - ⚠️ `awaiting_keys` chỉ nhớ phiếu mở TRONG tiến trình đó, nên khởi động lại Agent
   là nó quên phiếu đang chờ duyệt — cả `poll_jira_approvals` lẫn `verify` đều
   không chạm tới. Đo được 17/08: KAN-48 duyệt trước khi Agent khởi động thì không
