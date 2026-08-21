@@ -1,6 +1,6 @@
 # Kết quả đánh giá — 50 test case
 
-- Sinh lúc: `2026-08-21T15:38:15.879102+00:00`
+- Sinh lúc: `2026-08-21T15:45:41.573018+00:00`
 - Dataset SHA-256: `226eedfa8c574271ef1ead62d2d5c26d0f6631015e77c786654574e2bcfd35ed`
 - Phạm vi: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
 
