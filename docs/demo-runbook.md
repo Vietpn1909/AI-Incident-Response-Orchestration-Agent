@@ -31,7 +31,17 @@ Thiếu cái nào thì bật lại:
 ```bash
 DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
 python -m uvicorn src.main:app --port 8000                      # terminal 2
-API_URL=http://localhost:8000 streamlit run ui/war_room.py      # terminal 3
+# Ba biến, thiếu cái nào là mất đúng chức năng đó:
+#   API_URL       thiếu → UI đọc dữ liệu trên RENDER, không phải máy này
+#   JIRA_BASE_URL thiếu → KHÔNG bấm được sang Jira (nút hiện "Chưa đặt...")
+#   PROM_URL      thiếu → link "kiểm chứng PromQL" trỏ sai chỗ
+#
+# `ui/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải truyền
+# tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+API_URL=http://localhost:8000 \
+JIRA_BASE_URL=https://jibinarybro.atlassian.net \
+PROM_URL=http://localhost:9090 \
+  streamlit run ui/war_room.py   # terminal 3
 ```
 
 > `API_URL` là **bắt buộc**. Thiếu nó, UI đọc backend trên Render chứ không đọc
@@ -215,7 +225,17 @@ Sự cố mà **số đo hoàn toàn mù**: 100% request lỗi, nhưng p95 chỉ
 pkill -f "uvicorn src.main"
 REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000 &
 sleep 8
-API_URL=http://localhost:8000 streamlit run ui/war_room.py &
+# Ba biến, thiếu cái nào là mất đúng chức năng đó:
+#   API_URL       thiếu → UI đọc dữ liệu trên RENDER, không phải máy này
+#   JIRA_BASE_URL thiếu → KHÔNG bấm được sang Jira (nút hiện "Chưa đặt...")
+#   PROM_URL      thiếu → link "kiểm chứng PromQL" trỏ sai chỗ
+#
+# `ui/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải truyền
+# tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+API_URL=http://localhost:8000 \
+JIRA_BASE_URL=https://jibinarybro.atlassian.net \
+PROM_URL=http://localhost:9090 \
+  streamlit run ui/war_room.py &
 ```
 
 > ⚠️ Đây là chỗ dễ sai nhất. `duyet.py` chỉ gửi HTTP; `executors` chạy trong tiến
