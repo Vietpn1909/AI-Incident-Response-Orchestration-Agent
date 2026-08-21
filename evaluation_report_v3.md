@@ -4,6 +4,15 @@
 
 ---
 
+> ⚠️ **Bản này là ảnh chụp ngày 15/08, số liệu đã lệch.** Bản hiện hành:
+> [`eval/RESULTS-2026-08-21.md`](eval/RESULTS-2026-08-21.md).
+>
+> Thay đổi chính: recall 72% → **84%**, báo nhầm 28% → **20%**. Và một chỗ phải
+> sửa lại — con số *"báo nhầm 16%"* từng công bố giữa hai mốc này là **không
+> đúng**: bộ lọc tạo ra nó chưa hề được nối vào Agent. Xem §2 của bản mới.
+
+---
+
 | Thông tin | Chi tiết |
 |-----------|----------|
 | **Dự án** | P-035 — AI-Powered Incident Detection & Remediation |

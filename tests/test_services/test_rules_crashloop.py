@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from src.models.incident import Severity
+from src.services import rules
 from src.services.rules import (
     CRASHLOOP_RESTARTS,
     SUSTAINED_SECONDS,
@@ -250,3 +251,102 @@ def test_phan_loai_theo_dinh_khong_theo_gia_tri_tuc_thoi():
     )
 
     assert signal is not None, "phân loại theo tức thời thì bỏ lọt sự cố này"
+
+
+# ─────────────────────────── dự báo xu hướng: SẼ chết, chưa chết
+
+
+def test_bo_nho_tang_dan_thi_bao_truoc_khi_chet():
+    """Rò rỉ chậm phải bắt được TRƯỚC lúc OOM, không phải sau.
+
+    Case I18 trong bộ đo: 84% trong khi ngưỡng 85%, tăng ~6%/giờ → 1 giờ nữa qua
+    ngưỡng, 3 giờ nữa OOM. Luật cũ đọc 0,84 rồi kết luận bình thường — đúng theo
+    cách nó được viết, và bỏ lọt một sự cố **đã biết trước giờ xảy ra**.
+    """
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=0.0,
+        down_for_seconds=0.0,
+        service="service-dat-hang",
+        memory_ratio=0.84,
+        memory_forecast_ratio=0.90,
+    )
+
+    assert signal is not None
+    assert signal.severity is Severity.P2
+    assert "dự báo" in signal.metric_name
+
+
+def test_du_bao_mot_minh_khong_du_de_bao_dong():
+    """`predict_linear` ngoại suy tuyến tính nên tải nhích rồi tụt vẫn cho dốc.
+
+    Đòi thêm "hiện tại đã dùng kha khá": 20% bộ nhớ mà dự báo lên 90% cũng chỉ là
+    một đường thẳng vẽ qua nhiễu, không phải rò rỉ.
+    """
+    assert (
+        rules.detect_crashloop(
+            service_up=1.0,
+            restarts=0.0,
+            down_for_seconds=0.0,
+            service="service-dat-hang",
+            memory_ratio=0.20,
+            memory_forecast_ratio=0.95,
+        )
+        is None
+    )
+
+
+def test_du_bao_phang_thi_khong_bao_dong():
+    """Bộ nhớ cao nhưng ổn định không phải sự cố — nhiều service vốn dùng nhiều."""
+    assert (
+        rules.detect_crashloop(
+            service_up=1.0,
+            restarts=0.0,
+            down_for_seconds=0.0,
+            service="service-dat-hang",
+            memory_ratio=0.78,
+            memory_forecast_ratio=0.78,
+        )
+        is None
+    )
+
+
+def test_tin_hieu_du_bao_khong_mang_ten_restart():
+    """Tên chỉ số phải là "dự báo", không mượn tên "số lần restart".
+
+    Hai lẽ. Một: `restarts` ở đây bằng 0, nên "0 lần restart (ngưỡng 2)" là câu
+    vô nghĩa với người trực. Hai: `planned_events._PHAM_VI["crashloop"]` có từ
+    khoá "deploy", nên tín hiệu này sẽ bị một lần deploy gần đó bịt miệng — dù
+    deploy KHÔNG giải thích được rò rỉ bộ nhớ.
+    """
+    from src.services import planned_events
+
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=0.0,
+        down_for_seconds=0.0,
+        service="service-dat-hang",
+        memory_ratio=0.84,
+        memory_forecast_ratio=0.90,
+    )
+    assert signal is not None
+    assert "restart" not in signal.metric_name.lower()
+    assert not planned_events.giai_thich_duoc(
+        "deploy v1.4.3", "crashloop", signal.metric_name
+    ), "deploy không được bịt miệng tín hiệu dự báo rò rỉ bộ nhớ"
+
+
+def test_bang_chung_du_bao_truy_nguoc_duoc_bang_promql():
+    """Người trực phải dán được câu PromQL ra đúng con số trên war room."""
+    signal = rules.detect_crashloop(
+        service_up=1.0,
+        restarts=0.0,
+        down_for_seconds=0.0,
+        service="service-dat-hang",
+        memory_ratio=0.84,
+        memory_forecast_ratio=0.90,
+    )
+    assert signal is not None
+    bang_chung = next(e for e in signal.evidence if "dự báo" in e.name)
+    assert bang_chung.value == 0.90
+    assert "predict_linear" in (bang_chung.promql or "")

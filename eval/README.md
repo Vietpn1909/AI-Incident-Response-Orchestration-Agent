@@ -10,6 +10,17 @@ node detect quyết định mở incident.
 
 Mentor đã nhấn mạnh chính chỗ này: *"khi làm bài toán AI, vấn đề đo đạc như thế nào — cần phải clear, cần đo đạc cụ thể"*. Đây là câu trả lời.
 
+## Kết quả mới nhất
+
+[`RESULTS-2026-08-21.md`](RESULTS-2026-08-21.md) — bản hiện hành. Ngoài con số, nó
+ghi ba thứ mà một bảng chỉ số không nói được:
+
+- **bốn case còn bỏ lọt, kể tên** — vì *"recall 84%"* không cho ai biết Agent mù ở đâu
+- **con số 28% "nguyên nhân gốc" bị đọc sai** — chia ra thì 7 đúng · 11 tự nhận
+  *"chưa đủ bằng chứng"* · 2 nói sai · 4 bỏ lọt. Chỉ 2/25 là nói sai.
+- **bộ đo này không đo gì** — 3 khâu trên 11, và lỗ lớn nhất là khâu Agent **chọn
+  hành động**, nơi một lỗi thật đã xảy ra ngày 21/08 mà mọi chỉ số vẫn xanh
+
 ## Hai họ metric — đừng lẫn vào nhau
 
 ### Họ A — metric của sự cố (hệ thống)

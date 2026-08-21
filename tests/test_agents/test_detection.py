@@ -11,6 +11,7 @@ thành rác sau vài phút.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -75,6 +76,20 @@ def _classify(promql: str) -> str:
     """
     if "db_pool" in promql:
         return "pool"
+    # Ba nhánh bộ nhớ. Trước 21/08 fake này KHÔNG có nhánh nào cho bộ nhớ, nên
+    # mọi câu bộ nhớ rơi xuống nhánh "error" và nhận tỷ lệ lỗi 5xx — tức không
+    # test nào từng chạm tới bộ nhớ, kể cả test UC-2. Phát hiện khi viết test cho
+    # bộ lọc deploy: đặt memory_ratio=0.92 mà tín hiệu vẫn bị lọc.
+    #
+    # Thứ tự BẮT BUỘC: `predict_linear(...)` và `max_over_time(...)` đều chứa
+    # `process_resident_memory_bytes`, nên hai câu đó phải xét trước câu chia
+    # trực tiếp.
+    if "predict_linear(process_resident_memory_bytes" in promql:
+        return "memory_forecast"
+    if "max_over_time(process_resident_memory_bytes[10m])" in promql:
+        return "memory_peak"
+    if "process_resident_memory_bytes /" in promql:
+        return "memory_ratio"
     # Phải xét TRƯỚC mọi nhánh histogram_quantile: câu đếm điểm baseline BỌC
     # NGOÀI câu p95, nên nếu để rơi xuống dưới thì nó bị nhận thành câu p95 và
     # số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, và mọi test đi
@@ -472,3 +487,148 @@ def test_service_chet_thang_ca_tan_cong():
 
     assert len(signals) == 1
     assert "restart" in signals[0].metric_name or "up" in signals[0].metric_name
+
+
+# ─────────────────────────────── lọc việc đã lên lịch, nối vào ĐƯỜNG THẬT
+
+
+def _co_deploy(version: str = "v1.8.0", note: str = "blue-green deploy", phut: float = 2.0):
+    """Giả lịch sử deploy có một lần deploy cách đây `phut` phút."""
+    from datetime import UTC, datetime, timedelta
+
+    from src.services.deploys import DeployRecord
+
+    return [
+        DeployRecord(
+            service="service-thanh-toan",
+            version=version,
+            deployed_at=datetime.now(UTC) - timedelta(minutes=phut),
+            deployed_by="ci-bot",
+            commit_sha="abc1234",
+            change_note=note,
+        )
+    ]
+
+
+def test_restart_ngay_sau_deploy_thi_khong_mo_war_room():
+    """`planned_events` phải được nối vào `detect_incidents`, không chỉ vào bộ đo.
+
+    Lỗi thật, phát hiện 21/08: `planned_events.py` chỉ được gọi từ
+    `eval/case_suite.py`. Nên tỷ lệ báo nhầm 16% trong báo cáo là tính chất của
+    BỘ ĐO, còn Agent đang chạy vẫn báo nhầm 28% — đúng loại lỗi "chỉ số xanh,
+    sản phẩm không có".
+
+    Case N12: blue-green deploy làm 2 lần restart = đúng ngưỡng crashloop.
+    Restart ngay sau deploy là chuyện đương nhiên, không phải sự cố.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus({"restarts": 2.0, "up": 1.0}) as client:
+            assert detect_incidents(client) == []
+
+
+def test_deploy_khong_giai_thich_duoc_mat_tin_hieu():
+    """Việc đã lên lịch chỉ giải thích được thứ nó gây ra được.
+
+    Deploy giải thích container restart. Nó KHÔNG giải thích được mất tín hiệu
+    đo lường — nếu bỏ qua cả cái đó thì mỗi lần deploy là một cửa sổ Agent mù.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus({"p95": 0.0, "baseline": 0.4, "baseline_samples": 30.0}) as client:
+            signals = detect_incidents(client)
+
+    assert signals, "mất tín hiệu bị bỏ qua chỉ vì có deploy gần đó"
+    assert "mất tín hiệu" in signals[0].metric_name
+
+
+def test_khong_co_deploy_gan_thi_van_bao_restart():
+    """Không có deploy nào gần thì restart vẫn là crashloop."""
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy(phut=600.0)
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus({"restarts": 2.0, "up": 1.0}) as client:
+            assert detect_incidents(client)
+
+
+def test_khong_co_database_url_thi_khong_goi_db():
+    """Thiếu nguồn deploy thì thoát trước khi mở event loop.
+
+    Không có cửa thoát này thì mỗi tín hiệu tốn một `asyncio.run()` cộng một lần
+    thử kết nối Postgres — đo được +12,6 giây trên toàn bộ test suite.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys"
+    ) as goi:
+        gs.return_value.database_url = ""
+        with _prometheus({"restarts": 2.0, "up": 1.0}) as client:
+            assert detect_incidents(client)
+    goi.assert_not_called()
+
+
+def test_deploy_khong_giai_thich_duoc_service_chet():
+    """UC-2 phải sống sót qua bộ lọc, dù luôn có deploy 3 phút trước.
+
+    Rủi ro thật: `_PHAM_VI["crashloop"]` chứa từ khoá `"deploy"`, và `demo/seed.py`
+    luôn đặt `v1.4.3` ở mốc 3 phút trước. Nếu bộ lọc chỉ khớp từ khoá thì mọi
+    lần UC-2 xảy ra trong 15 phút sau seed đều bị bỏ qua — tức bản vá giảm báo
+    nhầm lại xoá luôn một use case đang demo.
+
+    Ranh giới đúng: deploy giải thích được VÀI LẦN RESTART (thay pod là chuyện
+    đương nhiên), nhưng KHÔNG giải thích được một service **vẫn đang chết**.
+    `planned_events._KHONG_BAO_GIO_BO_QUA` chặn đúng chỗ đó.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus({"up": 0.0, "down_for": 120.0, "restarts": 3.0}) as client:
+            signals = detect_incidents(client)
+
+    assert signals, "UC-2 bị bộ lọc việc-đã-lên-lịch bịt miệng"
+    assert "up (service" in signals[0].metric_name
+
+
+def test_restart_kem_bo_nho_sat_tran_thi_van_bao():
+    """Deploy giải thích thay pod, KHÔNG giải thích chết vì hết bộ nhớ.
+
+    Tìm ra bằng ĐO THẬT ngày 21/08, không bằng đọc code: restart 2 lần với deploy
+    5 phút trước thì log ghi "UC-2 ... 2 lần restart" mà tín hiệu không ra tới
+    danh sách cuối. Đúng 2 lần hợp lý với blue-green deploy (case N12, bộ nhớ
+    0,35), sai với UC-2 thật — nó chết vì OOM nên bộ nhớ sát trần.
+
+    Bẫy thứ hai trong cùng bản vá: bằng chứng "đỉnh bộ nhớ 10 phút" tính bằng MB
+    (54, 108…), nên điều kiện `"bộ nhớ" in name and value >= 0.85` LUÔN đúng và
+    vô hiệu hoá cả bộ lọc. Chỉ được so bằng chứng nào là tỷ lệ.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus(
+            {"restarts": 2.0, "up": 1.0, "memory_ratio": 0.92, "memory_peak": 120.0}
+        ) as client:
+            signals = detect_incidents(client)
+
+    assert signals, "UC-2 chết vì OOM bị deploy bịt miệng"
+
+
+def test_don_vi_mb_khong_duoc_tinh_la_ap_luc_bo_nho():
+    """Bằng chứng tính bằng MB không được coi là tỷ lệ.
+
+    Canh trực tiếp chỗ vấp: bộ nhớ THẤP (0,20) nhưng đỉnh 108 MB. Nếu bộ lọc so
+    cả bằng chứng MB thì 108 >= 0,85 và tín hiệu không bao giờ bị lọc.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus(
+            {"restarts": 2.0, "up": 1.0, "memory_ratio": 0.20, "memory_peak": 108.0}
+        ) as client:
+            assert detect_incidents(client) == []

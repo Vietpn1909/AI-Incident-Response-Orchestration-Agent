@@ -226,7 +226,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 0,
         "memory_ratio": 0.42,
-        "memory_peak_10m_mb": 54
+        "memory_peak_10m_mb": 54,
+        "memory_forecast_1h_ratio": 0.42
       },
       "context": {
         "deploy": "v1.4.4 deploy có chủ đích"
@@ -260,7 +261,8 @@
         "restarts_10m": 0,
         "down_for_seconds": 0,
         "memory_ratio": 0.78,
-        "memory_peak_10m_mb": 100
+        "memory_peak_10m_mb": 100,
+        "memory_forecast_1h_ratio": 0.78
       },
       "ground_truth": {
         "is_incident": false,
@@ -624,7 +626,8 @@
         "restarts_10m": 0,
         "down_for_seconds": 45,
         "memory_ratio": 0.3,
-        "memory_peak_10m_mb": 40
+        "memory_peak_10m_mb": 40,
+        "memory_forecast_1h_ratio": 0.3
       },
       "context": {
         "experiment_event": "Fault injection gửi SIGTERM tới process thanh toán"
@@ -670,7 +673,8 @@
         "restarts_10m": 2,
         "down_for_seconds": 0,
         "memory_ratio": 0.45,
-        "memory_peak_10m_mb": 60
+        "memory_peak_10m_mb": 60,
+        "memory_forecast_1h_ratio": 0.45
       },
       "context": {
         "experiment_event": "Fault injection gửi SIGKILL ở cả hai lần crash"
@@ -716,7 +720,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 0,
         "memory_ratio": 0.5,
-        "memory_peak_10m_mb": 126
+        "memory_peak_10m_mb": 126,
+        "memory_forecast_1h_ratio": 0.5
       },
       "ground_truth": {
         "is_incident": true,
@@ -762,7 +767,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 40,
         "memory_ratio": 0.2,
-        "memory_peak_10m_mb": 125
+        "memory_peak_10m_mb": 125,
+        "memory_forecast_1h_ratio": 0.2
       },
       "ground_truth": {
         "is_incident": true,
@@ -1158,7 +1164,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 0,
         "memory_ratio": 0.4,
-        "memory_peak_10m_mb": 52
+        "memory_peak_10m_mb": 52,
+        "memory_forecast_1h_ratio": 0.4
       },
       "context": {
         "deploy": "deploy hợp lệ ngay trước restart"
@@ -1298,7 +1305,8 @@
         "restarts_10m": 2,
         "down_for_seconds": 0,
         "memory_ratio": 0.35,
-        "memory_peak_10m_mb": 45
+        "memory_peak_10m_mb": 45,
+        "memory_forecast_1h_ratio": 0.35
       },
       "context": {
         "deploy": "blue-green deploy v1.8.0 — old pod shutdown + new pod startup = 2 process start events"
@@ -1333,7 +1341,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 0,
         "memory_ratio": 0.35,
-        "memory_peak_10m_mb": 45
+        "memory_peak_10m_mb": 45,
+        "memory_forecast_1h_ratio": 0.35
       },
       "context": {
         "deploy": "runtime upgrade có kế hoạch"
@@ -1538,7 +1547,8 @@
         "restarts_10m": 0,
         "down_for_seconds": 0,
         "memory_ratio": 0.84,
-        "memory_peak_10m_mb": 108
+        "memory_peak_10m_mb": 108,
+        "memory_forecast_1h_ratio": 0.9
       },
       "context": {
         "logs": [
@@ -2025,7 +2035,8 @@
         "restarts_10m": 3,
         "down_for_seconds": 0,
         "memory_ratio": 0.4,
-        "memory_peak_10m_mb": 52
+        "memory_peak_10m_mb": 52,
+        "memory_forecast_1h_ratio": 0.4
       },
       "context": {
         "maintenance_event": "Chaos engineering experiment FIS-2026-08-15 đã được phê duyệt",
@@ -2064,7 +2075,8 @@
         "restarts_10m": 1,
         "down_for_seconds": 0,
         "memory_ratio": 0.6,
-        "memory_peak_10m_mb": 108
+        "memory_peak_10m_mb": 108,
+        "memory_forecast_1h_ratio": 0.6
       },
       "context": {
         "maintenance_event": "Batch job báo cáo cuối ngày"

@@ -1357,11 +1357,26 @@ def truy_van_range(promql: str, bat_dau: int, ket_thuc: int, buoc: int) -> dict:
     return {"ok": True, "loi": None, "chuoi": chuoi}
 
 
-def truy_van_instant(promql: str) -> float | None:
-    """Một con số tại thời điểm hiện tại. None khi không có dữ liệu."""
+def truy_van_instant(promql: str, luc: float | None = None) -> float | None:
+    """Một con số tại thời điểm `luc` (Unix giây). None khi không có dữ liệu.
+
+    `luc = None` là hỏi "bây giờ". Nhưng với một sự cố đã qua thì **bây giờ không
+    còn dữ liệu**: cửa sổ `[5m]` chỉ chứa khoảng thời gian sau khi tải đã tắt.
+
+    Đo ngày 21/08: sự cố phát hiện 13:32, xem war room lúc 13:40 — ô "Ảnh hưởng"
+    hiện "Prometheus không trả dữ liệu cho cửa sổ này". Thông báo đúng, nhưng nó
+    đang hỏi sai thời điểm. Cùng loại lỗi với link kiểm chứng PromQL đã vá 12/08:
+    truy vấn tức thời trả giá trị *lúc hỏi*, không phải lúc sự cố.
+
+    Ô "Ảnh hưởng" là dòng quan trọng nhất với người không rành kỹ thuật — nó trả
+    lời "bao nhiêu phần khách bị ảnh hưởng". Để nó trống là mất đúng dòng đó.
+    """
+    tham_so: dict[str, object] = {"query": promql}
+    if luc is not None:
+        tham_so["time"] = luc
     try:
         phan_hoi = requests.get(
-            f"{PROM_URL}/api/v1/query", params={"query": promql}, timeout=PROM_TIMEOUT
+            f"{PROM_URL}/api/v1/query", params=tham_so, timeout=PROM_TIMEOUT
         )
         phan_hoi.raise_for_status()
         goi = phan_hoi.json()
@@ -1433,7 +1448,9 @@ def _le_gan_nhat(nguong: float) -> str | None:
     return None
 
 
-def ty_le_anh_huong(signal: dict, prom_ok: bool) -> tuple[str, str]:
+def ty_le_anh_huong(
+    signal: dict, prom_ok: bool, luc: float | None = None
+) -> tuple[str, str]:
     """Bao nhiêu phần request thực sự bị ảnh hưởng — `(giá trị, chú thích)`.
 
     Đây là ô "Ảnh hưởng" trên meta strip. File mẫu ghi sẵn "~12% traffic" như
@@ -1478,10 +1495,11 @@ def ty_le_anh_huong(signal: dict, prom_ok: bool) -> tuple[str, str]:
         f' / sum(rate(http_request_duration_seconds_bucket{{{loc},le="+Inf"}}[5m])))'
         f" and (sum(rate(http_requests_total{{{loc}}}[1m])) > 0)"
     )
-    ty_le = truy_van_instant(cau)
+    ty_le = truy_van_instant(cau, luc)
     if ty_le is None:
-        return "—", "Prometheus không trả dữ liệu cho cửa sổ này"
-    return f"{max(ty_le, 0) * 100:.1f}%", f"request chậm hơn {le}s, 5 phút gần nhất"
+        return "—", "Prometheus không trả dữ liệu quanh lúc phát hiện"
+    khi = "quanh lúc phát hiện" if luc is not None else "5 phút gần nhất"
+    return f"{max(ty_le, 0) * 100:.1f}%", f"request chậm hơn {le}s, {khi}"
 
 
 # ---------------------------------------------------------------------------
@@ -3001,7 +3019,12 @@ kho["bang_tra"] = {i["jira_key"]: i for i in ds if i.get("jira_key")}
 if inc_chon:
     signal_chon = inc_chon.get("signal") or {}
     if signal_chon:
-        kho["anh_huong"][dang_chon] = ty_le_anh_huong(signal_chon, kho["prom"])
+        # Hỏi tại MỐC PHÁT HIỆN, không phải "bây giờ". Sự cố đã qua thì cửa sổ
+        # `[5m]` tính từ hiện tại chỉ chứa khoảng sau khi tải đã tắt, và ô "Ảnh
+        # hưởng" trống — dòng quan trọng nhất với người không rành kỹ thuật.
+        kho["anh_huong"][dang_chon] = ty_le_anh_huong(
+            signal_chon, kho["prom"], _unix(inc_chon.get("detected_at"))
+        )
         if kho["prom"]:
             bang_chung_chon = _bang_chung_kich_hoat(signal_chon) or {}
             bat_dau_cs, ket_thuc_cs = _cua_so(inc_chon)

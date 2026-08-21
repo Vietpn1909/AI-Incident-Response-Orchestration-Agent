@@ -421,7 +421,16 @@ class RealJiraClient:
         if postmortem.action_items:
             lines.append("Action item:")
             lines.extend(f"- {i.title}" + (f" ({i.owner})" if i.owner else "") for i in postmortem.action_items)
-        self.add_comment(jira_key, "\n\n".join(lines))
+        # Kèm khối JSON, KHÔNG chỉ `add_comment`. Không có nó thì postmortem chỉ
+        # là chữ cho người đọc trên Jira: `get_incident()` dựng lại Incident từ
+        # Jira nên `incident.postmortem` luôn None, và nút "Postmortems" trên war
+        # room không bao giờ sáng. Đúng lỗi đã gặp với `proposal` (xem chú thích
+        # trong `get_incident`), lặp lại ở postmortem.
+        self._comment_with_payload(
+            jira_key,
+            "\n\n".join(lines),
+            {_PAYLOAD_KEY: "postmortem", "data": postmortem.model_dump(mode="json")},
+        )
 
     # ------------------------------------------------------------ đọc dữ liệu
 
@@ -572,6 +581,8 @@ class RealJiraClient:
                     incident.signal = IncidentSignal.model_validate(data)
                 elif kind == "hypothesis":
                     incident.hypotheses.append(Hypothesis.model_validate(data))
+                elif kind == "postmortem":
+                    incident.postmortem = Postmortem.model_validate(data)
                 elif kind == "proposal":
                     # Lấy đề xuất MỚI NHẤT: incident có thể được đề xuất lại sau
                     # khi hành động đầu không khắc phục được.

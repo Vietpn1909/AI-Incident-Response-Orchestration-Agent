@@ -183,6 +183,11 @@ _METRIC: tuple[tuple[str, str, str], ...] = (
     ("số tài khoản bị thử", "Số tài khoản bị thử mật khẩu", "tài khoản"),
     ("tỷ lệ từ IP nguồn lớn nhất", "Phần trăm đến từ một máy duy nhất", "%"),
     ("đỉnh bộ nhớ", "Bộ nhớ dùng nhiều nhất trong 10 phút", "MB"),
+    # Hai dòng dự báo phải đứng TRƯỚC "bộ nhớ đang dùng", vì so bằng chuỗi con.
+    # Câu dịch nói rõ đây là DỰ BÁO, không phải số đang đo — người trực đọc "Bộ
+    # nhớ 90%" mà thực ra là 84% thì mất niềm tin vào cả trang.
+    ("bộ nhớ dự báo sau 1 giờ (xu hướng)", "Bộ nhớ DỰ BÁO sau 1 giờ nữa", "%"),
+    ("bộ nhớ dự báo sau 1 giờ / giới hạn container", "Bộ nhớ DỰ BÁO sau 1 giờ so với giới hạn", "%"),
     ("bộ nhớ đang dùng / giới hạn container", "Bộ nhớ đang dùng so với giới hạn", "%"),
     ("số lần restart", "Số lần dịch vụ tự khởi động lại", "lần"),
     ("up (service còn sống không)", "Dịch vụ còn sống", ""),
