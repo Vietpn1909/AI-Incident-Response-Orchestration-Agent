@@ -76,6 +76,20 @@ def _classify(promql: str) -> str:
     """
     if "db_pool" in promql:
         return "pool"
+    # Ba nhánh bộ nhớ. Trước 21/08 fake này KHÔNG có nhánh nào cho bộ nhớ, nên
+    # mọi câu bộ nhớ rơi xuống nhánh "error" và nhận tỷ lệ lỗi 5xx — tức không
+    # test nào từng chạm tới bộ nhớ, kể cả test UC-2. Phát hiện khi viết test cho
+    # bộ lọc deploy: đặt memory_ratio=0.92 mà tín hiệu vẫn bị lọc.
+    #
+    # Thứ tự BẮT BUỘC: `predict_linear(...)` và `max_over_time(...)` đều chứa
+    # `process_resident_memory_bytes`, nên hai câu đó phải xét trước câu chia
+    # trực tiếp.
+    if "predict_linear(process_resident_memory_bytes" in promql:
+        return "memory_forecast"
+    if "max_over_time(process_resident_memory_bytes[10m])" in promql:
+        return "memory_peak"
+    if "process_resident_memory_bytes /" in promql:
+        return "memory_ratio"
     # Phải xét TRƯỚC mọi nhánh histogram_quantile: câu đếm điểm baseline BỌC
     # NGOÀI câu p95, nên nếu để rơi xuống dưới thì nó bị nhận thành câu p95 và
     # số điểm baseline nhận giá trị p95 (0.4) — dưới ngưỡng 20, và mọi test đi
@@ -578,3 +592,43 @@ def test_deploy_khong_giai_thich_duoc_service_chet():
 
     assert signals, "UC-2 bị bộ lọc việc-đã-lên-lịch bịt miệng"
     assert "up (service" in signals[0].metric_name
+
+
+def test_restart_kem_bo_nho_sat_tran_thi_van_bao():
+    """Deploy giải thích thay pod, KHÔNG giải thích chết vì hết bộ nhớ.
+
+    Tìm ra bằng ĐO THẬT ngày 21/08, không bằng đọc code: restart 2 lần với deploy
+    5 phút trước thì log ghi "UC-2 ... 2 lần restart" mà tín hiệu không ra tới
+    danh sách cuối. Đúng 2 lần hợp lý với blue-green deploy (case N12, bộ nhớ
+    0,35), sai với UC-2 thật — nó chết vì OOM nên bộ nhớ sát trần.
+
+    Bẫy thứ hai trong cùng bản vá: bằng chứng "đỉnh bộ nhớ 10 phút" tính bằng MB
+    (54, 108…), nên điều kiện `"bộ nhớ" in name and value >= 0.85` LUÔN đúng và
+    vô hiệu hoá cả bộ lọc. Chỉ được so bằng chứng nào là tỷ lệ.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus(
+            {"restarts": 2.0, "up": 1.0, "memory_ratio": 0.92, "memory_peak": 120.0}
+        ) as client:
+            signals = detect_incidents(client)
+
+    assert signals, "UC-2 chết vì OOM bị deploy bịt miệng"
+
+
+def test_don_vi_mb_khong_duoc_tinh_la_ap_luc_bo_nho():
+    """Bằng chứng tính bằng MB không được coi là tỷ lệ.
+
+    Canh trực tiếp chỗ vấp: bộ nhớ THẤP (0,20) nhưng đỉnh 108 MB. Nếu bộ lọc so
+    cả bằng chứng MB thì 108 >= 0,85 và tín hiệu không bao giờ bị lọc.
+    """
+    with patch("src.agents.nodes.detect.get_settings") as gs, patch(
+        "src.services.deploys.recent_deploys", return_value=_co_deploy()
+    ):
+        gs.return_value.database_url = "postgresql://x/y"
+        with _prometheus(
+            {"restarts": 2.0, "up": 1.0, "memory_ratio": 0.20, "memory_peak": 108.0}
+        ) as client:
+            assert detect_incidents(client) == []

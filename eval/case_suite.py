@@ -240,7 +240,7 @@ def _detect(
     # `_bao_nham_neu_co_nguon_bao_tri()` báo cáo mốc 8% riêng, ghi rõ là điều
     # kiện chưa có, để không ai đọc nhầm thành năng lực hiện tại.
     viec = (context or {}).get("deploy")
-    if planned_events.giai_thich_duoc(viec, detector, tin_hieu.metric_name):
+    if planned_events.bo_qua_duoc(tin_hieu, viec, detector):
         return None
     return tin_hieu
 

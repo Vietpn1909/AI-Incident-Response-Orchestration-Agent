@@ -331,16 +331,7 @@ def _bo_tin_hieu_da_co_giai_thich(
         # new startup" = 2 lần. Nhiều hơn thế là vòng crash thật, deploy không
         # giải thích được. Không có cửa này thì UC-2 im lặng suốt 15 phút sau mỗi
         # lần deploy, vì `_PHAM_VI["crashloop"]` có từ khoá "deploy".
-        la_restart = "restart" in signal.metric_name.lower()
-        if la_restart and signal.metric_value > rules.CRASHLOOP_RESTARTS:
-            logger.info(
-                "%s: %.0f lần restart — nhiều hơn mức một lần deploy giải thích được (%.0f), vẫn báo động",
-                service, signal.metric_value, rules.CRASHLOOP_RESTARTS,
-            )
-            con_lai.append(signal)
-            continue
-
-        if planned_events.giai_thich_duoc(viec, detector, signal.metric_name):
+        if planned_events.bo_qua_duoc(signal, viec, detector):
             logger.info(
                 "%s: KHÔNG mở war room — %s đã được giải thích bởi %r",
                 service, signal.metric_name, viec,

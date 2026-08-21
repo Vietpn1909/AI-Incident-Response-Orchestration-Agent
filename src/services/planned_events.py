@@ -49,6 +49,10 @@ Hai ngoại lệ này là lý do module tồn tại thay vì một dòng `if` tr
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.models.incident import IncidentSignal
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +114,57 @@ def giai_thich_duoc(
         detector, khop, mo_ta_viec[:60],
     )
     return True
+
+
+def bo_qua_duoc(signal: IncidentSignal, mo_ta_viec: str | None, detector: str) -> bool:
+    """Việc đã lên lịch `mo_ta_viec` có giải thích được `signal` không.
+
+    Đây là **chỗ duy nhất** quyết định việc đó. `giai_thich_duoc()` chỉ xét tên
+    chỉ số; hàm này xét thêm những giới hạn cần đọc bằng chứng số.
+
+    ⚠️ Gọi từ CẢ HAI đường — `detect.py` và `eval/case_suite.py`. Ngày 21/08 tôi
+    thêm điều kiện bộ nhớ vào một đường thôi, và
+    `test_pipeline_..._khop_voi_rule_truc_tiep` đỏ ngay. Đó là cùng loại lỗi với
+    `_NODE_CHAIN` cắm cứng lệch khỏi graph: hai bản sao của một quyết định.
+
+    Args:
+        signal: Tín hiệu đã dựng, cần cả `metric_value` và `evidence`.
+        mo_ta_viec: Mô tả việc đã lên lịch, `None` nếu không có.
+        detector: `"auth"` · `"crashloop"` · `"latency"`.
+    """
+    from src.services import rules
+
+    if not mo_ta_viec:
+        return False
+
+    # ── Deploy giải thích restart khi CẢ HAI đúng: ít lần, và không có áp lực
+    # bộ nhớ. Thay pod là "old shutdown + new startup" = 2 lần, container mới thì
+    # bộ nhớ thấp.
+    #
+    # Điều kiện bộ nhớ tìm ra bằng ĐO THẬT ngày 21/08, không bằng đọc code:
+    # restart service 2 lần với deploy 5 phút trước, log ghi "UC-2 trên
+    # service-thanh-toan: 2 lần restart" nhưng tín hiệu không ra tới danh sách
+    # cuối. Đúng 2 lần thì hợp lý với blue-green deploy (case N12, bộ nhớ 0,35),
+    # nhưng SAI với UC-2 thật — nó chết vì OOM nên bộ nhớ sát trần.
+    if "restart" in signal.metric_name.lower():
+        if signal.metric_value > rules.CRASHLOOP_RESTARTS:
+            logger.info(
+                "%.0f lần restart — ngoài mức một lần deploy giải thích được, vẫn báo động",
+                signal.metric_value,
+            )
+            return False
+        # ⚠️ Chỉ so bằng chứng nào là TỶ LỆ. `"bộ nhớ" in e.name` khớp cả
+        # "đỉnh bộ nhớ 10 phút (trần 128 MB)" — giá trị tính bằng **MB** (54,
+        # 108…), nên `>= 0.85` luôn đúng và điều kiện này vô hiệu. Đã vấp thật
+        # ngày 21/08: đo lại thấy tín hiệu restart không bao giờ bị lọc nữa.
+        #
+        # Cùng loại lỗi `ui/labels.py` đã cảnh báo về hai chỉ số bộ nhớ. Hai
+        # metric tỷ lệ đều kết thúc bằng "giới hạn container"; metric MB thì không.
+        if any(
+            e.name.endswith("giới hạn container") and e.value >= rules.MEMORY_NEAR_LIMIT_RATIO
+            for e in signal.evidence
+        ):
+            logger.info("restart kèm bộ nhớ sát trần — không phải thay pod, vẫn báo động")
+            return False
+
+    return giai_thich_duoc(mo_ta_viec, detector, signal.metric_name)
