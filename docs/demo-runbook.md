@@ -248,7 +248,32 @@ PROM_URL=http://localhost:9090 \
 
 ### ① Gây sự cố · 90 giây
 
+> ⚠️ **Hai điều kiện, thiếu là màn chốt tụt xuống "(mô phỏng)" mà không báo lỗi.**
+> Cả hai đều vấp thật khi diễn thử 21/08.
+>
+> **a) Seed lịch sử deploy TRONG 15 PHÚT trước khi gây sự cố.** `seed.py` đặt
+> `v1.4.3` ở mốc *"3 phút trước lúc seed"*, còn `rules.DEPLOY_WINDOW_MINUTES = 15`.
+> Seed từ sáng rồi chạy sự cố buổi chiều thì `correlate_deploy()` trả `None`,
+> Agent kết luận *"không có deploy nào trùng thời gian"* và đề xuất **`scale_up`**
+> thay vì `rollback`. Mà `executors._CHO_PHEP` chỉ cho thi hành thật
+> `("rollback", "service-thanh-toan")` → duyệt xong ra `(mô phỏng)`.
+> Đo lúc vấp: deploy cách sự cố **58,7 phút**.
+>
+> **b) service-thanh-toan KHÔNG được còn phiếu nào đang mở.** `open_war_room()`
+> thấy phiếu mở là chỉ **comment cập nhật**, không chẩn đoán lại và **không đề
+> xuất lại** — phiếu giữ nguyên đề xuất cũ. Đây là hành vi có chủ ý (chống mở
+> trùng), nhưng nghĩa là phải đóng phiếu cũ trước:
+>
+> ```bash
+> python -c "from dotenv import load_dotenv; load_dotenv('.env')
+> from src.config import get_settings
+> from src.services.jira.real import RealJiraClient
+> s=get_settings(); print(RealJiraClient(s.jira_base_url,s.jira_email,s.jira_api_token,s.jira_project_key).find_open_incident('service-thanh-toan'))"
+> ```
+> Ra `None` mới chạy tiếp.
+
 ```bash
+python demo/seed.py        # ← BẮT BUỘC, ngay trước bước dưới
 SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
   docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
 sleep 10 && python eval/run_measurements.py payment-load --seconds 80 --concurrency 3 --pause 0.05
