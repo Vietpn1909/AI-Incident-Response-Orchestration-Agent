@@ -250,6 +250,25 @@ MEMORY_USAGE_RATIO = f"process_resident_memory_bytes / {CONTAINER_MEMORY_LIMIT_B
 #: ra OOM-kill. Đỉnh mới là bằng chứng rò rỉ.
 MEMORY_PEAK_10M_MB = "max_over_time(process_resident_memory_bytes[10m]) / 1024 / 1024"
 
+#: Bộ nhớ **dự báo sau 1 giờ**, tính theo tỷ lệ trên giới hạn container (0–1).
+#:
+#: `predict_linear` khớp một đường thẳng qua 30 phút vừa rồi rồi ngoại suy tiếp
+#: 3600 giây. Đây là chỗ duy nhất trong cả bộ luật **nhìn về phía trước**; mọi
+#: luật khác đều hỏi "bây giờ đã vượt ngưỡng chưa".
+#:
+#: Vì sao cần: rò rỉ bộ nhớ chậm không bao giờ chạm ngưỡng cho tới lúc nó chạm,
+#: và lúc đó thì service đã chết. Case I18 trong bộ đo là đúng tình huống đó —
+#: 84% trong khi ngưỡng là 85%, tăng 5%/giờ, tức **3 giờ nữa OOM**. Luật cũ đọc
+#: 0,84 rồi kết luận bình thường, hoàn toàn đúng theo cách nó được viết, và bỏ
+#: lọt một sự cố đã biết trước giờ xảy ra.
+#:
+#: ⚠️ Ngoại suy tuyến tính chỉ đúng khi mức tăng đều. Tải tăng đột biến rồi tụt
+#: sẽ cho dự báo phóng đại, nên `rules` đòi **cả hai**: dự báo vượt ngưỡng VÀ mức
+#: hiện tại đã qua `MEMORY_TREND_MIN_RATIO`. Dự báo một mình không đủ để báo động.
+MEMORY_FORECAST_1H_RATIO = (
+    f"predict_linear(process_resident_memory_bytes[30m], 3600) / {CONTAINER_MEMORY_LIMIT_BYTES}"
+)
+
 _AVG_LATENCY_RAW = """
 sum(rate(http_request_duration_seconds_sum{handler!="/metrics"}[1m])) by (service)
   / sum(rate(http_request_duration_seconds_count{handler!="/metrics"}[1m])) by (service)

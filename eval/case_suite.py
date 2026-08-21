@@ -63,6 +63,10 @@ class SnapshotPrometheusClient:
             return "auth"
         if "max_over_time(process_resident_memory_bytes[10m])" in promql:
             return "memory_peak"
+        # `predict_linear` phải xét TRƯỚC "process_resident_memory_bytes /",
+        # vì câu dự báo cũng chứa chuỗi đó ở phần chia cho giới hạn container.
+        if "predict_linear(process_resident_memory_bytes" in promql:
+            return "memory_forecast"
         if "process_resident_memory_bytes /" in promql:
             return "memory_ratio"
         if "process_start_time_seconds" in promql:
@@ -99,6 +103,7 @@ class SnapshotPrometheusClient:
             "restarts": telemetry.get("restarts_10m"),
             "memory_ratio": telemetry.get("memory_ratio"),
             "memory_peak": telemetry.get("memory_peak_10m_mb"),
+            "memory_forecast": telemetry.get("memory_forecast_1h_ratio"),
         }
         if kind == "down":
             up = telemetry.get("service_up")
@@ -207,6 +212,7 @@ def _detect(
             service=str(telemetry["service"]),
             memory_ratio=float(telemetry.get("memory_ratio", 0.0)),
             memory_peak_mb=float(telemetry.get("memory_peak_10m_mb", 0.0)),
+            memory_forecast_ratio=float(telemetry.get("memory_forecast_1h_ratio", 0.0)),
         )
 
     if tin_hieu is None:

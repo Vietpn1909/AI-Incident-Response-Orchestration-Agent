@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-21T15:16:31.817901+00:00",
+  "generated_at": "2026-08-21T15:25:53.392879+00:00",
   "dataset": "eval/cases/incident_cases.json",
-  "dataset_sha256": "d5f7bb6abe7f49eadfe130808c0c7e8a1149309a4daaf3c72a7dbca74647482f",
+  "dataset_sha256": "226eedfa8c574271ef1ead62d2d5c26d0f6631015e77c786654574e2bcfd35ed",
   "distribution": {
     "normal": 15,
     "incident": 25,
@@ -12,20 +12,20 @@
     "true_incident_count": 25,
     "negative_count": 25,
     "confusion_matrix": {
-      "TP": 20,
-      "FN": 5,
+      "TP": 21,
+      "FN": 4,
       "FP": 5,
       "TN": 20
     },
-    "incident_recall": 0.8,
-    "incident_precision": 0.8,
-    "f1_score": 0.8,
-    "f2_score": 0.8,
-    "accuracy": 0.8,
+    "incident_recall": 0.84,
+    "incident_precision": 0.8077,
+    "f1_score": 0.8235,
+    "f2_score": 0.8333,
+    "accuracy": 0.82,
     "specificity": 0.8,
     "false_alarm_rate": 0.2,
-    "mcc": 0.6,
-    "severity_accuracy": 0.85,
+    "mcc": 0.6405,
+    "severity_accuracy": 0.8095,
     "severity_confusion_matrix": {
       "P2": {
         "P2": 5,
@@ -36,14 +36,14 @@
       },
       "P1": {
         "P1": 8,
-        "P2": 2
+        "P2": 3
       },
       "P4": {
         "P4": 2
       }
     },
     "top1_root_cause_accuracy": 0.28,
-    "evidence_coverage": 0.8,
+    "evidence_coverage": 0.84,
     "noisy_rejection_rate": 0.6,
     "input_error_count": 0,
     "per_family": {
@@ -58,12 +58,12 @@
       },
       "UC-2": {
         "true_incidents": 5,
-        "true_positives": 4,
-        "false_negatives": 1,
+        "true_positives": 5,
+        "false_negatives": 0,
         "false_positives": 1,
-        "recall": 0.8,
-        "precision": 0.8,
-        "f1": 0.8
+        "recall": 1.0,
+        "precision": 0.8333,
+        "f1": 0.9091
       },
       "UC-3": {
         "true_incidents": 5,
@@ -458,6 +458,7 @@
         "up (service còn sống không)",
         "số lần restart trong 10 phút",
         "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
         "đỉnh bộ nhớ 10 phút (trần 128 MB)"
       ],
       "error": null,
@@ -484,6 +485,7 @@
         "up (service còn sống không)",
         "số lần restart trong 10 phút",
         "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
         "đỉnh bộ nhớ 10 phút (trần 128 MB)"
       ],
       "error": null,
@@ -510,6 +512,7 @@
         "up (service còn sống không)",
         "số lần restart trong 10 phút",
         "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
         "đỉnh bộ nhớ 10 phút (trần 128 MB)"
       ],
       "error": null,
@@ -536,6 +539,7 @@
         "up (service còn sống không)",
         "số lần restart trong 10 phút",
         "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
         "đỉnh bộ nhớ 10 phút (trần 128 MB)"
       ],
       "error": null,
@@ -963,20 +967,26 @@
       "family": "UC-2",
       "title": "Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ",
       "expected_incident": true,
-      "predicted_incident": false,
-      "classification": "FN",
+      "predicted_incident": true,
+      "classification": "TP",
       "expected_severity": "P1",
-      "predicted_severity": null,
+      "predicted_severity": "P2",
       "severity_correct": false,
       "root_cause_correct": false,
-      "evidence_complete": false,
-      "hypothesis": null,
-      "confidence": null,
-      "evidence_names": [],
+      "evidence_complete": true,
+      "hypothesis": "service-dat-hang bất thường ở bộ nhớ dự báo sau 1 giờ (xu hướng) (0.90, ngưỡng 0.85). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+      "confidence": 0.0,
+      "evidence_names": [
+        "up (service còn sống không)",
+        "số lần restart trong 10 phút",
+        "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
+        "đỉnh bộ nhớ 10 phút (trần 128 MB)"
+      ],
       "error": null,
       "execution_mode": "prometheus-detect-jira",
-      "detected_signal_count": 0,
-      "jira_issue_count": 0
+      "detected_signal_count": 1,
+      "jira_issue_count": 1
     },
     {
       "case_id": "I19",
@@ -1212,6 +1222,7 @@
         "up (service còn sống không)",
         "số lần restart trong 10 phút",
         "bộ nhớ đang dùng / giới hạn container",
+        "bộ nhớ dự báo sau 1 giờ / giới hạn container",
         "đỉnh bộ nhớ 10 phút (trần 128 MB)"
       ],
       "error": null,
@@ -1272,20 +1283,20 @@
       "true_incident_count": 25,
       "negative_count": 25,
       "confusion_matrix": {
-        "TP": 20,
-        "FN": 5,
+        "TP": 21,
+        "FN": 4,
         "FP": 5,
         "TN": 20
       },
-      "incident_recall": 0.8,
-      "incident_precision": 0.8,
-      "f1_score": 0.8,
-      "f2_score": 0.8,
-      "accuracy": 0.8,
+      "incident_recall": 0.84,
+      "incident_precision": 0.8077,
+      "f1_score": 0.8235,
+      "f2_score": 0.8333,
+      "accuracy": 0.82,
       "specificity": 0.8,
       "false_alarm_rate": 0.2,
-      "mcc": 0.6,
-      "severity_accuracy": 0.85,
+      "mcc": 0.6405,
+      "severity_accuracy": 0.8095,
       "severity_confusion_matrix": {
         "P2": {
           "P2": 5,
@@ -1296,14 +1307,14 @@
         },
         "P1": {
           "P1": 8,
-          "P2": 2
+          "P2": 3
         },
         "P4": {
           "P4": 2
         }
       },
       "top1_root_cause_accuracy": 0.28,
-      "evidence_coverage": 0.8,
+      "evidence_coverage": 0.84,
       "noisy_rejection_rate": 0.6,
       "input_error_count": 0,
       "per_family": {
@@ -1318,12 +1329,12 @@
         },
         "UC-2": {
           "true_incidents": 5,
-          "true_positives": 4,
-          "false_negatives": 1,
+          "true_positives": 5,
+          "false_negatives": 0,
           "false_positives": 1,
-          "recall": 0.8,
-          "precision": 0.8,
-          "f1": 0.8
+          "recall": 1.0,
+          "precision": 0.8333,
+          "f1": 0.9091
         },
         "UC-3": {
           "true_incidents": 5,
@@ -1688,6 +1699,7 @@
           "up (service còn sống không)",
           "số lần restart trong 10 phút",
           "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
           "đỉnh bộ nhớ 10 phút (trần 128 MB)"
         ],
         "error": null,
@@ -1712,6 +1724,7 @@
           "up (service còn sống không)",
           "số lần restart trong 10 phút",
           "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
           "đỉnh bộ nhớ 10 phút (trần 128 MB)"
         ],
         "error": null,
@@ -1736,6 +1749,7 @@
           "up (service còn sống không)",
           "số lần restart trong 10 phút",
           "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
           "đỉnh bộ nhớ 10 phút (trần 128 MB)"
         ],
         "error": null,
@@ -1760,6 +1774,7 @@
           "up (service còn sống không)",
           "số lần restart trong 10 phút",
           "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
           "đỉnh bộ nhớ 10 phút (trần 128 MB)"
         ],
         "error": null,
@@ -2149,16 +2164,22 @@
         "family": "UC-2",
         "title": "Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ",
         "expected_incident": true,
-        "predicted_incident": false,
-        "classification": "FN",
+        "predicted_incident": true,
+        "classification": "TP",
         "expected_severity": "P1",
-        "predicted_severity": null,
+        "predicted_severity": "P2",
         "severity_correct": false,
         "root_cause_correct": false,
-        "evidence_complete": false,
-        "hypothesis": null,
-        "confidence": null,
-        "evidence_names": [],
+        "evidence_complete": true,
+        "hypothesis": "service-dat-hang bất thường ở bộ nhớ dự báo sau 1 giờ (xu hướng) (0.90, ngưỡng 0.85). Chưa đủ bằng chứng để nêu nguyên nhân gốc.",
+        "confidence": 0.0,
+        "evidence_names": [
+          "up (service còn sống không)",
+          "số lần restart trong 10 phút",
+          "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
+          "đỉnh bộ nhớ 10 phút (trần 128 MB)"
+        ],
         "error": null,
         "execution_mode": "direct-rule"
       },
@@ -2378,6 +2399,7 @@
           "up (service còn sống không)",
           "số lần restart trong 10 phút",
           "bộ nhớ đang dùng / giới hạn container",
+          "bộ nhớ dự báo sau 1 giờ / giới hạn container",
           "đỉnh bộ nhớ 10 phút (trần 128 MB)"
         ],
         "error": null,

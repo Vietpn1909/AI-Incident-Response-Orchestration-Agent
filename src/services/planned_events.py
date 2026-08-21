@@ -65,7 +65,7 @@ _PHAM_VI: dict[str, tuple[str, ...]] = {
 }
 
 #: Tín hiệu KHÔNG bao giờ được bỏ qua, dù có việc gì đã lên lịch.
-_KHONG_BAO_GIO_BO_QUA = ("mất tín hiệu", "up (service")
+_KHONG_BAO_GIO_BO_QUA = ("mất tín hiệu", "up (service", "dự báo")
 
 
 def giai_thich_duoc(

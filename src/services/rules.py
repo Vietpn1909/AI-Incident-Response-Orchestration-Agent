@@ -135,6 +135,16 @@ BASELINE_DEVIATION_STRONG = 3.0
 #: hai đã trượt.
 MEMORY_NEAR_LIMIT_RATIO = 0.85
 
+#: Mức bộ nhớ tối thiểu để TIN một dự báo xu hướng.
+#:
+#: `predict_linear` ngoại suy tuyến tính, nên tải nhích lên rồi tụt lại vẫn cho
+#: một dự báo dốc. Đòi thêm điều kiện "hiện tại đã dùng kha khá" thì dự báo mới
+#: có nghĩa: 20% bộ nhớ mà dự báo tăng gấp bốn cũng chỉ là 80%, chưa phải sự cố.
+#:
+#: 0,70 chọn theo khoảng trống trong dữ liệu: case bộ nhớ cao nhất KHÔNG phải sự
+#: cố là N07 ở 0,78 (phẳng, không có xu hướng), còn I18 ở 0,84 và đang tăng.
+MEMORY_TREND_MIN_RATIO = 0.70
+
 # Hình dạng nguồn của credential-stuffing (UC-3).
 
 #: Số tài khoản khác nhau bị thử trong 1 phút để coi là quét danh sách.
@@ -598,6 +608,7 @@ def classify_crashloop(
         return Severity.P1
     if restarts >= 1 and memory_ratio >= MEMORY_NEAR_LIMIT_RATIO:
         return Severity.P1
+
     return None
 
 
@@ -608,6 +619,7 @@ def detect_crashloop(
     service: str,
     memory_ratio: float = 0.0,
     memory_peak_mb: float = 0.0,
+    memory_forecast_ratio: float = 0.0,
 ) -> IncidentSignal | None:
     """Dựng tín hiệu UC-2 kèm bằng chứng. `None` nếu service bình thường.
 
@@ -646,10 +658,58 @@ def detect_crashloop(
     dinh_ratio = memory_peak_mb / tran_mb if tran_mb else 0.0
 
     severity = classify_crashloop(service_up, restarts, down_for_seconds, dinh_ratio)
+
+    # ── Đường thứ hai: SẼ chết, chưa chết ────────────────────────────────
+    #
+    # Rò rỉ bộ nhớ chậm không bao giờ chạm ngưỡng cho tới lúc nó chạm — và lúc đó
+    # service đã chết. Mọi luật khác hỏi "đã vượt ngưỡng chưa"; đây là chỗ duy
+    # nhất hỏi "sắp vượt chưa".
+    #
+    # Case I18: 84% trong khi ngưỡng 85%, tăng ~6%/giờ → 1 giờ nữa qua ngưỡng, 3
+    # giờ nữa OOM. Luật cũ đọc 0,84 rồi kết luận bình thường — đúng theo cách nó
+    # được viết, và bỏ lọt một sự cố đã biết trước giờ xảy ra.
+    #
+    # ⚠️ Nhánh này nằm ở ĐÂY, không nằm trong `classify_crashloop()`, vì tham số
+    # thứ tư của hàm đó tên là `memory_ratio` nhưng nhận **tỷ lệ ĐỈNH 10 phút**
+    # (`dinh_ratio`). Đặt nhánh dự báo trong đó thì nó canh theo đỉnh, còn
+    # `predict_linear` ngoại suy từ mức **hiện tại** — hai con số khác nhau, và
+    # test đầu tiên tôi viết đã đỏ đúng vì chỗ lệch này.
+    #
+    # Trả **P2, không phải P1**, ngược với `ground_truth` của I18 (ghi P1). Service
+    # vẫn đang phục vụ bình thường; gọi P1 là gọi người dậy lúc 3 giờ sáng cho một
+    # thứ sẽ hỏng lúc 6 giờ. P2 = "xử lý trong vài giờ" mô tả đúng hơn. Đổi lại là
+    # `severity_accuracy` mất 1 case (85,00% → 80,95%) — chấp nhận, vì nắn mức độ
+    # cho khớp bộ đo là đúng thứ bộ đo không được dùng để làm.
+    if (
+        severity is None
+        and memory_forecast_ratio >= MEMORY_NEAR_LIMIT_RATIO
+        and memory_ratio >= MEMORY_TREND_MIN_RATIO
+    ):
+        severity = Severity.P2
+
     if severity is None:
         return None
 
-    if service_up < 1:
+    # Tín hiệu DỰ BÁO phải mang tên riêng, không mượn tên "số lần restart".
+    #
+    # Hai lẽ. Một: `restarts` ở đây bằng 0, nên hiện "0 lần restart (ngưỡng 2)"
+    # là câu vô nghĩa với người trực. Hai: `planned_events` khớp theo tên chỉ số,
+    # và `_PHAM_VI["crashloop"]` có từ khoá "deploy" — nên tín hiệu này sẽ bị một
+    # lần deploy gần đó bịt miệng, dù deploy KHÔNG giải thích được rò rỉ bộ nhớ.
+    # Tên riêng cho phép `_KHONG_BAO_GIO_BO_QUA` chặn đúng chỗ.
+    la_du_bao = (
+        service_up >= 1
+        and restarts < CRASHLOOP_RESTARTS
+        and memory_forecast_ratio >= MEMORY_NEAR_LIMIT_RATIO
+    )
+
+    if la_du_bao:
+        metric_name, metric_value, threshold = (
+            "bộ nhớ dự báo sau 1 giờ (xu hướng)",
+            memory_forecast_ratio,
+            MEMORY_NEAR_LIMIT_RATIO,
+        )
+    elif service_up < 1:
         metric_name, metric_value, threshold = "up (service còn sống không)", service_up, 1.0
     else:
         metric_name, metric_value, threshold = (
@@ -681,6 +741,11 @@ def detect_crashloop(
                 name="bộ nhớ đang dùng / giới hạn container",
                 value=memory_ratio,
                 promql=prometheus.MEMORY_USAGE_RATIO,
+            ),
+            MetricEvidence(
+                name="bộ nhớ dự báo sau 1 giờ / giới hạn container",
+                value=memory_forecast_ratio,
+                promql=prometheus.MEMORY_FORECAST_1H_RATIO,
             ),
             MetricEvidence(
                 # Trần ghi thẳng vào tên, KHÔNG mượn `baseline` làm giới hạn.

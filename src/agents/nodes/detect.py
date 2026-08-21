@@ -165,6 +165,8 @@ def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
     down_for = _sustained(client, prometheus.SERVICE_DOWN, 0.5)
     memory_ratio = _samples_by_service(client, prometheus.MEMORY_USAGE_RATIO)
     memory_peak = _samples_by_service(client, prometheus.MEMORY_PEAK_10M_MB)
+    # Dự báo xu hướng — chỗ duy nhất trong bộ luật nhìn về phía trước.
+    memory_forecast = _samples_by_service(client, prometheus.MEMORY_FORECAST_1H_RATIO)
 
     found: dict[str, IncidentSignal] = {}
     for service in set(up) | set(restarts):
@@ -175,6 +177,7 @@ def _detect_crashloops(client: PrometheusClient) -> dict[str, IncidentSignal]:
             service=service,
             memory_ratio=memory_ratio.get(service, 0.0),
             memory_peak_mb=memory_peak.get(service, 0.0),
+            memory_forecast_ratio=memory_forecast.get(service, 0.0),
         )
         if signal is None:
             continue

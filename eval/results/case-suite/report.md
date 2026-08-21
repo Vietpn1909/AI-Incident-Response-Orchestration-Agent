@@ -1,12 +1,12 @@
 # Kết quả đánh giá — 50 test case
 
-- Sinh lúc: `2026-08-21T15:16:31.817901+00:00`
-- Dataset SHA-256: `d5f7bb6abe7f49eadfe130808c0c7e8a1149309a4daaf3c72a7dbca74647482f`
+- Sinh lúc: `2026-08-21T15:25:53.392879+00:00`
+- Dataset SHA-256: `226eedfa8c574271ef1ead62d2d5c26d0f6631015e77c786654574e2bcfd35ed`
 - Phạm vi: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
 
 ## 1. Confusion Matrix
 
-- TP=20, FN=5, FP=5, TN=20.
+- TP=21, FN=4, FP=5, TN=20.
 
 > **Tỷ lệ báo nhầm ở đây là con số Agent THẬT đạt được**, không phải con số
 > tốt nhất có thể. Bộ đo chỉ cho phép lọc bằng nguồn Agent biết được lúc
@@ -31,17 +31,17 @@
 
 | Chỉ số | Kết quả | Khoảng tin cậy 95% | Công thức | Ý nghĩa |
 |---|---:|:---:|---|---|
-| **Recall** | **80.00%** | 64%–96% | TP/(TP+FN) | Khả năng không bỏ lọt incident |
-| **Precision** | **80.00%** | 64%–96% | TP/(TP+FP) | Tỷ lệ alert đúng |
-| **F1 Score** | **80.00%** | — | 2·P·R/(P+R) | Cân bằng Precision-Recall |
-| **F2 Score** | **80.00%** | — | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |
-| **Accuracy** | **80.00%** | 69%–91% | (TP+TN)/All | Tổng thể đúng bao nhiêu |
+| **Recall** | **84.00%** | 70%–98% | TP/(TP+FN) | Khả năng không bỏ lọt incident |
+| **Precision** | **80.77%** | 66%–96% | TP/(TP+FP) | Tỷ lệ alert đúng |
+| **F1 Score** | **82.35%** | — | 2·P·R/(P+R) | Cân bằng Precision-Recall |
+| **F2 Score** | **83.33%** | — | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |
+| **Accuracy** | **82.00%** | 71%–93% | (TP+TN)/All | Tổng thể đúng bao nhiêu |
 | **Specificity** | **80.00%** | 64%–96% | TN/(TN+FP) | Khả năng nhận diện normal |
 | **False Alarm Rate** | **20.00%** | 4%–36% | FP/(FP+TN) | Tỷ lệ báo nhầm |
-| **MCC** | **+0.6000** | — | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |
+| **MCC** | **+0.6405** | — | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |
 
 > ⚠️ **Cỡ mẫu 50 case khiến mọi con số trên có sai số lớn.**
-> Recall 80.00% thật ra là "đâu đó trong 64%–96%" — khoảng rộng vài chục
+> Recall 84.00% thật ra là "đâu đó trong 70%–98%" — khoảng rộng vài chục
 > điểm phần trăm, nên **không phân biệt được** với một con số cao hơn 10–15 điểm.
 >
 > Hệ quả: đừng trích một phần trăm đơn lẻ ra khỏi ngữ cảnh, và đừng coi một
@@ -53,16 +53,16 @@
 
 | Chỉ số | Kết quả | Ý nghĩa |
 |---|---:|---|
-| Severity Accuracy | **85.00%** | Phân loại mức độ đúng (P1-P4) |
+| Severity Accuracy | **80.95%** | Phân loại mức độ đúng (P1-P4) |
 | Root Cause Accuracy | 28.00% | Xác định đúng nguyên nhân gốc |
-| Evidence Coverage | 80.00% | Đủ bằng chứng metric |
+| Evidence Coverage | 84.00% | Đủ bằng chứng metric |
 | Noisy Rejection | 60.00% | Chặn đúng case nhiễu |
 
 ## 4. Severity Confusion Matrix
 
 | Actual \ Predicted | P1 | P2 | P3 | P4 |
 |---|---|---|---|---|
-| **P1** | 8 | 2 | 0 | 0 |
+| **P1** | 8 | 3 | 0 | 0 |
 | **P2** | 0 | 5 | 1 | 0 |
 | **P3** | 0 | 0 | 2 | 0 |
 | **P4** | 0 | 0 | 0 | 2 |
@@ -71,8 +71,8 @@
 
 | Đường chạy | Recall | Precision | F1 | Báo nhầm |
 |---|---:|---:|---:|---:|
-| Pipeline (detect → Jira) | 80.00% | 80.00% | 80.00% | 20.00% |
-| Rule trực tiếp | 80.00% | 80.00% | 80.00% | 20.00% |
+| Pipeline (detect → Jira) | 84.00% | 80.77% | 82.35% | 20.00% |
+| Rule trực tiếp | 84.00% | 80.77% | 82.35% | 20.00% |
 
 Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 
@@ -81,7 +81,7 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 | Họ | Bắt được | Bỏ lọt | Báo nhầm | Bắt / tổng sự cố |
 |---|---:|---:|---:|:---:|
 | UC-1 | 7 | 1 | 2 | **7/8** |
-| UC-2 | 4 | 1 | 1 | **4/5** |
+| UC-2 | 5 | 0 | 1 | **5/5** |
 | UC-3 | 5 | 0 | 2 | **5/5** |
 | UC-4 | 2 | 1 | 0 | **2/3** |
 | dependency | 2 | 1 | 0 | **2/3** |
@@ -132,7 +132,7 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 | N15 | normal | UC-3 | TN | — | — |
 | I16 | incident | UC-4 | FN | — | sai |
 | I17 | incident | UC-1 | TP | P3 | sai |
-| I18 | incident | UC-2 | FN | — | sai |
+| I18 | incident | UC-2 | TP | P2 | sai |
 | I19 | incident | UC-3 | TP | P2 | sai |
 | I20 | incident | UC-3 | TP | P2 | sai |
 | I21 | incident | dependency | TP | P2 | sai |
@@ -160,7 +160,7 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 - `N14` — Health check prober thay đổi: error_rate 3% nhưng toàn từ synthetic checks: FP.
 - `I16` — Silent data corruption: service trả 200 OK nhưng ghi sai DB, metric hoàn toàn xanh: FN, top-1 nguyên nhân sai.
 - `I17` — Partial outage 1 pod: 5% request timeout 30s nhưng p95 tổng hợp bình thường: TP, top-1 nguyên nhân sai.
-- `I18` — Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ: FN, top-1 nguyên nhân sai.
+- `I18` — Memory leak chậm: tăng 5%/giờ, hiện 84% — chưa trigger rule nhưng sẽ OOM trong 3 giờ: TP, top-1 nguyên nhân sai.
 - `I19` — Evasive credential stuffing: 0.95/s suốt 24h — ngay dưới mọi ngưỡng detection: TP, top-1 nguyên nhân sai.
 - `I20` — DDoS làm cover cho credential stuffing: latency alert che khuất auth attack: TP, top-1 nguyên nhân sai.
 - `I21` — Thundering herd: sau recovery, 100% client reconnect đồng thời gây pool cạn lần 2: TP, top-1 nguyên nhân sai.
