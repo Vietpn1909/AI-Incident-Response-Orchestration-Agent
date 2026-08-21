@@ -11,9 +11,12 @@ cần Jira, và để chống mở trùng nằm đúng một chỗ.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
 
+from src.config import get_settings
 from src.models.incident import IncidentSignal
-from src.services import prometheus, rules
+from src.services import deploys, planned_events, prometheus, rules
 from src.services.prometheus import PrometheusClient
 
 logger = logging.getLogger(__name__)
@@ -250,7 +253,105 @@ def _detect_auth_bursts(client: PrometheusClient) -> dict[str, IncidentSignal]:
     return found
 
 
-def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
+
+def _viec_da_len_lich(service: str) -> str | None:
+    """Việc đã lên lịch mà Agent THẬT biết được, lấy từ lịch sử deploy.
+
+    ⚠️ Chỉ có DEPLOY. Không có pentest, load test đã phê duyệt, hay đổi route
+    CDN — lúc chạy thật **không tồn tại nguồn nào** cho những thứ đó. Bộ đo
+    trong `eval/` đọc chúng từ trường `context` do người viết case đặt tay, nên
+    tỷ lệ báo nhầm trong báo cáo tốt hơn thực tế nếu không nói rõ.
+
+    Đo ngày 21/08 trên 25 case bình thường/nhiễu:
+
+        không lọc gì                        báo nhầm 28%  (7 case)
+        lọc bằng lịch sử deploy (hàm này)   báo nhầm 20%  (5 case)
+        lọc bằng cả `context` của bộ đo     báo nhầm 16%  (4 case)
+
+    Muốn xuống 16% thật thì cần một nguồn cửa sổ bảo trì có thể đọc lúc chạy —
+    ví dụ issue Jira mang nhãn bảo trì kèm khoảng thời gian. Chưa có. Ghi ra để
+    người sau biết đây là chỗ còn thiếu, không phải chỗ đã xong.
+
+    Returns:
+        Mô tả việc đã lên lịch, hoặc `None` nếu không có deploy nào đủ gần.
+    """
+    # Không có DATABASE_URL thì không có nguồn nào — thoát trước khi mở event
+    # loop. Không có bước này thì mỗi tín hiệu tốn một `asyncio.run()` cộng một
+    # lần thử kết nối Postgres: đo được +12,6 giây trên toàn bộ test suite
+    # (3,9s → 16,5s), và ở production là một round-trip DB vô ích mỗi vòng quét.
+    if not get_settings().database_url:
+        return None
+
+    try:
+        history = deploys.recent_deploys(service)
+    except Exception:  # nguồn deploy hỏng không được làm sập vòng quét
+        logger.warning("%s: không đọc được lịch sử deploy — bỏ qua bước lọc", service)
+        return None
+
+    gan = rules.correlate_deploy(history, datetime.now(UTC))
+    if gan is None:
+        return None
+
+    # ⚠️ CỐ Ý KHÔNG trả `change_note`. Ghi chú thay đổi là văn bản tự do tả một
+    # thay đổi CODE, không phải tuyên bố "việc này đang chạy". Đưa nó vào bộ khớp
+    # từ khoá là mời báo-nhầm-ngược: tín hiệu thật bị bịt miệng.
+    #
+    # Đo ngày 21/08 với đúng ghi chú trong `demo/seed.py`: note của `v1.4.2` là
+    # "Gộp batch job đối soát... Batch chạy mỗi 5 phút" — chứa chữ "batch", khớp
+    # phạm vi latency, và sẽ **bỏ qua cả UC-1 lẫn UC-4**. Chưa nổ chỉ vì `v1.4.3`
+    # mới hơn nên `correlate_deploy` chọn nó. Đó là may, không phải đúng.
+    #
+    # Một lần deploy giải thích được **đúng một thứ**: container bị thay nên
+    # restart. Không giải thích latency, không giải thích pool, không giải thích
+    # đăng nhập sai. Nên trả về đúng chữ "deploy" và để `_PHAM_VI` quyết định.
+    return f"deploy {gan.version}"
+
+
+def _bo_tin_hieu_da_co_giai_thich(
+    signals: list[IncidentSignal],
+    detector_theo_service: dict[str, str],
+    nguon: Callable[[str], str | None] | None = None,
+) -> list[IncidentSignal]:
+    """Bỏ những tín hiệu đã có việc lên lịch giải thích được.
+
+    Lọc MỘT LẦN ở cuối, không bọc từng nhánh — giống `eval/case_suite.py`. Bộ
+    luật vẫn chạy nguyên vẹn và vẫn dựng đủ bằng chứng, nên log vẫn ghi được
+    Agent đã thấy gì, kể cả khi quyết định không báo động.
+    """
+    con_lai: list[IncidentSignal] = []
+    for signal in signals:
+        service = signal.affected_service
+        viec = (nguon or _viec_da_len_lich)(service)
+        detector = detector_theo_service.get(service, "latency")
+
+        # Deploy giải thích được VÀI lần restart — thay pod là "old shutdown +
+        # new startup" = 2 lần. Nhiều hơn thế là vòng crash thật, deploy không
+        # giải thích được. Không có cửa này thì UC-2 im lặng suốt 15 phút sau mỗi
+        # lần deploy, vì `_PHAM_VI["crashloop"]` có từ khoá "deploy".
+        la_restart = "restart" in signal.metric_name.lower()
+        if la_restart and signal.metric_value > rules.CRASHLOOP_RESTARTS:
+            logger.info(
+                "%s: %.0f lần restart — nhiều hơn mức một lần deploy giải thích được (%.0f), vẫn báo động",
+                service, signal.metric_value, rules.CRASHLOOP_RESTARTS,
+            )
+            con_lai.append(signal)
+            continue
+
+        if planned_events.giai_thich_duoc(viec, detector, signal.metric_name):
+            logger.info(
+                "%s: KHÔNG mở war room — %s đã được giải thích bởi %r",
+                service, signal.metric_name, viec,
+            )
+            continue
+        con_lai.append(signal)
+    return con_lai
+
+
+def detect_incidents(
+    client: PrometheusClient,
+    *,
+    nguon_viec_da_len_lich: Callable[[str], str | None] | None = None,
+) -> list[IncidentSignal]:
     """Quét toàn bộ service, trả tín hiệu sự cố nếu có.
 
     Gọi 4 + 12 câu PromQL mỗi vòng (4 metric, và 4 cửa sổ × 3 đường đo thời
@@ -262,6 +363,17 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
     sổ 30 phút bên trong một subquery. Với `--interval 10` thì Agent bận khoảng
     22% thời gian. Hạ interval xuống dưới 5s là hai vòng chồng lên nhau, cần đo
     lại trước khi làm.
+
+    Args:
+        client: Nguồn số đo.
+        nguon_viec_da_len_lich: Hàm `service -> mô tả việc đã lên lịch`, để bỏ
+            những tín hiệu đã có lời giải thích. Bỏ trống thì dùng lịch sử
+            deploy (`_viec_da_len_lich`).
+
+            Có tham số này để `detect` **vẫn thuần**: bộ đo truyền thẳng bối cảnh
+            của case, không cần Postgres, và hai đường (qua node này / gọi luật
+            trực tiếp) **không thể lệch nhau** — chính chỗ lệch đó đã làm báo cáo
+            công bố 16% báo nhầm trong khi Agent thật là 28%.
 
     Returns:
         Danh sách `IncidentSignal`, rỗng nghĩa là mọi thứ bình thường.
@@ -290,7 +402,11 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
                 "Không có series p95 nào. Service chưa nhận request, hoặc tên metric "
                 "lệch so với thứ demo/ expose — xem docs/contracts/01-metrics.md."
             )
-        return _one_per_service(crashloop, auth_burst)
+        return _bo_tin_hieu_da_co_giai_thich(
+            _one_per_service(crashloop, auth_burst),
+            {**dict.fromkeys(auth_burst, "auth"), **dict.fromkeys(crashloop, "crashloop")},
+            nguon_viec_da_len_lich,
+        )
 
     baseline = _samples_by_service(client, prometheus.P95_BASELINE_30M)
     # Đếm điểm dữ liệu thật trong cửa sổ baseline. Prometheus không có volume
@@ -334,4 +450,12 @@ def detect_incidents(client: PrometheusClient) -> list[IncidentSignal]:
         )
         signals.append(signal)
 
-    return signals
+    # Nhãn đường phát hiện cho từng service, để `planned_events` biết một việc đã
+    # lên lịch có nằm trong PHẠM VI giải thích được tín hiệu này hay không.
+    # Deploy giải thích được container restart, KHÔNG giải thích được pool cạn.
+    detector_theo_service = {
+        **dict.fromkeys(p95, "latency"),
+        **dict.fromkeys(auth_burst, "auth"),
+        **dict.fromkeys(crashloop, "crashloop"),
+    }
+    return _bo_tin_hieu_da_co_giai_thich(signals, detector_theo_service, nguon_viec_da_len_lich)

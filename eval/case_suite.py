@@ -215,7 +215,25 @@ def _detect(
     # Lọc MỘT LẦN ở cuối, không bọc từng nhánh: bộ luật vẫn chạy nguyên vẹn và
     # vẫn dựng đủ bằng chứng, rồi mới hỏi "việc này đã có lời giải thích chưa".
     # Nhờ vậy log vẫn ghi được tín hiệu đã thấy gì, kể cả khi không báo động.
-    viec = (context or {}).get("maintenance_event")
+    # ⚠️ Chỉ đọc `deploy`, KHÔNG đọc `maintenance_event`.
+    #
+    # Bộ đo phải mô phỏng đúng thứ Agent BIẾT ĐƯỢC lúc chạy thật. Nguồn duy nhất
+    # nó có là lịch sử deploy (`deploys.recent_deploys`, đã nối vào
+    # `detect.py::_viec_da_len_lich` ngày 21/08). Không tồn tại nguồn nào cho
+    # "pentest CISO đã ký" hay "đổi route CDN".
+    #
+    # Trước 21/08 chỗ này đọc `maintenance_event` — tức lọc bằng nguồn Agent
+    # KHÔNG có, và bỏ qua nguồn nó CÓ. Báo cáo ra 16% báo nhầm, trong khi Agent
+    # thật báo nhầm 28%. Đo lại đủ bốn cách:
+    #
+    #     không lọc gì                       FP=7  28%
+    #     chỉ maintenance_event (số cũ)      FP=4  16%   ← không đúng thực tế
+    #     chỉ deploy (Agent thật)            FP=5  20%   ← con số này
+    #     deploy + nguồn bảo trì (chưa có)   FP=2   8%
+    #
+    # `_bao_nham_neu_co_nguon_bao_tri()` báo cáo mốc 8% riêng, ghi rõ là điều
+    # kiện chưa có, để không ai đọc nhầm thành năng lực hiện tại.
+    viec = (context or {}).get("deploy")
     if planned_events.giai_thich_duoc(viec, detector, tin_hieu.metric_name):
         return None
     return tin_hieu
@@ -428,24 +446,20 @@ def evaluate_pipeline_case(case: dict[str, Any]) -> dict[str, Any]:
     jira = FakeJiraClient(verbose=False)
     detected_count = 0
     try:
-        signals = detect_incidents(SnapshotPrometheusClient(case["telemetry"]))
+        # Truyền bối cảnh THẲNG vào node, thay vì lọc lại ở đây.
+        #
+        # Trước 21/08 chỗ này lọc riêng, nên đường pipeline và đường luật trực
+        # tiếp dùng hai nguồn khác nhau — và `detect_incidents()` thật thì không
+        # lọc gì cả. Đó là lý do báo cáo ra 16% báo nhầm trong khi Agent thật 28%.
+        #
+        # Chỉ `deploy`: xem chú thích ở `_detect()` về việc Agent không có nguồn
+        # nào cho pentest / load test / CDN lúc chạy thật.
+        viec = (case.get("context") or {}).get("deploy")
+        signals = detect_incidents(
+            SnapshotPrometheusClient(case["telemetry"]),
+            nguon_viec_da_len_lich=lambda _service: viec,
+        )
         detected_count = len(signals)
-        # Lọc những tín hiệu đã có việc lên lịch giải thích, TRƯỚC khi mở war room.
-        #
-        # Lọc ở đây chứ không trong `detect_incidents()`: node đó chỉ biết số đo,
-        # còn "có việc gì đã lên lịch" là thông tin ngoài số đo. Giữ ranh giới đó
-        # thì `detect` vẫn thuần và test được riêng.
-        #
-        # `detected_count` giữ nguyên số tín hiệu đã THẤY, không phải số đã báo —
-        # để log còn phân biệt được "không thấy gì" với "thấy nhưng đã có lời giải
-        # thích".
-        viec = (case.get("context") or {}).get("maintenance_event")
-        detector = case["telemetry"]["detector"]
-        signals = [
-            s
-            for s in signals
-            if not planned_events.giai_thich_duoc(viec, detector, s.metric_name)
-        ]
         signal = signals[0] if signals else None
         for detected_signal in signals:
             open_war_room(jira, detected_signal)
@@ -646,6 +660,25 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "## 1. Confusion Matrix",
         "",
         f"- TP={confusion['TP']}, FN={confusion['FN']}, FP={confusion['FP']}, TN={confusion['TN']}.",
+        "",
+        "> **Tỷ lệ báo nhầm ở đây là con số Agent THẬT đạt được**, không phải con số",
+        "> tốt nhất có thể. Bộ đo chỉ cho phép lọc bằng nguồn Agent biết được lúc",
+        "> chạy — tức lịch sử deploy. Đo ngày 21/08 bốn cách:",
+        ">",
+        "> | Lọc bằng | FP | Báo nhầm |",
+        "> |---|---:|---:|",
+        "> | không lọc gì | 7 | 28% |",
+        "> | lịch sử deploy — **Agent thật làm được** | 5 | **20%** |",
+        "> | thêm nguồn cửa sổ bảo trì — **chưa tồn tại** | 2 | 8% |",
+        ">",
+        "> Muốn xuống 8% cần một nguồn đọc được lúc chạy cho *pentest đã phê duyệt*,",
+        "> *load test*, *đổi route CDN* — ví dụ issue Jira mang nhãn bảo trì kèm khoảng",
+        "> thời gian. Chưa có ai làm.",
+        ">",
+        "> Trước 21/08 báo cáo ghi **16%**: nó lọc bằng `maintenance_event` (nguồn Agent",
+        "> KHÔNG có) và bỏ qua `deploy` (nguồn Agent CÓ), trong khi `detect_incidents()`",
+        "> thật thì không lọc gì cả. Con số đó là tính chất của bộ đo, không phải của",
+        "> sản phẩm.",
         "",
         "## 2. Bộ chỉ số phát hiện (Detection Metrics)",
         "",

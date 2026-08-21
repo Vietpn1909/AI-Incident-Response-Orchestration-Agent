@@ -1,25 +1,44 @@
 # Kết quả đánh giá — 50 test case
 
-- Sinh lúc: `2026-08-20T06:46:57.362538+00:00`
+- Sinh lúc: `2026-08-21T15:16:31.817901+00:00`
 - Dataset SHA-256: `d5f7bb6abe7f49eadfe130808c0c7e8a1149309a4daaf3c72a7dbca74647482f`
 - Phạm vi: snapshot → Prometheus client giả → node detect thật → FakeJira; không gọi LLM/Jira thật/Docker.
 
 ## 1. Confusion Matrix
 
-- TP=20, FN=5, FP=4, TN=21.
+- TP=20, FN=5, FP=5, TN=20.
+
+> **Tỷ lệ báo nhầm ở đây là con số Agent THẬT đạt được**, không phải con số
+> tốt nhất có thể. Bộ đo chỉ cho phép lọc bằng nguồn Agent biết được lúc
+> chạy — tức lịch sử deploy. Đo ngày 21/08 bốn cách:
+>
+> | Lọc bằng | FP | Báo nhầm |
+> |---|---:|---:|
+> | không lọc gì | 7 | 28% |
+> | lịch sử deploy — **Agent thật làm được** | 5 | **20%** |
+> | thêm nguồn cửa sổ bảo trì — **chưa tồn tại** | 2 | 8% |
+>
+> Muốn xuống 8% cần một nguồn đọc được lúc chạy cho *pentest đã phê duyệt*,
+> *load test*, *đổi route CDN* — ví dụ issue Jira mang nhãn bảo trì kèm khoảng
+> thời gian. Chưa có ai làm.
+>
+> Trước 21/08 báo cáo ghi **16%**: nó lọc bằng `maintenance_event` (nguồn Agent
+> KHÔNG có) và bỏ qua `deploy` (nguồn Agent CÓ), trong khi `detect_incidents()`
+> thật thì không lọc gì cả. Con số đó là tính chất của bộ đo, không phải của
+> sản phẩm.
 
 ## 2. Bộ chỉ số phát hiện (Detection Metrics)
 
 | Chỉ số | Kết quả | Khoảng tin cậy 95% | Công thức | Ý nghĩa |
 |---|---:|:---:|---|---|
 | **Recall** | **80.00%** | 64%–96% | TP/(TP+FN) | Khả năng không bỏ lọt incident |
-| **Precision** | **83.33%** | 68%–98% | TP/(TP+FP) | Tỷ lệ alert đúng |
-| **F1 Score** | **81.63%** | — | 2·P·R/(P+R) | Cân bằng Precision-Recall |
-| **F2 Score** | **80.64%** | — | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |
-| **Accuracy** | **82.00%** | 71%–93% | (TP+TN)/All | Tổng thể đúng bao nhiêu |
-| **Specificity** | **84.00%** | 70%–98% | TN/(TN+FP) | Khả năng nhận diện normal |
-| **False Alarm Rate** | **16.00%** | 2%–30% | FP/(FP+TN) | Tỷ lệ báo nhầm |
-| **MCC** | **+0.6405** | — | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |
+| **Precision** | **80.00%** | 64%–96% | TP/(TP+FP) | Tỷ lệ alert đúng |
+| **F1 Score** | **80.00%** | — | 2·P·R/(P+R) | Cân bằng Precision-Recall |
+| **F2 Score** | **80.00%** | — | 5·P·R/(4P+R) | Thiên Recall — phù hợp incident detection |
+| **Accuracy** | **80.00%** | 69%–91% | (TP+TN)/All | Tổng thể đúng bao nhiêu |
+| **Specificity** | **80.00%** | 64%–96% | TN/(TN+FP) | Khả năng nhận diện normal |
+| **False Alarm Rate** | **20.00%** | 4%–36% | FP/(FP+TN) | Tỷ lệ báo nhầm |
+| **MCC** | **+0.6000** | — | Matthews Correlation | Chỉ số tổng hợp (-1..+1) |
 
 > ⚠️ **Cỡ mẫu 50 case khiến mọi con số trên có sai số lớn.**
 > Recall 80.00% thật ra là "đâu đó trong 64%–96%" — khoảng rộng vài chục
@@ -37,7 +56,7 @@
 | Severity Accuracy | **85.00%** | Phân loại mức độ đúng (P1-P4) |
 | Root Cause Accuracy | 28.00% | Xác định đúng nguyên nhân gốc |
 | Evidence Coverage | 80.00% | Đủ bằng chứng metric |
-| Noisy Rejection | 80.00% | Chặn đúng case nhiễu |
+| Noisy Rejection | 60.00% | Chặn đúng case nhiễu |
 
 ## 4. Severity Confusion Matrix
 
@@ -52,8 +71,8 @@
 
 | Đường chạy | Recall | Precision | F1 | Báo nhầm |
 |---|---:|---:|---:|---:|
-| Pipeline (detect → Jira) | 80.00% | 83.33% | 81.63% | 16.00% |
-| Rule trực tiếp | 80.00% | 83.33% | 81.63% | 16.00% |
+| Pipeline (detect → Jira) | 80.00% | 80.00% | 80.00% | 20.00% |
+| Rule trực tiếp | 80.00% | 80.00% | 80.00% | 20.00% |
 
 Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 
@@ -63,8 +82,8 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 |---|---:|---:|---:|:---:|
 | UC-1 | 7 | 1 | 2 | **7/8** |
 | UC-2 | 4 | 1 | 1 | **4/5** |
-| UC-3 | 5 | 0 | 0 | **5/5** |
-| UC-4 | 2 | 1 | 1 | **2/3** |
+| UC-3 | 5 | 0 | 2 | **5/5** |
+| UC-4 | 2 | 1 | 0 | **2/3** |
 | dependency | 2 | 1 | 0 | **2/3** |
 | deployment | 0 | 1 | 0 | **0/1** |
 
@@ -105,9 +124,9 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 | A02 | noisy | UC-3 | TN | — | — |
 | A03 | noisy | UC-2 | TN | — | — |
 | A04 | noisy | deployment | TN | — | — |
-| A05 | noisy | UC-3 | TN | — | — |
+| A05 | noisy | UC-3 | FP | P2 | — |
 | N11 | normal | UC-4 | TN | — | — |
-| N12 | normal | UC-2 | FP | P1 | — |
+| N12 | normal | UC-2 | TN | — | — |
 | N13 | normal | UC-2 | TN | — | — |
 | N14 | normal | UC-1 | FP | P3 | — |
 | N15 | normal | UC-3 | TN | — | — |
@@ -121,9 +140,9 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 | I23 | incident | UC-1 | TP | P1 | sai |
 | I24 | incident | UC-4 | TP | P4 | sai |
 | I25 | incident | UC-1 | FN | — | sai |
-| A06 | noisy | UC-3 | TN | — | — |
-| A07 | noisy | UC-4 | FP | P2 | — |
-| A08 | noisy | UC-2 | TN | — | — |
+| A06 | noisy | UC-3 | FP | P2 | — |
+| A07 | noisy | UC-4 | TN | — | — |
+| A08 | noisy | UC-2 | FP | P1 | — |
 | A09 | noisy | UC-2 | TN | — | — |
 | A10 | noisy | UC-1 | FP | P4 | — |
 
@@ -137,7 +156,7 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 - `I13` — Deploy thiếu migration làm 100% payment lỗi: TP, top-1 nguyên nhân sai.
 - `I14` — Payment service unreachable từ service phụ thuộc: TP, top-1 nguyên nhân sai.
 - `I15` — Lỗi xác thực backend bị metric tổng hợp che khuất: FN, top-1 nguyên nhân sai.
-- `N12` — Blue-green deploy: 2 restarts (= ngưỡng crashloop) nhưng là deploy có chủ đích: FP.
+- `A05` — Load test đăng nhập đã được phê duyệt nhưng vượt ngưỡng: FP.
 - `N14` — Health check prober thay đổi: error_rate 3% nhưng toàn từ synthetic checks: FP.
 - `I16` — Silent data corruption: service trả 200 OK nhưng ghi sai DB, metric hoàn toàn xanh: FN, top-1 nguyên nhân sai.
 - `I17` — Partial outage 1 pod: 5% request timeout 30s nhưng p95 tổng hợp bình thường: TP, top-1 nguyên nhân sai.
@@ -149,7 +168,8 @@ Hai đường phải khớp. Nếu lệch thì lỗi nằm ở wiring/collector.
 - `I23` — Monitoring blind spot: Prometheus exporter crash, metric trả 0 — service thật ra đang chết: TP, top-1 nguyên nhân sai.
 - `I24` — Config drift tích lũy: 10 deploy nhỏ mỗi cái +10% latency, tổng = 2.5× baseline: TP, top-1 nguyên nhân sai.
 - `I25` — Race condition: double-charge khi 2 request trùng idempotency key, không lỗi 5xx: FN, top-1 nguyên nhân sai.
-- `A07` — Canary tự rollback: p95=3s trong 35s nhưng canary đã tự kill trước impact lan rộng: FP.
+- `A06` — Pentest hợp pháp: 30 auth failures/s từ pentester đã được approve: FP.
+- `A08` — Chaos engineering đã lên lịch: 3 lần restart có chủ đích trong maintenance window: FP.
 - `A10` — CDN traffic shift: p95 tăng 3× do route change nhưng vẫn dưới ngưỡng cứng: FP.
 
 ## Giới hạn
