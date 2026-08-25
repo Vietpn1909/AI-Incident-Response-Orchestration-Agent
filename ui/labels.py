@@ -88,6 +88,8 @@ def mau_severity(muc: str) -> str:
 SERVICE: dict[str, str] = {
     "service-thanh-toan": "Thanh toán",
     "service-dat-hang": "Đặt hàng",
+    "service-kho-hang": "Kho hàng",
+    "service-van-chuyen": "Vận chuyển",
 }
 
 #: Trạng thái sức khoẻ trong `ServiceStatus.health` → (icon, câu tiếng Việt).
@@ -98,6 +100,12 @@ HEALTH: dict[str, tuple[str, str]] = {
     "degraded": ("🟡", "Chậm hơn bình thường"),
     "down": ("🔴", "Đang gặp sự cố"),
     "maintenance": ("🔧", "Đang bảo trì"),
+    # KHÔNG thuộc contract ④ — do UI tự đặt, xem `HEALTH_CHUA_CO` trong
+    # status_page.py. Dùng cho dịch vụ đang theo dõi mà `/api/status` chưa trả
+    # về (bản API đang chạy cũ hơn UI). Nói thẳng là chưa biết, thay vì mặc
+    # định "bình thường" — một dịch vụ chết mà hiện xanh là kiểu sai tệ nhất
+    # trang này có thể mắc.
+    "chua-co-du-lieu": ("⚪", "Chưa có dữ liệu"),
 }
 
 
@@ -107,6 +115,7 @@ HEALTH_MAU: dict[str, str] = {
     "degraded": PALETTE["cam"],
     "down": PALETTE["do"],
     "maintenance": PALETTE["tin_hieu"],
+    "chua-co-du-lieu": PALETTE["mo"],
 }
 
 

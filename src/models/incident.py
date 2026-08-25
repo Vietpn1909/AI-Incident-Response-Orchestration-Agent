@@ -89,6 +89,31 @@ class LogEvidence(BaseModel):
     )
 
 
+class IncidentLogs(BaseModel):
+    """Log thô của một sự cố, đọc TƯƠI lúc mở phiếu — không phải bản Agent đã lưu.
+
+    Khác `Hypothesis.log_evidence` ở hai điểm quan trọng:
+
+    1. `log_evidence` là ảnh chụp lúc Agent chẩn đoán, và chỉ được lưu lên Jira
+       khi log **đổi được kết luận** (xem `_post_lai_neu_log_doi_ket_luan`). Nên
+       phần lớn sự cố không có dòng nào, kể cả khi Agent đã đọc log thật.
+    2. Cái này đọc lại từ container tại thời điểm mở phiếu, theo đúng cửa sổ của
+       sự cố — sự cố còn mở thì cửa sổ kéo tới **bây giờ**, nên thấy được dòng
+       đang chảy ra lúc này.
+
+    `ly_do` khác rỗng nghĩa là `logs` rỗng, và nói vì sao — xem các hằng
+    `LY_DO_*` trong `src/services/log_collector.py`.
+    """
+
+    jira_key: str
+    service: str
+    start: datetime
+    end: datetime
+    dang_mo: bool = Field(default=False, description="Sự cố còn đang mở — cửa sổ kéo tới hiện tại")
+    ly_do: str = Field(default="", description="Vì sao không có log; rỗng nghĩa là có")
+    logs: list[LogEvidence] = Field(default_factory=list)
+
+
 class IncidentSignal(BaseModel):
     """Tín hiệu phát hiện sự cố — output của node `detect`.
 
@@ -210,6 +235,19 @@ class Incident(BaseModel):
     resolved_at: datetime | None = None
     signal: IncidentSignal | None = None
     hypotheses: list[Hypothesis] = Field(default_factory=list)
+    #: Log gốc Agent đã đọc lúc chẩn đoán, lưu lại để war room còn xem được SAU
+    #: KHI log container đã trôi mất.
+    #:
+    #: Vì sao không dùng `Hypothesis.log_evidence` cho việc này: cái đó chỉ lên
+    #: tới Jira khi log **đổi được kết luận** (xem `_post_lai_neu_log_doi_ket_luan`),
+    #: nên phần lớn sự cố không lưu được dòng nào.
+    #:
+    #: Vì sao không đọc thẳng `docker logs` mỗi lần mở phiếu: log container là
+    #: thứ phù du. Đo ngày 23/08 trên KAN-82 — chỉ 20 phút sau khi sự cố đóng,
+    #: một đợt tải mới đã đẩy toàn bộ cửa sổ của nó ra khỏi tầm `docker logs`,
+    #: và `--tail` lớn hơn cũng không cứu được vì Docker nhảy sang file đã xoay
+    #: vòng. Muốn giữ bằng chứng thì phải chép nó đi lúc còn đọc được.
+    log_evidence: list[LogEvidence] = Field(default_factory=list)
     proposal: RemediationProposal | None = None
     timeline: list[TimelineEvent] = Field(default_factory=list)
     postmortem: Postmortem | None = None

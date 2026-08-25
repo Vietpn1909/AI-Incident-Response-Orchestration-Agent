@@ -73,13 +73,18 @@ REPLICAS_DE_XUAT = 3
 RATE_LIMIT_DE_XUAT = 60
 
 
-def _phien_ban_truoc(history: list[DeployRecord], nghi_pham: DeployRecord) -> str | None:
+def phien_ban_truoc(history: list[DeployRecord], nghi_pham: DeployRecord) -> str | None:
     """Phiên bản deploy ngay TRƯỚC `nghi_pham` — tức đích để rollback về.
 
     Trả `None` khi không tìm được, và khi đó **không đề xuất rollback**. Đề xuất
     "rollback" mà không nói rõ về đâu thì người trực không duyệt được, còn để
     `remediation._describe()` điền "phiên bản trước" là đẩy việc đoán xuống lúc
     thi hành — sai chỗ.
+
+    Công khai (bỏ gạch dưới) từ 18/08 vì `auto_remediation.py` cần **đúng** phép
+    chọn này khi tự rollback lúc hết thời chờ. Chép sang đó một bản thứ hai là
+    tạo chỗ để hai đường đi lệch nhau: người duyệt thấy một phiên bản đích, Agent
+    tự thi hành một phiên bản khác — mà không có gì đỏ lên.
     """
     truoc_do = [d for d in history if d.deployed_at < nghi_pham.deployed_at]
     if not truoc_do:
@@ -117,7 +122,7 @@ def choose(
     service = signal.affected_service
     history = deploy_history or []
     nghi_pham = hypothesis.related_deploy
-    ve_phien_ban = _phien_ban_truoc(history, nghi_pham) if nghi_pham else None
+    ve_phien_ban = phien_ban_truoc(history, nghi_pham) if nghi_pham else None
 
     # ── UC-3: tấn công. Xét trước rollback, xem docstring module.
     if _co_bang_chung(signal, EVIDENCE_AUTH) is not None:

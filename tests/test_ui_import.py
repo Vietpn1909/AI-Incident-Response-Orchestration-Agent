@@ -99,7 +99,7 @@ def _status_rong() -> dict:
     ).model_dump(mode="json")
 
 
-@pytest.mark.parametrize("ten_module", ["ui.war_room", "ui.status_page", "ui.labels"])
+@pytest.mark.parametrize("ten_module", ["ui.pages.war_room", "ui.status_page", "ui.labels"])
 def test_trang_ui_import_duoc(ten_module: str):
     """Thiếu dependency hay gãy import là đỏ ở đây, không phải đỏ lúc demo."""
     if str(GOC_REPO) not in sys.path:
@@ -149,9 +149,73 @@ def test_khong_mo_san_su_co_da_dong():
     nguồn vì logic chọn nằm ở cấp module, chạy lúc import, không gói trong hàm
     nào để gọi lại được.
     """
-    nguon = (GOC_REPO / "ui" / "war_room.py").read_text(encoding="utf-8")
+    nguon = (GOC_REPO / "ui" / "pages" / "war_room.py").read_text(encoding="utf-8")
 
     assert "dau_tien = cho_duyet or dang_mo" in nguon, "không tìm thấy logic chọn phiếu mở sẵn"
     assert "or (ds[0] if ds else None)" not in nguon, (
         "war_room.py lại rơi về `ds[0]` — sẽ mở sẵn một sự cố ĐÃ ĐÓNG khi board sạch"
+    )
+
+
+def test_dieu_huong_khong_dung_parent_location():
+    """Điều hướng cấp cao nhất bị sandbox của iframe Streamlit chặn ÂM THẦM.
+
+    Lấy từ chính bundle đang cài (`streamlit/static/.../js`), iframe được gắn:
+
+        allow-forms · allow-modals · allow-popups · allow-popups-to-escape-sandbox
+        allow-same-origin · allow-scripts · allow-downloads
+
+    KHÔNG có `allow-top-navigation`. Nên gán `parent.location.href` bị chặn — và
+    Chrome chặn nó mà **không ném exception**, chỉ log console. Nghĩa là `catch`
+    không chạy, đường lùi không bao giờ tới, và nút không làm gì cả.
+
+    Đây là lần thứ hai: đã vá ở war room ngày 17/08 (phải dùng
+    `history.replaceState()` + `location.reload()`), rồi tái diễn ở nút "Xem chi
+    tiết sự cố" của trang trạng thái ngày 22/08. Test này chốt lại.
+
+    `allow-popups` CÓ trong danh sách, nên `window.open` là đường đúng.
+    """
+    nguon = (GOC_REPO / "ui" / "status_page.py").read_text(encoding="utf-8")
+
+    assert "window.open(" in nguon, "không tìm thấy đường điều hướng bằng window.open"
+    i_open = nguon.index("window.open(")
+    i_parent = nguon.find("window.parent.location.href =")
+    assert i_parent == -1 or i_parent > i_open, (
+        "gán `parent.location.href` đứng TRƯỚC `window.open` — sandbox chặn âm thầm "
+        "nên nhánh sau không bao giờ chạy"
+    )
+
+
+def test_trang_cong_khai_an_thanh_nav_multipage():
+    """Trang cho khách hàng không được tự liệt kê war room ở sidebar.
+
+    Từ 22/08 war room nằm ở `ui/pages/war_room.py`, nên Streamlit tự sinh thanh
+    điều hướng multi-page — tức trang công khai quảng cáo trang nội bộ, nơi có số
+    đo, log, đề xuất khắc phục và tên người duyệt.
+
+    ⚠️ Đây là CHE, không phải phân quyền: war room không có xác thực nào, ai biết
+    `/war_room` vẫn vào được. Test này chỉ chốt rằng mình không tự chỉ đường.
+    """
+    nguon = (GOC_REPO / "ui" / "status_page.py").read_text(encoding="utf-8")
+
+    assert 'stSidebarNav' in nguon, "không thấy đoạn ẩn thanh nav multi-page"
+    assert "display: none" in nguon
+
+
+def test_requirements_goc_khong_co_streamlit():
+    """Backend không được cài streamlit — đo được 314 MB gói không dùng.
+
+    `Dockerfile` của backend cài từ `requirements.txt` gốc. Đo ngày 22/08:
+    streamlit kéo theo pyarrow 128 MB + pandas 70 MB + numpy 34 MB + pydeck 24 MB
+    + pillow 15 MB + altair 10 MB — cho những gói backend không import dòng nào.
+
+    Deps của UI ở `ui/requirements.txt`, và `Dockerfile.ui` cài đúng file đó.
+    """
+    goc = (GOC_REPO / "requirements.txt").read_text(encoding="utf-8")
+    dong_thuc = [
+        d.strip() for d in goc.splitlines() if d.strip() and not d.strip().startswith("#")
+    ]
+
+    assert not any("streamlit" in d for d in dong_thuc), (
+        "streamlit nằm trong requirements.txt gốc — backend sẽ cài 314 MB gói không dùng"
     )

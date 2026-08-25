@@ -32,6 +32,7 @@ from src.services import executors
 from src.services.email_client import Attachment, GmailClient
 from src.services.hitl import ApprovalError, assert_human_approved
 from src.services.jira import JiraApiError, JiraClient, RealJiraClient
+from src.services.jira.mapping import FIXED_BY_HUMAN_LABEL
 from src.services.postmortem_generator import generate_postmortem
 from src.services.postmortem_report import build_detailed_report, build_email_body
 from src.services.remediation import UnsupportedActionError, execute, is_already_remediated
@@ -187,6 +188,11 @@ async def jira_webhook(
     # response: remediation đã thi hành, rollback lại thì tệ hơn.
     postmortem_sent = False
     if result.succeeded:
+        # Nhãn NGƯỜI: tới được đây nghĩa là đã qua lớp 2, tức changelog Jira xác
+        # nhận có người thật chuyển trạng thái. Đây là sự thật sẵn có ngay tại
+        # chỗ thi hành, không phải thứ phải suy luận lại về sau.
+        _try_label(client, jira_key, FIXED_BY_HUMAN_LABEL)
+
         postmortem_sent = _try_send_postmortem(client, jira_key)
 
         # ---- Bước 7: Đóng incident — chuyển sang Resolved ----
@@ -251,6 +257,23 @@ def _try_comment(client: JiraClient, jira_key: str, body: str) -> None:
         client.add_comment(jira_key, body)
     except Exception:
         logger.exception("Không post được comment lên %s", jira_key)
+
+
+def _try_label(client: JiraClient, jira_key: str, label: str) -> None:
+    """Gắn nhãn "ai đã khắc phục", nhưng lỗi Jira không được làm sập luồng chính.
+
+    Cùng lý do với `_try_comment()`, và mạnh hơn một bậc: hành động khắc phục đã
+    thi hành lên production rồi. Ném exception ra đây là trả HTTP 5xx, mà Jira
+    Automation thấy 5xx thì **gọi lại webhook** — tức thi hành lần hai. Đổi một
+    dòng thống kê lấy một lần remediation trùng là đánh đổi sai.
+
+    Log ở mức warning chứ không phải exception: đây là việc phụ đã lường trước,
+    không phải lỗi lập trình cần stack trace.
+    """
+    try:
+        client.add_label(jira_key, label)
+    except Exception as error:
+        logger.warning("%s: không gắn được nhãn %s (%s)", jira_key, label, error)
 
 
 def _try_send_postmortem(client: JiraClient, jira_key: str) -> bool:

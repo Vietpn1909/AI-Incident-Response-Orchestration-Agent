@@ -1,5 +1,7 @@
 """Quy ước map model incident sang Jira team-managed project.
 
+CHỦ SỞ HỮU: Đức. Nhóm nhãn `fixed-by-*` do Long thêm ngày 18/08 để đếm được sự cố theo người khắc phục.
+
 Vì sao không dùng custom field: đã thử tạo global custom field qua REST API
 (`POST /rest/api/3/field`) — tạo được, nhưng **không xuất hiện trên createmeta
 của team-managed project**. Team-managed quản lý field riêng và không nhận
@@ -34,6 +36,23 @@ INCIDENT_LABEL = "incident"
 #: "Đang xảy ra (5)" trong khi chỉ có 2 sự cố thật, và cả ba đều là P4 không có
 #: service nào, nhìn như dữ liệu hỏng.
 ACTION_ITEM_LABEL = "postmortem-action"
+
+#: Nhãn "sự cố này do **Agent tự khắc phục**" — Agent hết thời chờ duyệt rồi tự
+#: thi hành, hoặc tự rollback dự phòng sau đó.
+#:
+#: Vì sao cần nhãn khi comment war room đã phân biệt được ba đường: comment đọc
+#: bằng mắt thì rõ, nhưng **không truy vấn được**. `eval/` và báo cáo cần một
+#: con số, mà đếm thì phải có JQL — `labels = "fixed-by-agent"`.
+#:
+#: Rollback dự phòng KHÔNG có nhãn riêng: nó vẫn là Agent tự quyết, còn chi tiết
+#: "lần thi hành đầu hay lần lùi lại" đã phân biệt được bằng `FALLBACK_MARKER`
+#: trong comment. Nhãn thứ ba chỉ chia nhỏ mẫu đếm mà không ai hỏi tới.
+FIXED_BY_AGENT_LABEL = "fixed-by-agent"
+
+#: Nhãn "sự cố này khắc phục **sau khi người duyệt**" — luồng HITL bình thường,
+#: dù phát hiện qua webhook Jira hay qua vòng poll của Agent. Hai đường đó cùng
+#: một ý nghĩa với người đọc báo cáo, nên cùng một nhãn.
+FIXED_BY_HUMAN_LABEL = "fixed-by-human"
 
 _SEVERITY_PREFIX = "severity-"
 _SERVICE_PREFIX = "service-"
@@ -78,6 +97,51 @@ def replace_severity_label(labels: list[str], severity: Severity) -> list[str]:
     """
     giu_lai = [label for label in labels if not label.startswith(_SEVERITY_PREFIX)]
     return [*giu_lai, severity_label(severity)]
+
+
+def merge_label(labels: list[str], label: str) -> list[str]:
+    """Thêm một nhãn vào danh sách cũ, giữ nguyên mọi nhãn khác.
+
+    Cùng kiểu và cùng lý do với `replace_severity_label()`: Jira API ghi
+    `labels` là **ghi đè toàn bộ** danh sách, không phải thêm vào. Gửi thẳng
+    `["fixed-by-agent"]` là xoá sạch `incident`, `severity-*`, `service-*` —
+    tức issue rơi khỏi mọi JQL đang dùng để tìm war room, kể cả bước chống mở
+    trùng của `find_open_incident()`. Mất nhãn trên Jira thì không có lệnh nào
+    lấy lại được, phải gõ tay từng issue.
+
+    Không thêm trùng, vì hai đường có thể cùng gắn một nhãn cho một issue:
+    webhook trên Render và vòng poll của Agent local đều chạy khi người duyệt
+    bấm nút. Jira tự dedupe, nhưng danh sách trả về từ hàm này còn được đọc bởi
+    `fixed_by_from_labels()` và bởi mắt người — trùng lặp ở đó chỉ gây nghi ngờ
+    dữ liệu hỏng.
+    """
+    if label in labels:
+        return list(labels)
+    return [*labels, label]
+
+
+def fixed_by_from_labels(labels: list[str]) -> str | None:
+    """Đọc ngược: sự cố này ai khắc phục. `None` khi chưa gắn nhãn nào.
+
+    Đối xứng với `severity_from_labels()`, và có mặt vì cùng một lý do: lần sau
+    ai cần biết "ai đã fix" thì gọi hàm này, thay vì tự so chuỗi ở UI hay ở
+    `eval/`. Quy ước nhãn phải nằm gọn trong file này — mỗi chỗ tự bóc tiền tố
+    là một chỗ sẽ lệch khi quy ước đổi.
+
+    Trả về **chính hằng nhãn** chứ không phải một từ vựng thứ hai kiểu
+    `"agent"`/`"human"`: hai bộ tên cho cùng một khái niệm là chỗ để chúng lệch
+    nhau, và người gọi so với `FIXED_BY_AGENT_LABEL` thì không phải nhớ gì thêm.
+
+    Có CẢ HAI nhãn (Agent tự thi hành trước, sau đó người vào duyệt tiếp một đề
+    xuất khác) thì trả nhãn NGƯỜI. Con số này đi vào báo cáo về mức tự động hoá,
+    nên đếm thiếu cho Agent còn hơn đếm thừa: sự cố nào có người can thiệp thì
+    không phải sự cố Agent tự lo trọn.
+    """
+    if FIXED_BY_HUMAN_LABEL in labels:
+        return FIXED_BY_HUMAN_LABEL
+    if FIXED_BY_AGENT_LABEL in labels:
+        return FIXED_BY_AGENT_LABEL
+    return None
 
 
 def retitle_severity(summary: str, severity: Severity) -> str:

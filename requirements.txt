@@ -24,3 +24,13 @@ langgraph>=0.2.0
 ruff>=0.8.0
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
+
+# ⚠️ KHÔNG thêm streamlit vào đây. `Dockerfile` của backend cài từ file này, và
+# đo ngày 22/08: streamlit kéo theo pyarrow 128 MB + pandas 70 MB + numpy 34 MB +
+# pydeck 24 MB + pillow 15 MB + altair 10 MB = **314 MB** vào image backend, cho
+# những gói backend không import dòng nào.
+#
+# Deps của UI nằm ở `ui/requirements.txt`, và `Dockerfile.ui` cài đúng file đó.
+# Nếu sau này deploy UI lên Streamlit Cloud mà nó không tự tìm thấy
+# `ui/requirements.txt`, thì trỏ đường dẫn trong cấu hình app — đừng nhồi vào
+# đây, vì cái giá phải trả nằm ở service khác.

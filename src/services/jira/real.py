@@ -1,5 +1,7 @@
 """`RealJiraClient` — cài đặt [contract ③](client.py) trên Jira Cloud thật.
 
+CHỦ SỞ HỮU: Đức. Method `add_label()` do Long thêm ngày 18/08 cho nhóm nhãn `fixed-by-*`.
+
 Thay `FakeJiraClient` bằng class này là Agent chạy với Jira thật, không phải sửa
 code Agent (đó là mục đích của Protocol).
 
@@ -36,6 +38,7 @@ from src.models.incident import (
     Incident,
     IncidentSignal,
     IncidentState,
+    LogEvidence,
     Postmortem,
     RemediationProposal,
     Severity,
@@ -47,6 +50,7 @@ from src.services.jira.mapping import (
     jira_status_for,
     jql_open_incidents,
     labels_for,
+    merge_label,
     replace_severity_label,
     retitle_severity,
     service_from_labels,
@@ -323,6 +327,16 @@ class RealJiraClient:
         )
         self.transition(jira_key, IncidentState.INVESTIGATING)
 
+    def post_logs(self, jira_key: str, body: str, logs: list[LogEvidence]) -> None:
+        self._comment_with_payload(
+            jira_key,
+            body,
+            {
+                _PAYLOAD_KEY: "logs",
+                "data": {"logs": [le.model_dump(mode="json") for le in logs]},
+            },
+        )
+
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
         from src.services.status_updater import status_proposed
         self._comment_with_payload(
@@ -460,6 +474,27 @@ class RealJiraClient:
             },
         )
 
+    def add_label(self, jira_key: str, label: str) -> None:
+        """Gắn thêm một nhãn, giữ nguyên nhãn cũ.
+
+        GET rồi PUT cả danh sách, y hệt `set_severity()` — Jira API ghi `labels`
+        là ghi đè toàn bộ. PUT thẳng `[label]` là xoá mất `incident`,
+        `severity-*`, `service-*`, và issue rơi khỏi mọi JQL của war room.
+
+        Đọc rồi ghi nên có cửa sổ đua: hai tiến trình cùng gắn nhãn cho một issue
+        thì nhãn của người ghi trước có thể bị mất. Chấp nhận, vì đúng một issue
+        chỉ có một đường thi hành thắng — `is_already_remediated()` đã chặn đường
+        thứ hai trước khi tới đây — và vì đây là cách `set_severity()` đã làm từ
+        04/08. Đổi sang một cơ chế khác thì phải đổi cả hai chỗ, không phải chỗ này.
+        """
+        issue = self._call("GET", f"/rest/api/3/issue/{jira_key}?fields=labels")
+        labels_cu = (issue.get("fields", {}) or {}).get("labels", []) or []
+        self._call(
+            "PUT",
+            f"/rest/api/3/issue/{jira_key}",
+            {"fields": {"labels": merge_label(labels_cu, label)}},
+        )
+
     def get_transition_author(self, jira_key: str, to_state: IncidentState) -> str | None:
         """Ai đã chuyển issue sang trạng thái này, lần gần nhất.
 
@@ -581,6 +616,12 @@ class RealJiraClient:
                     incident.signal = IncidentSignal.model_validate(data)
                 elif kind == "hypothesis":
                     incident.hypotheses.append(Hypothesis.model_validate(data))
+                elif kind == "logs":
+                    # Gộp dồn: `analyze_logs` chạy lại ở mỗi vòng quét khi sự cố
+                    # còn mở, nên một phiếu có thể có nhiều comment loại này.
+                    incident.log_evidence.extend(
+                        LogEvidence.model_validate(dong) for dong in data.get("logs") or []
+                    )
                 elif kind == "postmortem":
                     incident.postmortem = Postmortem.model_validate(data)
                 elif kind == "proposal":

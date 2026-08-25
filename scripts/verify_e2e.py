@@ -10,7 +10,7 @@ mạch một lần nào. Script này chạy nó, và in rõ tắc ở mảnh nà
     python scripts/verify_e2e.py --live
 
 Chế độ `--local` gọi webhook trên máy (`uvicorn src.main:app` phải đang chạy).
-Chế độ `--live` gọi webhook trên Render, tức kiểm luôn được Jira Automation.
+Chế độ `--live` gọi webhook qua địa chỉ công khai, tức kiểm luôn được Jira Automation.
 
 Issue tạo ra là issue THẬT trên Jira. Script chuyển nó sang Resolved khi xong,
 nhưng không xoá được — account Agent không có quyền xoá issue (đúng như mong
@@ -20,6 +20,7 @@ muốn). Xoá tay trên UI nếu muốn cho gọn.
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import sys
 from datetime import UTC, datetime
@@ -41,7 +42,11 @@ from src.services.jira import RealJiraClient, status_candidates  # noqa: E402
 from src.services.prometheus import P95_LATENCY  # noqa: E402
 
 LOCAL_URL = "http://localhost:8000"
-RENDER_URL = "https://p-035-incident-agent.onrender.com"
+
+#: Địa chỉ webhook công khai mà Jira Automation đang gọi. Từ 23/08 dự án tự host
+#: qua Cloudflare Tunnel thay cho Render — xem docs/self-host-cloudflare.md.
+#: Đổi bằng biến môi trường `LIVE_URL` nếu chạy ở chỗ khác.
+LIVE_URL = os.getenv("LIVE_URL", "https://api-035.emmetech.id.vn")
 
 REQUIRED = [
     "JIRA_BASE_URL",
@@ -97,11 +102,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--local", action="store_true", help="webhook trên máy")
-    mode.add_argument("--live", action="store_true", help="webhook trên Render")
+    mode.add_argument("--live", action="store_true", help="webhook công khai (tunnel)")
     args = parser.parse_args()
 
     env = load_env()
-    base = LOCAL_URL if args.local else RENDER_URL
+    base = LOCAL_URL if args.local else LIVE_URL
     agent_id = env["JIRA_AGENT_ACCOUNT_ID"]
 
     print(f"Verify chuỗi HITL — webhook: {base}")
@@ -266,7 +271,7 @@ def main() -> int:
     else:
         print("✅ TOÀN BỘ CHUỖI THÔNG")
         if args.local:
-            print("   Tiếp: chạy lại với --live để kiểm hop Jira Automation → Render")
+            print("   Tiếp: chạy lại với --live để kiểm hop Jira Automation → tunnel")
         else:
             print("   Bước 8 của kịch bản demo đã chạy được end-to-end.")
     return 1 if failures else 0

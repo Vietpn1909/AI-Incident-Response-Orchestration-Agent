@@ -186,6 +186,90 @@ def test_action_item_mang_nhan_khac_incident():
     assert ACTION_ITEM_LABEL != INCIDENT_LABEL
 
 
+# ---------------------------------------------------------------------------
+# Nhóm nhãn `fixed-by-*` — ai đã khắc phục sự cố
+#
+# Import thẳng từ `mapping` chứ không qua `src.services.jira`: mấy tên mới chưa
+# có trong `__init__.py`, và đường import ngắn hơn thì test cũng không kém giá
+# trị — `real.py` vốn đã import từ module con.
+# ---------------------------------------------------------------------------
+
+
+def test_gop_nhan_giu_nguyen_moi_nhan_khac():
+    """Gộp nhãn KHÔNG được làm mất `incident` / `severity-*` / `service-*`.
+
+    Đây là điều nguy hiểm nhất của nhóm nhãn mới: Jira ghi `labels` là ghi đè
+    toàn bộ, nên gắn ẩu là issue rơi khỏi mọi JQL tìm war room — mà nhãn đã mất
+    trên Jira thì phải gõ tay từng issue để dựng lại.
+    """
+    from src.services.jira.mapping import FIXED_BY_AGENT_LABEL, merge_label
+
+    cu = ["incident", "severity-P2", "service-service-thanh-toan"]
+
+    moi = merge_label(cu, FIXED_BY_AGENT_LABEL)
+
+    assert moi == [*cu, FIXED_BY_AGENT_LABEL]
+    assert severity_from_labels(moi) is Severity.P2
+    assert service_from_labels(moi) == "service-thanh-toan"
+    assert INCIDENT_LABEL in moi
+    # Danh sách cũ không bị sửa tại chỗ — người gọi còn dùng nó để so sánh.
+    assert cu == ["incident", "severity-P2", "service-service-thanh-toan"]
+
+
+def test_gop_nhan_hai_lan_van_chi_mot_nhan():
+    """Webhook và vòng poll cùng gắn một nhãn cho một issue — không được ra hai."""
+    from src.services.jira.mapping import FIXED_BY_HUMAN_LABEL, merge_label
+
+    mot_lan = merge_label(["incident"], FIXED_BY_HUMAN_LABEL)
+    hai_lan = merge_label(mot_lan, FIXED_BY_HUMAN_LABEL)
+
+    assert hai_lan == mot_lan
+    assert hai_lan.count(FIXED_BY_HUMAN_LABEL) == 1
+
+
+def test_doc_nguoc_ai_da_fix():
+    """Đọc ngược đối xứng với `severity_from_labels()`."""
+    from src.services.jira.mapping import (
+        FIXED_BY_AGENT_LABEL,
+        FIXED_BY_HUMAN_LABEL,
+        fixed_by_from_labels,
+    )
+
+    assert fixed_by_from_labels(["incident", FIXED_BY_AGENT_LABEL]) == FIXED_BY_AGENT_LABEL
+    assert fixed_by_from_labels(["incident", FIXED_BY_HUMAN_LABEL]) == FIXED_BY_HUMAN_LABEL
+    assert fixed_by_from_labels(["incident", "severity-P2"]) is None
+    assert fixed_by_from_labels([]) is None
+
+
+def test_co_ca_hai_nhan_thi_tinh_la_nguoi():
+    """Agent tự thi hành rồi sau đó có người vào duyệt tiếp → tính cho NGƯỜI.
+
+    Con số này đi vào báo cáo về mức tự động hoá, nên đếm thiếu cho Agent còn
+    hơn đếm thừa.
+    """
+    from src.services.jira.mapping import (
+        FIXED_BY_AGENT_LABEL,
+        FIXED_BY_HUMAN_LABEL,
+        fixed_by_from_labels,
+    )
+
+    ca_hai = ["incident", FIXED_BY_AGENT_LABEL, FIXED_BY_HUMAN_LABEL]
+
+    assert fixed_by_from_labels(ca_hai) == FIXED_BY_HUMAN_LABEL
+
+
+def test_hai_nhan_fixed_by_khac_nhau_va_khac_nhan_cu():
+    """Trùng một chữ là mọi câu JQL đếm sai mà không có gì đỏ lên."""
+    from src.services.jira.mapping import (
+        ACTION_ITEM_LABEL,
+        FIXED_BY_AGENT_LABEL,
+        FIXED_BY_HUMAN_LABEL,
+    )
+
+    nhan = {FIXED_BY_AGENT_LABEL, FIXED_BY_HUMAN_LABEL, INCIDENT_LABEL, ACTION_ITEM_LABEL}
+    assert len(nhan) == 4
+
+
 def test_create_subtasks_khong_gan_nhan_incident():
     """Chốt tại nguồn: subtask sinh ra phải mang nhãn action item.
 

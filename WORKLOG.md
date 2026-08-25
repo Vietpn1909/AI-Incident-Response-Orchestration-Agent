@@ -880,4 +880,112 @@ Cuối ngày dọn nốt chỗ lệch tông giữa hai trang: tách `ui/theme.py
 
 ---
 
+## 2026-08-18
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Nhãn `fixed-by-agent` / `fixed-by-human` trên Jira để đếm được bằng JQL — gắn ở đúng 3 chỗ thi hành thật (`run_agent`, `webhooks`, `auto_remediation`) | ✅ Done | `4064eed`, +741 dòng, 10 file |
+| Trương Công Thái Đức | Rollback dự phòng khi Agent tự thi hành P3/P4 mà đo lại vẫn chưa đỡ — fix 4 lỗi trong rollback P1/P2 cũ (`.get()` trên pydantic, `history[0]` là bản mới nhất, tra lịch sử sai service, test xanh giả) | ✅ Done | `709de1a`, +1074 dòng, 4 file |
+| Việt | Agent autofix P3/P4: thêm 2 demo service (`service_kho_hang`, `service_van_chuyen`), mở rộng docker-compose, viết luồng auto remediation | ✅ Done | `41ab7e2`, +929 dòng, 12 file |
+
+**Tổng kết ngày:** Hai hướng bổ sung cho UC-4. (1) Đức hoàn thiện rollback dự phòng + nhãn đo lường: Agent tự thi hành → đo lại → chưa đỡ thì tự lùi, và mọi hành động được gắn nhãn `fixed-by-agent`/`fixed-by-human` để JQL đếm được. (2) Việt dựng 2 demo service mới và viết luồng autofix cho P3/P4.
+
+---
+
+## 2026-08-19
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Cập nhật pipeline P3/P4: thêm seed data, mở rộng `docs/pipeline.md`, bổ sung test auto remediation | ✅ Done | `9ad2169`, +344 dòng, 4 file |
+
+**Tổng kết ngày:** Việt tiếp tục hoàn thiện luồng P3/P4 — thêm seed data cho demo, cập nhật tài liệu pipeline, và viết thêm 109 dòng test.
+
+---
+
+## 2026-08-20
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Rule mới: mất tín hiệu đo lường (`NaN`/`null`) không được coi là "khoẻ" — Prometheus trả `null` khi service chết, mà null không vượt ngưỡng nào nên bộ luật cũ bảo "bình thường" | ✅ Done | `bc2c337` |
+| Trương Công Thái Đức | Rule mới: việc đã lên lịch (deploy, bảo trì) GIẢI THÍCH tín hiệu thay vì bịt miệng báo động — trước đây lọc hẳn, giờ giữ tín hiệu + ghi chú ngữ cảnh | ✅ Done | `d4360a8`, +266 dòng |
+| Trương Công Thái Đức | Rule mới: bắt credential stuffing theo DIỆN RỘNG (≥10 tài khoản bị thử) thay vì chỉ theo tốc độ — kẻ tấn công giữ 0,95/s suốt 24h vẫn lọt ngưỡng cũ | ✅ Done | `0ca5e74`, +158 dòng, bịt case I19 |
+| Trương Công Thái Đức | Fix eval: in khoảng tin cậy 95% cạnh mỗi phần trăm, bỏ phần trăm ở bảng theo họ (thay bằng số đếm) | ✅ Done | `dff26ea` |
+| Trương Công Thái Đức | Đo lại bộ chẩn đoán với LLM thật (8 lượt/UC): UC-3 đi từ 38% lên 100% — nhờ 3 metric hình dạng nguồn + 3 cửa chặn trong `hypothesize` | ✅ Done | `8edac4c`, kèm `runs.csv` đợt 2 |
+
+**Tổng kết ngày:** Ba rule mới nâng detection lên mức mới. Chỉ số cả tuần: recall 72% → 80%, báo nhầm 28% → 16%, MCC +0,44 → +0,64. Riêng bộ chẩn đoán UC-3 từ 38% lên 100% — model không đổi, cải thiện hoàn toàn nhờ thiết kế (thêm metric bề rộng + cửa chặn rule). 584 test pass.
+
+---
+
+## 2026-08-21
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Fix runbook: lệnh bật UI thiếu 2 biến môi trường (`JIRA_BASE_URL`, `JIRA_PROJECT_KEY`), mất nút sang Jira | ✅ Done | `846455d` |
+| Trương Công Thái Đức | Fix UI: ô "Ảnh hưởng" hỏi Prometheus sai thời điểm (dùng `time()` thay vì thời điểm sự cố) nên luôn trống | ✅ Done | `e02d95a` |
+| Trương Công Thái Đức | Fix postmortem: subtask postmortem không bao giờ tới được war room — thiếu transition trong pipeline | ✅ Done | `498a219` |
+| Trương Công Thái Đức | Chế độ `--with-llm` cho eval: đo độ bao quát của phần chẩn đoán bằng LLM thật, không chỉ đo detection bằng rule | ✅ Done | `be6dc2e` |
+| Trương Công Thái Đức | Fix runbook UC-4: ghi rõ 2 điều kiện ngầm (`SIMULATE_MISSING_MIGRATION` + `AUTO_REMEDIATION_ENABLED`), thiếu là màn chốt hỏng im lặng | ✅ Done | `b7ea668` |
+| Trương Công Thái Đức | Fix detect: bộ lọc việc-đã-lên-lịch chưa hề được nối vào Agent — `planned_events.py` chỉ được gọi từ `eval/`, Agent thật vẫn 28% báo nhầm | ✅ Done | `1e29deb` |
+| Trương Công Thái Đức | Style: đổi tên test theo quy ước chữ thường, fix ruff N802 | ✅ Done | `aad19cc` |
+| Trương Công Thái Đức | Rule mới: dự báo xu hướng bộ nhớ bằng `predict_linear` — báo TRƯỚC khi service chết OOM, thay vì chờ restart rồi mới biết | ✅ Done | `ee6908d` |
+| Trương Công Thái Đức | Fix detect: deploy không được bịt miệng UC-2 (OOM) — tìm ra bằng đo thật trong Docker, 4 lỗi liên hoàn (thiếu điều kiện bộ nhớ, trộn đơn vị MB vs tỷ lệ, hai đường quyết định lệch nhau, fake Prometheus thiếu nhánh bộ nhớ) | ✅ Done | `00600c0`, +116 dòng, 6 file |
+| Trương Công Thái Đức | Báo cáo đo lường 21/08 — ghi kèm chỗ phải sửa lại và những gì bộ đo KHÔNG đo (3/11 khâu chưa có đánh giá) | ✅ Done | `8c598b3`, `eval/RESULTS-2026-08-21.md` 270 dòng |
+| Trương Công Thái Đức | Fix bảng theo họ sự cố thiếu 4 case — đúng 4 case khó nhất (họ `dependency` và `deployment`), thêm dòng Tổng | ✅ Done | `470ea1e` |
+
+**Tổng kết ngày:** Ngày sửa lỗi nặng nhất. Phát hiện bộ lọc `planned_events` chưa hề nối vào Agent (16% báo nhầm công bố là của eval, Agent thật vẫn 28% — đã vá, giờ sản phẩm lọc thật và đạt 20%). Deploy che mất UC-2 vì thiếu điều kiện bộ nhớ — 4 lỗi liên hoàn chỉ lộ khi chạy Docker thật, không lỗi nào phát hiện bằng đọc code. Thêm rule dự báo OOM bằng `predict_linear`. Viết báo cáo `RESULTS-2026-08-21.md` với 11 chỉ số, confusion matrix, và ghi rõ 3 khâu chưa đo + 4 case bỏ lọt kể tên. Bộ 50 case: TP=21 FN=4 FP=5 TN=20, recall 84%, báo nhầm 20%, MCC +0,64. 598 test pass.
+
+---
+
+## 2026-08-22
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Multi-page Streamlit: gộp status page + war room thành 1 deploy duy nhất (status_page.py là trang chính, war_room.py trong `pages/`) | ✅ Done | `a6ec7dd` |
+| Việt | Thêm `streamlit` + `requests` vào root `requirements.txt` cho Streamlit Cloud | ✅ Done | `eba623b` |
+| Việt | Viết `Dockerfile.ui` cho deploy Streamlit UI trên Render | ✅ Done | `0ece618` |
+| Trương Công Thái Đức | Fix UI: vá 5 chỗ trong bản gộp nhánh `viet` trước khi deploy — import thiếu, biến đổi tên, test khói lệch | ✅ Done | `5126a22`, +141 dòng, 4 file |
+| Trương Công Thái Đức | Deploy: khai service UI (`p-035-war-room`) vào `render.yaml` blueprint, vá lỗi `Dockerfile.ui` dùng exec form nên `$PORT` không expand (đúng bẫy backend đã gặp) | ✅ Done | `ccddbbe`, +61 dòng |
+| Trương Công Thái Đức | Bảng chỉ số đầy đủ 11 dòng trong `RESULTS-2026-08-21.md`: kèm số đếm, so với mốc 15/08, khoảng tin cậy, và mục "chỉ số nên trích khi báo cáo" (MCC +0,64, F2 83,33%) | ✅ Done | `d56669c`, +73 dòng |
+| Trương Công Thái Đức | Xếp lại bảng chỉ số cho đọc được ở dạng mã thô — tách cột "Công thức" ra bảng "Đọc bảng" riêng, thêm cột "Trả lời câu gì" bằng tiếng thường | ✅ Done | `9af1452` |
+
+**Tổng kết ngày:** Bước nhảy deploy: UI lên Render lần đầu. Việt gộp hai trang thành multi-page Streamlit + viết Dockerfile riêng. Đức review, vá 5 lỗi trong bản gộp, fix Dockerfile (exec form → shell form cho `$PORT`), khai vào blueprint, thêm CORS. Bảng đo lường hoàn chỉnh với 11 chỉ số × 2 mốc thời gian. Tổng thay đổi từ worklog trước (17/08): **+10.400 dòng, 67 file**, 650+ test.
+
+---
+
+## 2026-08-23
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Status page: thêm biểu đồ Prometheus realtime (Chart.js qua CDN) — 3 chỉ số/service (latency, error rate, throughput), tự đổi màu theo theme, xử lý `NaN` + mất CDN | ✅ Done | `b666e15`, `ui/status_page.py` +541 dòng |
+| Việt | War room: cải thiện hiển thị — mở rộng thêm chức năng và sửa layout | ✅ Done | `b666e15`, `ui/pages/war_room.py` +355 dòng |
+| Việt | API mới `GET /api/incidents/{key}/logs`: đọc log tươi từ container theo cửa sổ sự cố, model `IncidentLogs` kèm lý do khi rỗng | ✅ Done | `b666e15`, `src/api/incidents.py` +154, `src/models/incident.py` +25 |
+| Việt | Refactor `log_collector`: tách `thu_thap_co_ly_do()` — phân biệt 3 trạng thái rỗng (không Docker, không container, log sạch) thay vì gộp thành một | ✅ Done | `b666e15`, `src/services/log_collector.py` +92 dòng |
+| Việt | Mở rộng `demo/loadtest.py`: thêm kịch bản test mới | ✅ Done | `b666e15`, +106 dòng |
+| Việt | Cập nhật fixture `status.json` + `ui/labels.py` + `ui/theme.py` cho phù hợp giao diện mới | ✅ Done | `b666e15` |
+
+| Việt | Bỏ Render, tự host qua Cloudflare Tunnel: 3 route (`035` → UI 8501, `api-035` → API 8000, `prom-035` → Prometheus 9090), backend chạy trên host để `docker logs` thấy container demo | ✅ Done | `docs/self-host-cloudflare.md` (mới), `Makefile` target `api-local`/`ui-local` |
+| Việt | Nối vòng HITL qua tunnel: sửa 2 Jira Automation rule trỏ về `api-035`. Nghiệm thu thật trên KAN-85 — người duyệt `vietpn04` ≠ `JIRA_AGENT_ACCOUNT_ID`, Agent thi hành `increase_pool`, sinh postmortem + 2 sub-task | ✅ Done | webhook 200, guard chống trùng postmortem chạy đúng |
+| Việt | Biểu đồ Prometheus chuyển vào TRONG thẻ dịch vụ (bỏ khối riêng cuối trang) — mỗi chỉ số một trục y riêng vì lệch đơn vị 2 bậc mười, gộp dòng trùng, khung cao cố định chống Chart.js phình canvas | ✅ Done | `ui/status_page.py` |
+| Việt | Status page tự cập nhật kiểu SPA, nhịp 2 giây, không tải lại trang: trình duyệt gọi thẳng `api-035` + `prom-035`. Giữ vị trí cuộn, giữ vùng bôi đen, giữ tooltip biểu đồ | ✅ Done | `POLL_SECONDS`, `API_PUBLIC_URL`, `CORS_ORIGINS` |
+| Việt | Đệm 3 giây cho `/api/status` — 10 lời gọi trong 3 giây chỉ còn 1 lần hỏi Jira, chặn 429 khi nhiều người cùng xem | ✅ Done | `_TTL_STATUS_GIAY`, `src/api/incidents.py` |
+| Việt | Sửa `docker logs` trả sai trên Docker Desktop: bỏ `--since/--until` (im lặng trả rỗng khi lệch giờ), đọc 2 mức `--tail` rồi ghép + khử trùng theo mốc nano giây — một mức trả file đang ghi, mức kia trả file đã xoay vòng | ✅ Done | `src/services/log_collector.py`, +3 test |
+| Việt | Lưu bền log Agent đã đọc: `Incident.log_evidence` + `JiraClient.post_logs()` — trước đó log chỉ lên Jira khi nó ĐỔI kết luận, nên 15/15 phiếu mà bộ luật tự nêu được nguyên nhân đều có 0 dòng | ✅ Done | contract ② (thêm trường có mặc định, tương thích ngược) |
+| Việt | Vá 2 lỗi cấu hình chặn Agent: `DATABASE_URL` trỏ cổng 5432 trong khi Postgres map ra 55432 (mất bằng chứng deploy), và LLM 402 vì không đặt `max_tokens` nên bị giữ chỗ theo trần 8192 token | ✅ Done | `.env`, `llm_max_tokens` mặc định 2048 |
+| Việt | Sửa `PROM_PUBLIC_URL` tách khỏi `PROM_URL`: link "Mở trên Prometheus" do trình duyệt mở nên không dùng được `localhost` | ✅ Done | `ui/pages/war_room.py` |
+
+| Việt | Cài lại `pre-push` hook (`bash scripts/setup_hooks.sh`) — hook chưa từng tồn tại trên clone này nên AI log ghi đủ vào `.ai-log/session.jsonl` (~1MB) mà **chưa bao giờ nộp lên server chấm**. Nộp bù 568 mục tồn, server trả `202` | ✅ Done | deliverable #4 |
+| Việt | Vá 2 cảnh báo ruff trong `ui/pages/war_room.py` — CI chạy `ruff check ui/` nên chúng sẽ làm đỏ PR `viet → develop` | ✅ Done | ruff sạch trên đúng phạm vi CI kiểm |
+| Việt | Cài `demo/requirements.txt` vào venv chính cho khớp CI — `tests/test_services/test_demo_services.py` trước đó không collect được vì thiếu `prometheus_client` | ✅ Done | **665 test pass** (654 + 11) |
+
+**Tổng kết ngày:** Hai đợt. Đợt sáng (`b666e15`, +1.212 dòng): biểu đồ Prometheus realtime, API `/incidents/{key}/logs`. Đợt chiều: **bỏ Render, chuyển hẳn sang tự host qua Cloudflare Tunnel** — 3 subdomain, vòng HITL nghiệm thu thật trên KAN-85. Status page thành SPA nhịp 2 giây, không còn tải lại trang.
+
+Ba lỗi đáng ghi lại vì đều thuộc loại **im lặng trả sai**, nguy hiểm hơn crash:
+1. `docker logs --since` và `--tail` lớn trả lát cắt sai trên Docker Desktop → 0 dòng → UI kết luận "log sạch", tức khẳng định SAI với người trực rằng service không ghi lỗi nào.
+2. LLM 402 vì `max_tokens` mặc định 8192 → Agent **vẫn chạy tiếp** bằng kết luận bộ luật, war room vẫn có giả thuyết, nhìn qua tưởng LLM đã chẩn đoán.
+3. `DATABASE_URL` sai cổng → `correlate_deploy` mù, mất `change_note` — nguồn phi cấu trúc duy nhất mà UC-4 cần.
+
+Đo lường: `654 test pass`. 5 cảnh báo ruff còn lại đều có sẵn từ trước trên `HEAD`, không phải phát sinh mới.
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

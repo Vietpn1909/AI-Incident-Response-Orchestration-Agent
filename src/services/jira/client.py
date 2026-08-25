@@ -1,5 +1,7 @@
 """Contract ③ — Interface Jira.
 
+CHỦ SỞ HỮU: Đức. Method `add_label()` do Long thêm ngày 18/08 cho nhóm nhãn `fixed-by-*`.
+
 Đường ghép: Đức (implement) → Việt (gọi).
 
 Việt import `JiraClient` và `FakeJiraClient`, viết trọn Agent ngay hôm nay mà
@@ -27,11 +29,13 @@ from src.models.incident import (
     Incident,
     IncidentSignal,
     IncidentState,
+    LogEvidence,
     Postmortem,
     RemediationProposal,
     Severity,
     TimelineEvent,
 )
+from src.services.jira.mapping import labels_for, merge_label, replace_severity_label
 
 
 @runtime_checkable
@@ -56,6 +60,14 @@ class JiraClient(Protocol):
     def post_hypothesis(self, jira_key: str, hypothesis: Hypothesis) -> None:
         """Post giả thuyết nguyên nhân kèm bằng chứng số."""
         ...
+
+    def post_logs(self, jira_key: str, body: str, logs: list[LogEvidence]) -> None:
+        """Post comment "đã thu thập log" kèm chính các dòng log, để đọc lại được.
+
+        Tách khỏi `add_comment()` vì phần log phải **lưu được dưới dạng dữ liệu**,
+        không chỉ là chữ cho người đọc: log container trôi mất rất nhanh, nên đây
+        là bản duy nhất còn lại khi mở phiếu sau đó vài chục phút.
+        """
 
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
         """Post đề xuất khắc phục và chuyển issue sang `Awaiting Approval`.
@@ -83,6 +95,20 @@ class JiraClient(Protocol):
         Returns:
             accountId của người thực hiện, None nếu chưa từng chuyển sang
             trạng thái đó.
+        """
+        ...
+
+    def add_label(self, jira_key: str, label: str) -> None:
+        """Gắn thêm một nhãn cho issue, giữ nguyên các nhãn sẵn có.
+
+        Thêm ngày 18/08 cho nhóm nhãn `fixed-by-*`: phân biệt sự cố Agent tự
+        khắc phục với sự cố khắc phục sau khi người duyệt, để **đếm được bằng
+        JQL** — comment war room nói đủ chuyện nhưng không truy vấn được.
+
+        ⚠️ "Giữ nguyên các nhãn sẵn có" là phần khó, không phải phần hiển nhiên:
+        Jira API ghi `labels` là ghi đè toàn bộ danh sách. Bản cài đặt phải đọc
+        nhãn cũ rồi PUT lại cả danh sách, y như `set_severity()` đang làm —
+        quy tắc gộp nằm ở [`mapping.merge_label()`](mapping.py).
         """
         ...
 
@@ -197,6 +223,12 @@ class FakeJiraClient:
         # (jira_key, to_state) -> thời điểm transition gần nhất. Bản thật đọc từ
         # changelog; ở đây ghi lúc `transition()` được gọi.
         self._transition_times: dict[tuple[str, IncidentState], datetime] = {}
+        #: jira_key -> danh sách nhãn, mô phỏng đúng field `labels` của Jira.
+        #:
+        #: Giữ riêng chứ không nhét vào `Incident`: model đó là contract ② dùng
+        #: chung ba người, còn nhãn là chi tiết cài đặt của riêng Jira — bản thật
+        #: cũng không giữ nhãn trong `Incident` mà đọc thẳng từ API.
+        self._labels: dict[str, list[str]] = {}
 
     def _log(self, message: str) -> None:
         if self._verbose:
@@ -224,6 +256,10 @@ class FakeJiraClient:
             detected_at=signal.detected_at,
             signal=signal,
         )
+        # Nhãn khởi tạo giống hệt `RealJiraClient.create_incident()`. Bắt đầu từ
+        # danh sách rỗng thì bản giả không bao giờ lộ được lỗi nguy hiểm nhất của
+        # nhóm nhãn mới: gắn `fixed-by-*` mà làm bay mất `incident`/`severity-*`.
+        self._labels[jira_key] = labels_for(signal.severity, signal.affected_service)
         self._append_timeline(jira_key, "agent", "mở war room", signal.title)
         self._log(f"tạo {jira_key}: {signal.title}")
         return jira_key
@@ -241,6 +277,13 @@ class FakeJiraClient:
             incident.state = IncidentState.INVESTIGATING
         self._append_timeline(jira_key, "agent", "giả thuyết", hypothesis.statement)
         self._log(f"{jira_key} giả thuyết ({hypothesis.confidence:.0%}): {hypothesis.statement}")
+
+    def post_logs(self, jira_key: str, body: str, logs: list[LogEvidence]) -> None:
+        incident = self._incidents.get(jira_key)
+        if incident is not None:
+            incident.log_evidence = list(logs)
+        self._append_timeline(jira_key, "agent", "thu thập log", f"{len(logs)} dòng")
+        self._log(f"{jira_key} thu thập {len(logs)} dòng log")
 
     def post_proposal(self, jira_key: str, proposal: RemediationProposal) -> None:
         incident = self._incidents.get(jira_key)
@@ -280,12 +323,35 @@ class FakeJiraClient:
     def get_transition_time(self, jira_key: str, to_state: IncidentState) -> datetime | None:
         return self._transition_times.get((jira_key, to_state))
 
+    def add_label(self, jira_key: str, label: str) -> None:
+        """Gắn nhãn, giữ nguyên nhãn cũ — qua `merge_label()` như bản thật.
+
+        Dùng chung đúng một hàm gộp với `RealJiraClient` là cách duy nhất để test
+        chạy trên bản giả còn nói được điều gì đó về bản thật.
+        """
+        self._labels[jira_key] = merge_label(self._labels.get(jira_key, []), label)
+        self._log(f"{jira_key} nhãn += {label}")
+
+    def get_labels(self, jira_key: str) -> list[str]:
+        """Chỉ có ở bản giả: đọc lại nhãn để test kiểm chứng.
+
+        Không đưa vào Protocol vì Agent không cần đọc nhãn để chạy — thêm vào
+        contract ③ là bắt bản thật gánh một method chỉ test dùng.
+        """
+        return list(self._labels.get(jira_key, []))
+
     def set_severity(self, jira_key: str, severity: Severity) -> None:
         incident = self._incidents.get(jira_key)
         if incident is None:
             return
         cu = incident.severity
         incident.severity = severity
+        # Nhãn `severity-*` phải đi theo, đúng như bản thật làm trong cùng một
+        # lần PUT. Bản giả để nhãn cũ lại thì nó tự mâu thuẫn: `escalate` nâng
+        # P3 → P1 mà nhãn vẫn `severity-P3`.
+        self._labels[jira_key] = replace_severity_label(
+            self._labels.get(jira_key, []), severity
+        )
         # Tiêu đề mang tiền tố `[P2]`, đổi luôn cho khớp — xem cảnh báo ở
         # Protocol. Bản thật cũng phải làm y hệt trên summary của Jira.
         incident.title = incident.title.replace(f"[{cu.value}]", f"[{severity.value}]", 1)

@@ -11,7 +11,8 @@ Mọi con số trong đây là số đo được, không phải ước lượng.
 
 | Cửa sổ | Địa chỉ |
 |---|---|
-| **War room** | http://localhost:8501 |
+| **War room** | http://localhost:8501/war_room |
+| Trang trạng thái (khách hàng) | http://localhost:8501 |
 | **Jira board** | https://jibinarybro.atlassian.net/jira/software/projects/KAN/boards/2 |
 | Prometheus | http://localhost:9090 |
 
@@ -23,7 +24,7 @@ Mọi con số trong đây là số đo được, không phải ước lượng.
 ```bash
 docker ps --format '{{.Names}}' | grep p035-demo    # phải ra 4 dòng
 curl -s localhost:8000/api/incidents                 # phải ra [] hoặc danh sách
-curl -s -o /dev/null -w "%{http_code}\n" localhost:8501   # phải ra 200
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8501/war_room   # phải ra 200
 ```
 
 Thiếu cái nào thì bật lại:
@@ -36,12 +37,19 @@ python -m uvicorn src.main:app --port 8000                      # terminal 2
 #   JIRA_BASE_URL thiếu → KHÔNG bấm được sang Jira (nút hiện "Chưa đặt...")
 #   PROM_URL      thiếu → link "kiểm chứng PromQL" trỏ sai chỗ
 #
-# `ui/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải truyền
-# tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+# `ui/pages/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải
+# truyền tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+#
+# ⚠️ Điểm khởi động là `ui/status_page.py`, KHÔNG phải war room. Từ 22/08 hai trang
+# nằm trong một app Streamlit multi-page: một tiến trình phục vụ cả hai.
+#     localhost:8501            → trang trạng thái (cho khách hàng)
+#     localhost:8501/war_room   → WAR ROOM (màn demo chính)
+# Chạy `streamlit run ui/pages/war_room.py` cũng lên được, nhưng khi đó KHÔNG có
+# trang trạng thái, và nút "Xem chi tiết sự cố" trỏ vào chỗ không tồn tại.
 API_URL=http://localhost:8000 \
 JIRA_BASE_URL=https://jibinarybro.atlassian.net \
 PROM_URL=http://localhost:9090 \
-  streamlit run ui/war_room.py   # terminal 3
+  streamlit run ui/status_page.py   # terminal 3
 ```
 
 > `API_URL` là **bắt buộc**. Thiếu nó, UI đọc backend trên Render chứ không đọc
@@ -230,12 +238,19 @@ sleep 8
 #   JIRA_BASE_URL thiếu → KHÔNG bấm được sang Jira (nút hiện "Chưa đặt...")
 #   PROM_URL      thiếu → link "kiểm chứng PromQL" trỏ sai chỗ
 #
-# `ui/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải truyền
-# tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+# `ui/pages/war_room.py` đọc bằng `os.getenv`, KHÔNG đọc file `.env` — nên phải
+# truyền tường minh. Đã vấp ngày 21/08: chỉ truyền API_URL và mất hẳn nút sang Jira.
+#
+# ⚠️ Điểm khởi động là `ui/status_page.py`, KHÔNG phải war room. Từ 22/08 hai trang
+# nằm trong một app Streamlit multi-page: một tiến trình phục vụ cả hai.
+#     localhost:8501            → trang trạng thái (cho khách hàng)
+#     localhost:8501/war_room   → WAR ROOM (màn demo chính)
+# Chạy `streamlit run ui/pages/war_room.py` cũng lên được, nhưng khi đó KHÔNG có
+# trang trạng thái, và nút "Xem chi tiết sự cố" trỏ vào chỗ không tồn tại.
 API_URL=http://localhost:8000 \
 JIRA_BASE_URL=https://jibinarybro.atlassian.net \
 PROM_URL=http://localhost:9090 \
-  streamlit run ui/war_room.py &
+  streamlit run ui/status_page.py &
 ```
 
 > ⚠️ Đây là chỗ dễ sai nhất. `duyet.py` chỉ gửi HTTP; `executors` chạy trong tiến
@@ -311,7 +326,7 @@ Dừng ở hai dòng:
 
 ### ④ War room · 60 giây
 
-F5 http://localhost:8501 — ba mục ①②③, đọc to ô đỏ *"nó không tự thực hiện"*.
+F5 http://localhost:8501/war_room — ba mục ①②③, đọc to ô đỏ *"nó không tự thực hiện"*.
 
 ### ⑤ Người duyệt + sửa THẬT · 60 giây
 

@@ -1,0 +1,143 @@
+<title>P-035 Thumbnail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* Ảnh đại diện 1280×720. Token lấy từ ui/theme.py để khớp tông sản phẩm.
+   Render: chrome --headless --screenshot=thumbnail.png --window-size=1280,720 */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  width:1280px;height:720px;overflow:hidden;
+  background:#0A0D12;color:#E6EBF2;
+  font-family:'Inter',-apple-system,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+.frame{
+  position:relative;width:1280px;height:720px;
+  padding:64px 72px;display:flex;flex-direction:column;
+  background:
+    radial-gradient(1100px 620px at 84% 8%, rgba(212,160,86,.075), transparent 62%),
+    radial-gradient(760px 520px at 6% 96%, rgba(229,72,77,.07), transparent 60%),
+    #0A0D12;
+}
+/* lưới mờ — gợi màn hình theo dõi, không được nổi hơn chữ */
+.frame::before{
+  content:"";position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(230,235,242,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230,235,242,.028) 1px, transparent 1px);
+  background-size:64px 64px;
+}
+.frame > *{position:relative}
+
+.eyebrow{
+  display:flex;align-items:center;gap:14px;
+  font-family:'JetBrains Mono',ui-monospace,monospace;
+  font-size:15px;letter-spacing:.2em;text-transform:uppercase;color:#556377;
+}
+.eyebrow b{color:#D4A056;font-weight:500}
+.eyebrow .rule{flex:1;height:1px;background:#1F2A37;max-width:210px}
+
+h1{
+  font-family:'Newsreader',Georgia,serif;font-weight:400;
+  font-size:82px;line-height:1.02;letter-spacing:-.02em;
+  margin:34px 0 0;max-width:19ch;
+}
+h1 .em{color:#D4A056}
+
+.sub{
+  margin:26px 0 0;font-size:23px;line-height:1.45;color:#8593A6;max-width:30ch;
+}
+.sub b{color:#E6EBF2;font-weight:600}
+
+/* dải số — bằng chứng đập vào mắt ngay ở kích thước nhỏ */
+.proof{
+  margin-top:auto;display:flex;align-items:stretch;gap:16px;
+}
+.metric{
+  display:flex;align-items:center;gap:18px;
+  background:#10151C;border:1px solid #1F2A37;border-left:4px solid #E5484D;
+  border-radius:5px;padding:20px 26px;
+}
+.metric .from{
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:44px;font-weight:500;
+  color:#E5484D;letter-spacing:-.02em;line-height:1;
+}
+.metric .to{
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:44px;font-weight:500;
+  color:#52B788;letter-spacing:-.02em;line-height:1;
+}
+.metric .arw{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:30px;color:#3B4757}
+.metric .cap{
+  font-size:15px;line-height:1.4;color:#8593A6;width:19ch;
+  padding-left:20px;border-left:1px solid #1F2A37;
+}
+.metric .cap b{color:#E6EBF2;font-weight:600;display:block}
+
+.gate{
+  flex:1;display:flex;align-items:center;gap:16px;
+  background:rgba(229,72,77,.13);border:1px solid rgba(229,72,77,.38);
+  border-radius:5px;padding:20px 28px;
+}
+.gate .lock{font-size:34px;line-height:1}
+.gate .txt{font-size:19px;line-height:1.35;color:#E5484D;font-weight:600}
+.gate .txt small{display:block;font-weight:400;font-size:15px;color:#8593A6;margin-top:5px}
+
+.foot{
+  margin-top:22px;padding-top:18px;border-top:1px solid #1F2A37;
+  display:flex;align-items:center;gap:14px;
+  font-family:'JetBrains Mono',ui-monospace,monospace;
+  font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:#556377;
+}
+.foot .team{color:#E6EBF2}
+.foot .sep{color:#2D3A4A}
+.foot .live{
+  margin-left:auto;display:flex;align-items:center;gap:9px;color:#52B788;
+}
+.foot .live .dot{width:8px;height:8px;border-radius:50%;background:#52B788}
+
+/* đường latency: vọt lên rồi về đáy — câu chuyện của sản phẩm, vẽ một nét */
+.spark{position:absolute;right:56px;top:132px;width:496px;height:250px;opacity:.85}
+</style>
+
+<div class="frame">
+  <div class="eyebrow"><b>PTNT-20</b><span class="rule"></span>AI20K · Demo Day</div>
+
+  <h1>AI Agent Điều Phối<br><span class="em">Ứng Phó Sự Cố</span></h1>
+
+  <p class="sub">Tự phát hiện, chẩn đoán có <b>bằng chứng truy vết được</b> — và dừng lại chờ người duyệt.</p>
+
+  <svg class="spark" viewBox="0 0 520 260" fill="none" aria-hidden="true">
+    <path d="M0 205 L70 202 L112 208 L150 199 L182 204
+             L206 150 L224 84 L242 40 L262 26 L286 34 L310 52
+             L332 96 L352 152 L372 190 L396 200 L440 203 L520 201"
+          stroke="#E5484D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
+    <path d="M372 190 L396 200 L440 203 L520 201"
+          stroke="#52B788" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="262" cy="26" r="4.5" fill="#E5484D"/>
+    <circle cx="520" cy="201" r="4.5" fill="#52B788"/>
+  </svg>
+
+  <div class="proof">
+    <div class="metric">
+      <span class="from">100%</span>
+      <span class="arw">→</span>
+      <span class="to">0%</span>
+      <span class="cap"><b>tỷ lệ lỗi</b>sau khi người duyệt, đo bằng Prometheus</span>
+    </div>
+    <div class="gate">
+      <span class="lock">⛔</span>
+      <span class="txt">Agent không tự duyệt được<small>Backend kiểm changelog Jira — là Agent thì từ chối thi hành</small></span>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span class="team">Team Binary Brothers</span>
+    <span class="sep">·</span>
+    <span>LangGraph · Prometheus · Jira Cloud</span>
+    <span class="live"><i class="dot"></i>Live trên Render</span>
+  </div>
+</div>

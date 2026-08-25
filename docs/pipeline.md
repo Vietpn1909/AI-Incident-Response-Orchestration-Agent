@@ -174,7 +174,9 @@ Agent viết comment: "💡 ĐỀ XUẤT — Rollback service-thanh-toan về ph
 
 Sau đó Agent **chuyển ticket sang trạng thái "Chờ phê duyệt"** — và **DỪNG LẠI**.
 
-> ⚠️ **Agent KHÔNG TỰ SỬA.** Dù Agent tin 99% vào chẩn đoán, nó vẫn phải chờ con người đồng ý. Đây là nguyên tắc bắt buộc: **AI không được tự ý thay đổi hệ thống production**.
+> ⚠️ **Agent KHÔNG TỰ SỬA** — khi có người trực. Dù Agent tin 99% vào chẩn đoán, nó vẫn **ưu tiên chờ con người đồng ý**. Đây là nguyên tắc mặc định: **AI không được tự ý thay đổi hệ thống production khi có người giám sát**.
+>
+> **Ngoại lệ:** Nếu đã chờ **30 phút** mà không ai phản hồi (sự cố xảy ra vào đêm, không ai trực), Agent sẽ tự thi hành — xem **Phase 2, Nhánh C**. Tính năng này mặc định **TẮT**, phải bật chủ động bằng `AUTO_REMEDIATION_ENABLED=1`.
 
 > **File code:** [`propose_remediation.py`](src/agents/nodes/propose_remediation.py)
 
@@ -216,9 +218,15 @@ Nối sự cố liên quan (nếu có)
 
 ---
 
-## Phase 2: Con người phê duyệt & Hệ thống thực thi
+## Phase 2: Phê duyệt & Thực thi
 
-> 👤 Phase này bắt đầu khi **con người ra quyết định** — có **2 nhánh** tuỳ quyết định
+> Phase này có **3 nhánh** tuỳ vào phản hồi của con người:
+>
+> | Nhánh | Điều kiện | Actor |
+> |-------|----------|-------|
+> | **A** — Đồng ý | 👤 Kỹ sư bấm duyệt | Con người quyết định → hệ thống thực thi |
+> | **B** — Không đồng ý | 👤 Kỹ sư tự sửa | Con người tự xử lý |
+> | **C** — Không ai phản hồi | 🤖 Agent tự sửa (sau 30 phút) | Agent thay thế con người |
 
 ---
 
@@ -356,12 +364,90 @@ Hệ thống:
 
 ---
 
+### Nhánh C: Không ai phản hồi — Agent tự sửa (Auto-Remediation)
+
+> 🤖 Nhánh này **thay thế Phase 2** khi con người vắng mặt. **Mặc định TẮT** — phải bật bằng `AUTO_REMEDIATION_ENABLED=1` trong `.env`.
+
+---
+
+#### Điều kiện kích hoạt
+
+Agent tự sửa khi **cả 3 điều kiện** sau đều đúng:
+
+1. ✅ Feature được **bật** (`AUTO_REMEDIATION_ENABLED=1`)
+2. ⏰ Ticket đã ở trạng thái "Chờ duyệt" **≥ 30 phút** (cấu hình được bằng `AUTO_REMEDIATION_TIMEOUT_MINUTES`)
+3. 🚫 **Không có dấu hiệu con người can thiệp** — chưa ai chuyển ticket sang `Remediating`
+
+> ⚠️ **Ưu tiên con người:** Agent luôn **poll kiểm tra human approval TRƯỚC** khi xét auto-remediation trong mỗi vòng quét. Nếu con người đã duyệt → Agent tuân theo con người, không tự sửa.
+
+---
+
+#### Bước 2C.1: Quyết định hành động theo mức độ
+
+Agent không áp dụng chung một cách sửa cho mọi sự cố. Tuỳ mức nghiêm trọng **ban đầu** (lúc phát hiện, trước khi escalate):
+
+| Severity gốc | Hành vi |
+|---|---|
+| 🔴 **P1 / P2** | Ép **rollback** bất kể đề xuất gốc là gì — sự cố nghiêm trọng cần đưa hệ thống về trạng thái ổn định nhanh nhất |
+| 🟡 **P3 / P4** | Dùng **đúng hành động đã đề xuất** (restart, scale_up, ...) — ưu tiên sửa đúng nguyên nhân |
+
+> **Tại sao dùng severity gốc?** Sau 30 phút escalate liên tục, mọi P3/P4 đều đã bị nâng lên P1. Nếu dùng severity hiện tại thì mọi sự cố đều bị ép rollback — nhánh P3/P4 "dùng đề xuất gốc" không bao giờ chạy.
+
+> **File code:** [`auto_remediation.py`](src/services/auto_remediation.py) — `should_auto_remediate()`, `execute_auto_remediation()`
+
+---
+
+#### Bước 2C.2: Thi hành và ghi nhận
+
+**Chuyện gì xảy ra:**
+
+1. Agent comment lên Jira: *"⚠️ Tự thi hành do hết thời chờ — [lý do chi tiết]"*
+2. Gọi `remediation.execute()` — **cùng hàm** mà nhánh A dùng, chỉ khác `approved_by = AUTO_TIMEOUT_AGENT`
+3. Gắn nhãn **`fixed-by-agent`** (thay vì `fixed-by-human`)
+4. Chuyển ticket sang `Remediating`
+5. **KHÔNG tự đóng issue** (không chuyển sang `Resolved`) — để người hôm sau xem lại
+
+---
+
+#### Bước 2C.3: Đo lại sau 5 phút
+
+**Tại sao phải chờ 5 phút?** Cửa sổ PromQL `[1m]` mà hệ thống giám sát dùng vẫn còn chứa dữ liệu lúc đang hỏng. Đo ngay sau khi sửa → gần như luôn ra "chưa đỡ".
+
+Sau 5 phút, Agent chạy lại **đúng truy vấn đã phát hiện sự cố** (không viết truy vấn riêng) để xem service có còn vượt ngưỡng không.
+
+**3 kết quả có thể:**
+
+| Kết quả | Hành vi Agent | Comment lên Jira |
+|---------|--------------|------------------|
+| ✅ **Hồi phục** | Ghi nhận thành công | *"📈 ĐÃ HỒI PHỤC — metric về baseline"* |
+| ⚠️ **Chưa đỡ** | → Bước 2C.4 (chỉ P3/P4) | *"⚠️ CHƯA ĐỠ — metric vẫn vượt ngưỡng"* |
+| 🔴 **Tệ hơn** | **DỪNG** — không thi hành thêm | *"🔴 TỆ HƠN — cần người vào xem"* |
+
+> **File code:** [`verify.py`](src/agents/nodes/verify.py)
+
+---
+
+#### Bước 2C.4: Rollback dự phòng (chỉ P3/P4)
+
+**Chuyện gì xảy ra:** Nếu Agent đã tự thi hành đề xuất gốc (restart, scale_up...) mà sự cố vẫn chưa hết → Agent **rollback về phiên bản trước** để đưa hệ thống về trạng thái trước khi can thiệp.
+
+**Điều kiện:**
+- Hành động vừa thử KHÔNG phải rollback (đã rollback thì không rollback thêm)
+- Chưa từng rollback dự phòng cho issue này (mỗi issue đúng **1 lần**)
+- Sự cố KHÔNG tệ hơn (tệ hơn → dừng ngay)
+
+**Sau rollback dự phòng:** Agent đo lại lần nữa. Nếu vẫn chưa đỡ → Agent dừng hẳn. Comment: *"Đo lại lần nữa mà vẫn chưa đỡ thì chẩn đoán ban đầu sai — Agent không có căn cứ nào để thi hành tiếp. 👉 Cần người vào xem."*
+
+> **File code:** [`auto_remediation.py`](src/services/auto_remediation.py) — `should_fallback_rollback()`, `execute_fallback_rollback()`
+
+---
+
 ### 📊 Tóm tắt Phase 2:
 
 ```
-Kỹ sư đọc chẩn đoán + đề xuất trên Jira
+Ticket đang ở "Chờ phê duyệt" — Agent poll mỗi 10 giây
     │
-    ├── ĐỒNG Ý → Kéo sang "Remediating"
+    ├── NHÁNH A: Kỹ sư ĐỒNG Ý → Kéo sang "Remediating"
     │       ↓
     │   Jira Automation Rule #1 gọi webhook
     │       ↓
@@ -375,13 +461,23 @@ Kỹ sư đọc chẩn đoán + đề xuất trên Jira
     │       ↓
     │   Tự động chuyển ticket sang "Resolved"
     │
-    └── KHÔNG ĐỒNG Ý → Tự sửa → Kéo sang "Resolved"
+    ├── NHÁNH B: Kỹ sư KHÔNG ĐỒNG Ý → Tự sửa → Kéo sang "Resolved"
+    │       ↓
+    │   Jira Automation Rule #2 gọi webhook
+    │       ↓
+    │   🔒 Kiểm tra mật khẩu → OK
+    │       ↓
+    │   Ghi nhận giải quyết thủ công
+    │
+    └── NHÁNH C: KHÔNG AI PHẢN HỒI (≥30 phút)
             ↓
-        Jira Automation Rule #2 gọi webhook
+        P1/P2: ép rollback · P3/P4: dùng đề xuất gốc
             ↓
-        🔒 Kiểm tra mật khẩu → OK
-            ↓
-        Ghi nhận giải quyết thủ công
+        ⚡ Tự thi hành + label "fixed-by-agent"
+            ↓ chờ 5 phút
+        Đo lại: hồi phục? → ghi nhận
+                 chưa đỡ? → rollback dự phòng (P3/P4)
+                 tệ hơn?  → DỪNG, chờ người
 ```
 
 ---
@@ -513,6 +609,25 @@ flowchart TD
         D1 --> D2 --> D3
     end
 
+    subgraph PHASE2C["🤖 Phase 2C — Không ai phản hồi (30 phút)"]
+        E1{"Severity gốc?"}
+        E2["🔴 P1/P2: Ép rollback"]
+        E3["🟡 P3/P4: Dùng đề xuất gốc"]
+        E4["⚡ Tự thi hành<br/>label: fixed-by-agent"]
+        E5["⏳ Chờ 5 phút → đo lại"]
+        E6{"Hồi phục?"}
+        E7["✅ Ghi nhận hồi phục"]
+        E8["🔁 Rollback dự phòng<br/>(chỉ P3/P4, đúng 1 lần)"]
+        E9["🛑 DỪNG — chờ người"]
+
+        E1 -->|"P1/P2"| E2 --> E4
+        E1 -->|"P3/P4"| E3 --> E4
+        E4 --> E5 --> E6
+        E6 -->|"Đã đỡ"| E7
+        E6 -->|"Chưa đỡ"| E8
+        E6 -->|"Tệ hơn"| E9
+    end
+
     subgraph PHASE3["🤖 Phase 3 — Agent tự động báo cáo"]
         C1["Sinh báo cáo postmortem<br/>từ dữ liệu thật"]
         C2["Tạo ticket con cho<br/>việc cần làm sau sự cố"]
@@ -521,14 +636,16 @@ flowchart TD
         C1 --> C2 --> C3
     end
 
-    A9 -.->|"Con người<br/>quyết định"| B1
+    A9 -.->|"Con người<br/>đồng ý"| B1
     A9 -.->|"Con người<br/>không đồng ý"| D1
+    A9 -.->|"30 phút<br/>không ai phản hồi"| E1
     B5 --> C1
     D3 --> C1
 
     style PHASE1 fill:#eff6ff,stroke:#2563eb
     style PHASE2A fill:#fefce8,stroke:#ca8a04
     style PHASE2B fill:#fff7ed,stroke:#ea580c
+    style PHASE2C fill:#fee2e2,stroke:#ef4444
     style PHASE3 fill:#f5f3ff,stroke:#7c3aed
 ```
 
@@ -549,7 +666,7 @@ flowchart TD
 9.  📧 Đã gửi báo cáo postmortem tới leader@gmail.com
 ```
 
-### Nhánh B (tự sửa):
+### Nhánh B (kỹ sư tự sửa):
 ```
 1.  🔴 PHÁT HIỆN SỰ CỐ — latency 5.1s (ngưỡng 2s)
 2.  📋 THU THẬP LOG — 847 dòng, 12 liên quan
@@ -560,7 +677,40 @@ flowchart TD
 6.  📧 Đã gửi báo cáo postmortem (manual resolution)
 ```
 
-> **Điểm then chốt:** Tất cả comment trên đều do **AI Agent tự viết** — con người chỉ cần đọc và bấm duyệt (hoặc tự sửa), không cần tự ghi chép gì.
+### Nhánh C (Agent tự sửa khi không ai phản hồi):
+
+**P1/P2 — ép rollback:**
+```
+1.  🔴 PHÁT HIỆN SỰ CỐ — latency 5.1s (ngưỡng 2s)
+2.  📋 THU THẬP LOG — 847 dòng, 12 liên quan
+3.  🔍 CHẨN ĐOÁN — Pool DB cạn kiệt (tin cậy 85%)
+4.  💡 ĐỀ XUẤT — Restart service-thanh-toan · VẪN CHỜ DUYỆT
+5.  ⏰ NÂNG MỨC P3→P2 — chờ 12 phút (ngưỡng 10 phút)
+6.  ⏰ NÂNG MỨC P2→P1 — chờ 22 phút (ngưỡng 10 phút)
+    ← 30 phút trôi qua, không ai phản hồi →
+7.  ⚠️ TỰ THI HÀNH DO HẾT THỜI CHỜ — Ép rollback v1.4.1
+    ← Chờ 5 phút →
+8.  📈 ĐÃ HỒI PHỤC — metric về baseline
+```
+
+**P3/P4 — dùng đề xuất gốc → rollback dự phòng nếu thất bại:**
+```
+1.  🔴 PHÁT HIỆN SỰ CỐ — latency 3.5s (ngưỡng 2s)
+2.  📋 THU THẬP LOG — 423 dòng, 8 liên quan
+3.  🔍 CHẨN ĐOÁN — Memory leak do request tăng (tin cậy 72%)
+4.  💡 ĐỀ XUẤT — Restart service-thanh-toan · VẪN CHỜ DUYỆT
+5.  ⏰ NÂNG MỨC P3→P2 — chờ 12 phút
+6.  ⏰ NÂNG MỨC P2→P1 — chờ 22 phút
+    ← 30 phút trôi qua, không ai phản hồi →
+7.  ⚠️ TỰ THI HÀNH DO HẾT THỜI CHỜ — Restart service-thanh-toan
+    ← Chờ 5 phút →
+8.  ⚠️ CHƯA ĐỠ — metric vẫn vượt ngưỡng
+9.  🔁 ROLLBACK DỰ PHÒNG — Restart không ăn, rollback v1.4.1
+    ← Chờ 5 phút →
+10. 📈 ĐÃ HỒI PHỤC — metric về baseline
+```
+
+> **Điểm then chốt:** Tất cả comment trên đều do **AI Agent tự viết** — con người chỉ cần đọc và bấm duyệt (hoặc để Agent tự xử lý nếu vắng mặt), không cần tự ghi chép gì.
 
 ---
 
@@ -613,20 +763,20 @@ Chặng Jira → backend **thiết kế** để chạy tự động bằng 2 Aut
 
 ## ⚠️ Khoảng cách giữa THIẾT KẾ và HIỆN TRẠNG
 
-Tài liệu này mô tả pipeline **như thiết kế**. Ba chỗ hiện chưa khớp — ghi ra đây
-để người đọc không nhầm, và để người trình bày nói chủ động thay vì bị hỏi vặn.
+Tài liệu này mô tả pipeline **như thiết kế**. Dưới đây là các chỗ đã khớp và chưa
+khớp — ghi ra đây để người đọc không nhầm, và để người trình bày nói chủ động
+thay vì bị hỏi vặn.
 
-| Chỗ | Thiết kế | Hiện trạng 13/08/2026 |
+| Chỗ | Thiết kế | Hiện trạng 18/08/2026 |
 |---|---|---|
 | **Thi hành khắc phục** | đổi phiên bản / scale service thật | **UC-4 chạy THẬT** từ 15/08 (`REMEDIATION_REAL=1`) — đo được lỗi 100% → 0%. Ba hành động còn lại vẫn mô phỏng |
 | **Jira Automation Rule** | 2 rule tự gọi webhook | Rule #1 (`Remediating`) **đã chạy** từ 15/08. Rule #2 (`Resolved`) chưa cấu hình |
-| **Xác nhận đã hồi phục** | đo lại sau khi sửa, đóng vòng | **Chưa có node `verify`** — không ai kiểm hành động khắc phục có tác dụng không |
+| ~~Xác nhận đã hồi phục~~ | ~~đo lại sau khi sửa, đóng vòng~~ | ✅ **ĐÃ CÓ** từ 18/08 — node `verify` đo lại bằng chính PromQL đã phát hiện sự cố. Chờ 5 phút cho cửa sổ PromQL sạch rồi kết luận |
+| ~~Auto-remediation~~ | ~~Agent tự sửa khi vắng người~~ | ✅ **ĐÃ CÓ** từ 18/08 — 3 vế: tự thi hành sau 30p timeout, đo lại, rollback dự phòng. 616 test passed |
 
-Ba chỗ này nối liền nhau: phải có thi hành thật rồi mới `verify` được, và có
-`verify` thì vòng *sửa → đo → xác nhận khỏi* mới khép.
-
-Lý do dừng ở mô phỏng là **lựa chọn phạm vi**, không phải vì service demo không
-làm được — thực tế với UC-4 (deploy thiếu migration) thì "rollback" chính là tắt
-cờ `SIMULATE_MISSING_MIGRATION` rồi khởi động lại container, và hiệu ứng đo được
+Lý do dừng ở mô phỏng (cho `scale_up`, `increase_pool`, `rate_limit`) là **lựa
+chọn phạm vi**, không phải vì service demo không làm được — thực tế với UC-4
+(deploy thiếu migration) thì "rollback" chính là tắt cờ
+`SIMULATE_MISSING_MIGRATION` rồi khởi động lại container, và hiệu ứng đo được
 ngay: tỷ lệ lỗi 100% → 0%. Nhóm ưu tiên làm đúng phần chẩn đoán và cổng phê
 duyệt trước, vì đó là chỗ sai thì hỏng thật.

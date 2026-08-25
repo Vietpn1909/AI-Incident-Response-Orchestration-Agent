@@ -51,16 +51,26 @@ PALETTE: dict[str, str] = {
     "tin_hieu": "#6BB6C7",
 }
 
-#: Thẻ `<link>` Google Fonts. Ba họ chữ, mỗi họ một việc — serif cho tiêu đề,
+#: Dòng `@import` Google Fonts. Ba họ chữ, mỗi họ một việc — serif cho tiêu đề,
 #: sans cho thân, mono cho code và nhãn kỹ thuật.
-FONTS_LINK = (
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?'
+#:
+#: ⚠️ Phải là `@import` chứ không phải `<link>`. Cả hai trang đều nhúng qua
+#: `st.iframe` (srcdoc), và `<link>` bên trong srcdoc hay bị sandbox/CSP chặn
+#: không tải được font. `@import` nằm trong `<style>` nên không bị chặn.
+_FONTS_URL = (
+    "https://fonts.googleapis.com/css2?"
     "family=Inter:wght@400;500;600;700&"
     "family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;"
     "1,6..72,300;1,6..72,400&"
-    'family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">'
+    "family=JetBrains+Mono:wght@400;500&display=swap"
+)
+FONTS_IMPORT = f"@import url('{_FONTS_URL}');\n"
+
+#: Giữ lại cho chỗ nào chưa đổi — nhưng khuyến khích dùng FONTS_IMPORT.
+FONTS_LINK = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    f'<link href="{_FONTS_URL}" rel="stylesheet">'
 )
 
 #: Biến màu hai theme. Dark là mặc định, light nằm dưới `[data-theme="light"]`.
@@ -107,8 +117,8 @@ TOKENS_CSS = """
   --code-p: #8593A6;
 
   --font-display: 'Newsreader', Georgia, serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --font-body: 'Inter', 'Segoe UI', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SF Mono', 'Consolas', monospace;
 }
 
 /* ═══════════════ LIGHT THEME ═══════════════ */
@@ -373,7 +383,8 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
   height: 100%; overflow: hidden; background: #0A0D12;
 }
 [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"],
-[data-testid="stStatusWidget"], [data-testid="stSidebarCollapsedControl"], footer {
+[data-testid="stStatusWidget"], [data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebar"], footer {
   display: none !important;
 }
 .block-container, [data-testid="stMainBlockContainer"], [data-testid="stAppViewBlockContainer"] {

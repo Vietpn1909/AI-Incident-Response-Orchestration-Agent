@@ -32,9 +32,11 @@ services:
       - key: LOG_LEVEL
         value: INFO
 
-      # CORS: thêm domain Streamlit vào khi Long deploy UI.
+      # CORS phải có domain UI, không thì trang trên Render gọi API bị chặn và
+      # war room trắng trơn mà không có lỗi nào ở backend.
+      # Tên miền suy ra từ `name` của service dưới: <name>.onrender.com
       - key: CORS_ORIGINS
-        value: http://localhost:8501
+        value: http://localhost:8501,https://p-035-war-room.onrender.com
 
       # LLM — dùng langchain-openai cho provider tương thích OpenAI.
       # Đội dùng Alibaba Cloud Model Studio vì có quota miễn phí.
@@ -84,3 +86,44 @@ services:
       # ngoài gọi được endpoint remediation. Render tự sinh giá trị random.
       - key: JIRA_WEBHOOK_SECRET
         generateValue: true
+
+  # ── Trang UI: status page (công khai) + war room, một app Streamlit multi-page
+  #
+  # Từ 22/08 hai trang nằm trong MỘT service: điểm khởi động là
+  # `ui/status_page.py`, còn war room ở `ui/pages/war_room.py` được phục vụ tại
+  # `/war_room`. Xem `ui/README.md`.
+  - type: web
+    name: p-035-war-room
+    runtime: docker
+    dockerfilePath: ./Dockerfile.ui
+    plan: free
+    region: singapore # cùng region với backend
+    branch: develop
+    autoDeploy: true
+
+    # Endpoint sức khoẻ có sẵn của Streamlit. Không khai thì Render dùng `/`, mà
+    # `/` trả 200 kể cả khi app chưa dựng xong — health check mất ý nghĩa.
+    healthCheckPath: /_stcore/health
+
+    envVars:
+      # ⚠️ BẮT BUỘC. Thiếu nó thì `ui/` đọc mặc định trong code, và trang sẽ hiện
+      # dữ liệu của môi trường khác. Đã vấp ngày 21/08 khi chạy local.
+      - key: API_URL
+        value: https://p-035-incident-agent.onrender.com
+
+      # Thiếu biến này thì nút "Mở phiếu Jira" bị khoá — đã vấp 21/08.
+      - key: JIRA_BASE_URL
+        value: https://jibinarybro.atlassian.net
+
+      # ⚠️ CỐ Ý KHÔNG khai `PROM_URL`.
+      #
+      # Prometheus chỉ chạy trong Docker Compose trên máy người demo, không có
+      # địa chỉ công khai. Khai một URL sai thì tệ hơn để trống: nút "kiểm chứng
+      # PromQL" sẽ trỏ vào chỗ không tồn tại, và ô "Ảnh hưởng" trả về "không có
+      # dữ liệu" mà người xem tưởng hệ thống hỏng.
+      #
+      # Để trống thì `ui/` tự lùi về mặc định localhost — sai nhưng KHÔNG gây
+      # hiểu nhầm cho người ngoài, vì họ không bấm được vào máy người khác.
+      #
+      # Hệ quả: bản UI trên Render KÉM HƠN bản chạy máy. Demo nên dùng bản máy;
+      # bản Render để BTC tự vào xem sau.

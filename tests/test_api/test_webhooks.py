@@ -5,7 +5,9 @@ ba lớp bảo vệ. `test_agent_tu_duyet_bi_tu_choi_qua_webhook` là test tươ
 với ràng buộc bắt buộc của đề bài, ở tầng HTTP.
 """
 
+import os
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -165,6 +167,51 @@ def test_hanh_dong_khong_duoc_phep_thi_400(jira: FakeJiraClient):
 
     assert response.status_code == 400
     assert "không được phép" in response.json()["detail"]
+
+
+# ------------------------------------------------------- nhãn ai đã khắc phục
+
+
+def test_duyet_qua_webhook_thi_gan_nhan_nguoi(jira: FakeJiraClient, incident_key: str):
+    """Khắc phục qua webhook = có người duyệt → nhãn NGƯỜI, không phải Agent.
+
+    Nhãn là thứ duy nhất **đếm được bằng JQL**; comment war room đọc bằng mắt
+    thì rõ nhưng không truy vấn được. Thiếu lời gọi ở đây là thủng dữ liệu, vì
+    webhook là một trong ba đường thi hành thật.
+    """
+    from src.services.jira.mapping import FIXED_BY_AGENT_LABEL, FIXED_BY_HUMAN_LABEL
+
+    jira.approve_as_human(incident_key)
+
+    assert _post({"issue": {"key": incident_key}}).status_code == 200
+
+    nhan = jira.get_labels(incident_key)
+    assert FIXED_BY_HUMAN_LABEL in nhan
+    assert FIXED_BY_AGENT_LABEL not in nhan
+    # Nhãn cũ còn nguyên — issue không được rơi khỏi JQL tìm war room.
+    assert "incident" in nhan
+    assert "severity-P2" in nhan
+
+
+def test_loi_jira_luc_gan_nhan_khong_pha_webhook(
+    jira: FakeJiraClient, incident_key: str, monkeypatch: pytest.MonkeyPatch
+):
+    """Jira ném lỗi lúc gắn nhãn → nuốt, webhook vẫn trả 200.
+
+    Ném ra đây là HTTP 5xx, mà Jira Automation thấy 5xx thì gọi lại webhook —
+    tức thi hành remediation lần hai. Đổi một dòng thống kê lấy một lần
+    remediation trùng là đánh đổi sai.
+    """
+    def hong(jira_key: str, label: str) -> None:
+        raise JiraApiError("PUT /issue → HTTP 429", status_code=429)
+
+    monkeypatch.setattr(jira, "add_label", hong)
+    jira.approve_as_human(incident_key)
+
+    response = _post({"issue": {"key": incident_key}})
+
+    assert response.status_code == 200
+    assert response.json()["succeeded"] is True
 
 
 # -------------------------------------------------------------- parse payload
@@ -564,3 +611,44 @@ def test_resolved_skip_khi_da_co_postmortem(jira_with_smtp: FakeJiraClient):
     assert body["resolution"] == "already_handled"
     assert body["postmortem_sent"] is False
 
+
+
+def test_health_bao_commit_dang_chay():
+    """`/health` phải nói đang chạy commit nào, không chỉ "ok".
+
+    Trước 22/08 nó chỉ trả `status` + `env`, nên câu "Render đã deploy commit mới
+    chưa" không ai trả lời được từ bên ngoài — phải mở dashboard. Và
+    `docs/START-HERE.md` đã ghi sẵn một cạm bẫy có thật: merge PR trên web thì repo
+    mirror tụt lại, Render chạy code cũ, mà dashboard vẫn báo deploy thành công.
+
+    `RENDER_GIT_COMMIT` do Render tự bơm. Ngoài Render thì trả `"local"` — nói thật
+    là không biết, hơn là đọc `git` lúc chạy rồi báo commit của thư mục làm việc
+    chứ không phải của bản đã build.
+    """
+    from fastapi.testclient import TestClient
+
+    from src.main import app
+
+    with patch.dict(
+        os.environ, {"RENDER_GIT_COMMIT": "abc1234def5678", "RENDER_GIT_BRANCH": "develop"}
+    ):
+        body = TestClient(app).get("/health").json()
+
+    assert body["status"] == "ok"
+    assert body["commit"] == "abc1234", "phải rút ngắn còn 7 ký tự như git short sha"
+    assert body["branch"] == "develop"
+
+
+def test_health_ngoai_render_khong_bao_commit_gia():
+    """Không có `RENDER_GIT_COMMIT` thì trả "local", không đoán."""
+    from fastapi.testclient import TestClient
+
+    from src.main import app
+
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("RENDER_GIT_COMMIT", None)
+        os.environ.pop("RENDER_GIT_BRANCH", None)
+        body = TestClient(app).get("/health").json()
+
+    assert body["commit"] == "local"
+    assert body["branch"] == "local"

@@ -85,14 +85,55 @@ def test_parse_and_filter_ignores_info_without_pattern():
 
 @patch("subprocess.run")
 def test_collect_container_logs_success(mock_run):
+    # stdout mô phỏng ĐÚNG dạng `docker logs --timestamps` trả về: mốc của
+    # Docker (UTC) đứng trước, rồi mới tới dòng log của ứng dụng. Cửa sổ lọc so
+    # với mốc ĐẦU DÒNG — xem `_trong_cua_so()`.
     mock_run.return_value = MagicMock(
         returncode=0,
-        stdout="2026-08-10T22:30:01 [ERROR] service-thanh-toan: asyncpg.TooManyConnectionsError pool_size=5\n",
+        stdout=(
+            "2026-08-10T10:05:00.123456789Z "
+            "2026-08-10T17:05:00 [ERROR] service-thanh-toan: "
+            "asyncpg.TooManyConnectionsError pool_size=5\n"
+        ),
         stderr="",
     )
     logs = collect_container_logs("service-thanh-toan", "2026-08-10T10:03:00Z", "2026-08-10T10:07:00Z")
     assert len(logs) == 1
     assert logs[0].pattern == "DB_EXCEPTION"
+
+
+@patch("subprocess.run")
+def test_collect_container_logs_khong_dung_since_until(mock_run):
+    """Không được truyền `--since`/`--until` cho `docker logs`.
+
+    Chúng im lặng trả rỗng khi Docker Desktop lệch giờ, mà rỗng ở đây bị hiểu
+    thành "log sạch" — một bằng chứng SAI hiện thẳng lên war room. Đo ngày
+    23/08: `--since 10m` trả 0 dòng trong khi container vẫn đang ghi log.
+    """
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    collect_container_logs("service-thanh-toan", "2026-08-10T10:03:00Z", "2026-08-10T10:07:00Z")
+    cmd = mock_run.call_args[0][0]
+    assert "--since" not in cmd
+    assert "--until" not in cmd
+    assert "--timestamps" in cmd
+
+
+@patch("subprocess.run")
+def test_collect_container_logs_loc_dong_ngoai_cua_so(mock_run):
+    """Dòng nằm ngoài cửa sổ bị loại, dòng trong cửa sổ được giữ."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=(
+            "2026-08-10T09:00:00.000000000Z [ERROR] cu: qua som\n"
+            "2026-08-10T10:05:00.000000000Z [ERROR] service-thanh-toan: "
+            "asyncpg.TooManyConnectionsError pool_size=5\n"
+            "2026-08-10T23:00:00.000000000Z [ERROR] moi: qua muon\n"
+        ),
+        stderr="",
+    )
+    logs = collect_container_logs("service-thanh-toan", "2026-08-10T10:03:00Z", "2026-08-10T10:07:00Z")
+    assert len(logs) == 1
+    assert "TooManyConnectionsError" in logs[0].message
 
 
 @patch("subprocess.run")
@@ -103,7 +144,11 @@ def test_collect_logs_for_service_tries_candidates(mock_run):
         if container == "p035-demo-service-thanh-toan-1":
             return MagicMock(
                 returncode=0,
-                stdout="2026-08-10T22:30:01 [ERROR] service-thanh-toan: login failed status=401 source_ip=1.2.3.4\n",
+                stdout=(
+                    "2026-08-10T10:05:01.000000000Z "
+                    "2026-08-10T17:05:01 [ERROR] service-thanh-toan: "
+                    "login failed status=401 source_ip=1.2.3.4\n"
+                ),
                 stderr="",
             )
         return MagicMock(returncode=1, stdout="", stderr="No such container")

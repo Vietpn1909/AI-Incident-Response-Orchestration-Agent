@@ -43,6 +43,10 @@ def get_llm() -> ChatOpenAI:
         "model": settings.model_name,
         "api_key": settings.openai_api_key,
         "temperature": settings.llm_temperature,
+        # ⚠️ Phải đặt tường minh — xem `Settings.llm_max_tokens`. Bỏ trống là
+        # nhà cung cấp giữ chỗ theo trần tối đa của model rồi từ chối cả request
+        # khi tài khoản gần cạn tiền, dù câu trả lời thật rất ngắn.
+        "max_tokens": settings.llm_max_tokens,
     }
     # Trống thì để LangChain dùng endpoint mặc định của OpenAI.
     if settings.llm_base_url:

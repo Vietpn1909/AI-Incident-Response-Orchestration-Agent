@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Chỉ cài deps cho UI
+COPY ui/requirements.txt /app/ui/requirements.txt
+RUN pip install --no-cache-dir -r ui/requirements.txt
+
+# Copy đúng thư mục UI
+COPY ui/ /app/ui/
+COPY .streamlit/ /app/.streamlit/
+
+EXPOSE 8501
+
+# ⚠️ SHELL FORM, không phải JSON array — để `$PORT` được expand.
+#
+# Render tự đặt `$PORT` và **chỉ nhận** service nào lắng nghe đúng cổng đó. Dạng
+# exec form (JSON array) truyền nguyên chuỗi `"$PORT"` cho Streamlit, container
+# không bind được, và Render báo "no open ports detected" TRONG KHI log Streamlit
+# vẫn nói "You can now view your Streamlit app" — nên rất dễ tưởng app đã chạy.
+#
+# Đây là đúng cái bẫy `Dockerfile` của backend đã vấp và ghi lại. Chạy local thì
+# không có `$PORT`, nên mặc định 8501.
+#
+# `exec` để Streamlit thay thế shell, nhờ đó nhận SIGTERM và tắt gọn.
+CMD exec streamlit run ui/status_page.py \
+     --server.port="${PORT:-8501}" \
+     --server.address=0.0.0.0 \
+     --server.headless=true \
+     --browser.gatherUsageStats=false

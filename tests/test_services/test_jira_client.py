@@ -56,6 +56,59 @@ def test_fake_client_thoa_man_protocol(client: FakeJiraClient):
     assert isinstance(client, JiraClient)
 
 
+def test_fake_client_co_add_label(client: FakeJiraClient):
+    """`add_label()` thêm 18/08 phải có ở CẢ HAI bản cài đặt.
+
+    `isinstance` với Protocol chỉ kiểm tên method có tồn tại, nên nêu thẳng tên
+    ở đây: thiếu nó ở `RealJiraClient` thì lỗi chỉ lộ ra lúc chạy Jira thật —
+    tức đúng lúc vừa khắc phục xong một sự cố thật.
+    """
+    from src.services.jira import RealJiraClient
+
+    assert callable(client.add_label)
+    assert callable(RealJiraClient.add_label)
+
+
+def test_gan_nhan_giu_nguyen_nhan_khoi_tao(client: FakeJiraClient, signal: IncidentSignal):
+    """Gắn nhãn mới không được làm mất bộ nhãn gắn lúc mở war room.
+
+    Kiểm qua bản giả chứ không chỉ qua `merge_label()`: chỗ dễ sai là **người
+    gọi** — gửi thẳng `["fixed-by-agent"]` cho Jira. Bản giả seed nhãn y như bản
+    thật nên nó bắt được lỗi đó.
+    """
+    from src.services.jira.mapping import FIXED_BY_AGENT_LABEL, labels_for
+
+    jira_key = client.create_incident(signal)
+    assert client.get_labels(jira_key) == labels_for(Severity.P2, "service-thanh-toan")
+
+    client.add_label(jira_key, FIXED_BY_AGENT_LABEL)
+    client.add_label(jira_key, FIXED_BY_AGENT_LABEL)
+
+    nhan = client.get_labels(jira_key)
+    assert nhan.count(FIXED_BY_AGENT_LABEL) == 1
+    assert "incident" in nhan
+    assert "severity-P2" in nhan
+    assert "service-service-thanh-toan" in nhan
+
+
+def test_nang_muc_thi_nhan_severity_di_theo(client: FakeJiraClient, signal: IncidentSignal):
+    """Nâng mức phải đổi cả nhãn — bản thật làm trong cùng một lần PUT.
+
+    Không có bước này thì bản giả tự mâu thuẫn: `incident.severity` là P1 còn
+    nhãn vẫn `severity-P2`, và test nào đọc nhãn sẽ tin vào mức cũ.
+    """
+    from src.services.jira.mapping import FIXED_BY_HUMAN_LABEL, severity_from_labels
+
+    jira_key = client.create_incident(signal)
+    client.add_label(jira_key, FIXED_BY_HUMAN_LABEL)
+
+    client.set_severity(jira_key, Severity.P1)
+
+    nhan = client.get_labels(jira_key)
+    assert severity_from_labels(nhan) is Severity.P1
+    assert FIXED_BY_HUMAN_LABEL in nhan  # nhãn khác không bị cuốn theo
+
+
 def test_create_incident_mo_war_room(client: FakeJiraClient, signal: IncidentSignal):
     jira_key = client.create_incident(signal)
 

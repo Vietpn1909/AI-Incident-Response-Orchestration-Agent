@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binary Brothers · P-035</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   Bố cục theo presentation-polished.html: khung 16:9 cố định, slide
+   chồng nhau và hiện bằng .active, thanh điều khiển nằm dưới khung.
+   Khác một điểm: bảng màu là NỀN TRẮNG.
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --page-bg:#EDF1F7;
+  --deck-bg:#FFFFFF;
+  --card-bg:#F7F9FC;
+  --card-bg-2:#FFFFFF;
+  --border-color:#E3E9F0;
+  --border-strong:#CFD8E3;
+  --text-main:#0F172A;
+  --text-mid:#334155;
+  --text-muted:#64748B;
+
+  --accent:#0E7490;          /* teal đậm — đọc được trên nền trắng */
+  --accent-soft:rgba(14,116,144,.07);
+  --accent-line:rgba(14,116,144,.28);
+  --rose:#DC2626;
+  --rose-soft:rgba(220,38,38,.06);
+  --emerald:#047857;
+  --emerald-soft:rgba(4,120,87,.07);
+  --amber:#B45309;
+  --purple:#6D28D9;
+
+  --shadow-card:0 1px 2px rgba(15,23,42,.04), 0 6px 16px -10px rgba(15,23,42,.10);
+  --shadow-deck:0 24px 60px -22px rgba(15,23,42,.28), 0 2px 8px rgba(15,23,42,.06);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--page-bg);
+  color:var(--text-main);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100svh;padding:16px;
+  -webkit-font-smoothing:antialiased;
+}
+
+.deck-container{
+  width:min(1280px, calc(100vw - 32px), calc((100svh - 104px) * 16 / 9));
+  aspect-ratio:16 / 9;
+  background:var(--deck-bg);
+  border:1px solid var(--border-color);
+  border-radius:18px;
+  box-shadow:var(--shadow-deck);
+  position:relative;overflow:hidden;
+  container-type:size;
+}
+
+.slide{
+  position:absolute;inset:0;
+  padding:38px 46px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:14px;
+  opacity:0;visibility:hidden;transform:scale(.985);
+  transition:opacity .35s ease, transform .35s ease;
+}
+.slide.active{opacity:1;visibility:visible;transform:scale(1)}
+
+/* Khối thân bài giãn lấp chiều cao còn lại — nếu không, space-between đẩy
+   các khối ra hai đầu và giữa slide hở một mảng trắng lớn.
+   Dòng chốt, hàng nhãn và hộp liên hệ thì giữ nguyên chiều cao thật. */
+.slide:not(.center) > .grid-2,
+.slide:not(.center) > .grid-3,
+.slide:not(.center) > .grid-4,
+.slide:not(.center) > .process-flow{flex:1 1 auto}
+.slide.center{justify-content:center;gap:26px}
+/* Khối giãn ra để chiếm chỗ, nhưng THẺ bên trong giữ chiều cao thật và nằm
+   giữa vùng đó — nếu để lưới stretch, thẻ bị kéo cao gấp bốn lần nội dung. */
+.slide .grid-2,.slide .grid-3,.slide .grid-4,.slide .process-flow{align-content:center}
+@media (prefers-reduced-motion:reduce){.slide,.glass-card,.btn-nav{transition:none!important}}
+
+/* ── đầu slide ───────────────────────────────────────────────────── */
+.tag-line{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:12px;font-size:.95cqw;
+  font-weight:700;letter-spacing:2.2px;text-transform:uppercase;
+  color:var(--accent);display:flex;align-items:center;gap:8px;margin-bottom:7px;
+}
+.tag-line::before{
+  content:'';width:7px;height:7px;border-radius:50%;
+  background:var(--accent);flex:none;
+}
+.slide-title{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:30px;font-size:2.45cqw;
+  font-weight:700;line-height:1.24;letter-spacing:-.4px;
+  color:var(--text-main);text-wrap:balance;max-width:26ch;
+}
+.slide-subtitle{
+  font-size:13px;font-size:1.02cqw;
+  font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  color:var(--text-muted);margin-top:8px;
+}
+
+/* ── thẻ ─────────────────────────────────────────────────────────── */
+.glass-card{
+  background:var(--card-bg);
+  border:1px solid var(--border-color);
+  border-radius:13px;padding:19px 20px;
+  box-shadow:var(--shadow-card);
+  transition:border-color .25s ease, box-shadow .25s ease;
+  display:flex;flex-direction:column;gap:5px;
+}
+.glass-card:hover{border-color:var(--accent-line);box-shadow:0 8px 22px -12px rgba(14,116,144,.35)}
+/* Thẻ trong hàng ba/hàng bốn cần đủ dày, không thì trông như dòng chữ có viền */
+.grid-3 > .glass-card,.grid-4 > .glass-card{min-height:138px}
+.glass-card.rose{border-top:3px solid var(--rose)}
+.glass-card.teal{border-top:3px solid var(--accent)}
+.glass-card.emerald{border-top:3px solid var(--emerald)}
+.glass-card.purple{border-top:3px solid var(--purple)}
+
+.step-num{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:13px;font-size:1.02cqw;font-weight:700;color:var(--accent);
+}
+.feature-title{font-size:16px;font-size:1.34cqw;font-weight:800;color:var(--text-main);line-height:1.3}
+.feature-desc{font-size:13.5px;font-size:1.12cqw;color:var(--text-muted);line-height:1.5}
+.feature-desc b{color:var(--text-mid);font-weight:700}
+
+/* ── lưới ────────────────────────────────────────────────────────── */
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+
+/* ── chuỗi bước ──────────────────────────────────────────────────── */
+.process-flow{display:grid;gap:11px}
+.process-flow.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.process-flow.five{grid-template-columns:repeat(5,minmax(0,1fr))}
+.process-card{
+  background:var(--card-bg);border:1px solid var(--border-color);
+  border-radius:12px;padding:16px 15px;position:relative;min-height:150px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:7px;
+  box-shadow:var(--shadow-card);
+}
+.process-card.bottleneck{border-color:rgba(220,38,38,.35);background:var(--rose-soft)}
+.process-card.gate{border-color:var(--rose);background:var(--rose-soft);box-shadow:0 8px 22px -14px rgba(220,38,38,.5)}
+.badge-bottleneck{
+  position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  background:var(--rose);color:#fff;white-space:nowrap;
+  font-size:9.5px;font-size:.72cqw;font-weight:800;letter-spacing:.8px;
+  padding:2px 8px;border-radius:20px;
+}
+.step-title{font-size:14.5px;font-size:1.2cqw;font-weight:700;color:var(--text-main);line-height:1.32}
+.step-meta{font-size:12.5px;font-size:1cqw;font-weight:700;color:var(--text-muted)}
+.process-card.bottleneck .step-meta,.process-card.gate .step-meta{color:var(--rose)}
+
+/* ── số liệu ─────────────────────────────────────────────────────── */
+.stat-card{
+  background:var(--card-bg);border:1px solid var(--border-color);
+  border-left:4px solid var(--accent);
+  border-radius:12px;padding:17px 19px;min-height:118px;
+  display:flex;flex-direction:column;justify-content:center;gap:5px;
+  box-shadow:var(--shadow-card);
+}
+.stat-card.rose{border-left-color:var(--rose)}
+.stat-card.rose .stat-num{color:var(--rose)}
+.stat-card.emerald{border-left-color:var(--emerald)}
+.stat-card.emerald .stat-num{color:var(--emerald)}
+.stat-card.amber{border-left-color:var(--amber)}
+.stat-card.amber .stat-num{color:var(--amber)}
+.stat-num{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:36px;font-size:3cqw;font-weight:700;line-height:1.06;
+  color:var(--accent);letter-spacing:-.5px;font-variant-numeric:tabular-nums;
+}
+.stat-desc{font-size:12.5px;font-size:1.02cqw;font-weight:600;color:var(--text-muted);line-height:1.45}
+
+/* ── dòng chốt cuối slide ────────────────────────────────────────── */
+.callout-bar{
+  border-left:4px solid var(--accent);
+  background:var(--accent-soft);
+  padding:11px 16px;border-radius:0 9px 9px 0;
+  font-size:14.5px;font-size:1.18cqw;font-weight:600;line-height:1.45;
+  color:var(--text-mid);
+}
+.callout-bar span{color:var(--accent);font-weight:800}
+.callout-bar.danger{border-left-color:var(--rose);background:var(--rose-soft)}
+.callout-bar.danger span{color:var(--rose)}
+
+/* ── nhãn nhỏ ────────────────────────────────────────────────────── */
+.badges{display:flex;flex-wrap:wrap;gap:6px}
+.mini-badge{
+  font-size:11.5px;font-size:.94cqw;font-weight:700;
+  padding:3px 9px;border-radius:20px;
+  background:var(--card-bg);border:1px solid var(--border-strong);color:var(--text-muted);
+}
+.mini-badge.teal{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.mini-badge.rose{background:var(--rose-soft);border-color:rgba(220,38,38,.3);color:var(--rose)}
+.mini-badge.emerald{background:var(--emerald-soft);border-color:rgba(4,120,87,.3);color:var(--emerald)}
+
+code{
+  font-family:'Space Grotesk',ui-monospace,monospace;
+  font-size:.94em;font-weight:600;color:var(--accent);
+  background:var(--accent-soft);padding:1px 5px;border-radius:4px;
+}
+
+.contact-box{
+  background:var(--card-bg);border:1px solid var(--accent-line);
+  border-radius:13px;padding:13px 17px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+}
+.contact-box .who{font-size:13px;font-size:1.02cqw;font-weight:800;color:var(--text-main)}
+.contact-box .link{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:11.5px;font-size:.92cqw;font-weight:600;color:var(--accent);
+}
+
+/* ── thanh điều khiển ────────────────────────────────────────────── */
+.deck-controls{
+  width:min(1280px, calc(100vw - 32px), calc((100svh - 104px) * 16 / 9));
+  margin-top:13px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  color:var(--text-muted);font-size:13px;
+}
+.deck-controls .tip{font-weight:500}
+.deck-controls .right{display:flex;align-items:center;gap:18px}
+#slideIndicator{font-weight:800;color:var(--accent);font-family:'Space Grotesk',sans-serif}
+.nav-buttons{display:flex;gap:10px}
+.btn-nav{
+  font-family:inherit;font-weight:700;font-size:13px;
+  background:#FFFFFF;color:var(--text-main);
+  border:1px solid var(--border-strong);
+  padding:9px 18px;border-radius:9px;cursor:pointer;
+  transition:background .2s ease, color .2s ease, border-color .2s ease;
+}
+.btn-nav:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-nav:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn-nav:disabled{opacity:.35;cursor:not-allowed}
+.btn-nav:disabled:hover{background:#fff;color:var(--text-main);border-color:var(--border-strong)}
+
+/* ── màn hẹp ─────────────────────────────────────────────────────── */
+@media(max-width:820px){
+  body{padding:0;justify-content:flex-start}
+  .deck-container{
+    width:100%;height:calc(100svh - 84px);aspect-ratio:auto;
+    border:0;border-radius:0;box-shadow:none;
+  }
+  .slide{padding:24px 20px 30px;overflow-y:auto;justify-content:flex-start;gap:16px}
+  .slide-title{font-size:24px;max-width:none}
+  .tag-line,.slide-subtitle,.feature-desc,.callout-bar,.step-title,.stat-desc{font-size:13px}
+  .stat-num{font-size:26px}
+  .feature-title{font-size:15px}
+  .grid-2,.grid-3,.grid-4,.process-flow.four,.process-flow.five{grid-template-columns:1fr}
+  .deck-controls{width:100%;margin:0;height:84px;padding:0 14px;background:#fff;border-top:1px solid var(--border-color)}
+  .deck-controls .tip{display:none}
+  .deck-controls .right{width:100%;justify-content:space-between}
+}
+
+/* ── in / xuất PDF ───────────────────────────────────────────────── */
+@media print{
+  @page{size:landscape;margin:0}
+  body{display:block;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .deck-container{
+    width:100%;height:auto;aspect-ratio:auto;border:0;border-radius:0;
+    box-shadow:none;overflow:visible;container-type:normal;
+  }
+  .slide{
+    position:relative;inset:auto;
+    width:100%;height:99vh;padding:30px 42px;
+    opacity:1!important;visibility:visible!important;transform:none!important;
+    break-before:page;break-inside:avoid;overflow:hidden;
+  }
+  .slide:first-of-type{break-before:auto}
+  .deck-controls{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="deck-container" id="slideDeck">
+
+  <!-- ══════════ 01 · TITLE ══════════ -->
+  <div class="slide center active">
+    <div>
+      <div class="tag-line">Binary Brothers · PTNT-20 · Demo Day</div>
+      <h1 class="slide-title" style="font-size:2.7cqw;max-width:22ch">AI Agent Điều Phối Ứng Phó Sự Cố</h1>
+      <div class="slide-subtitle">Tự phát hiện · Chẩn đoán có bằng chứng · Người quyết định</div>
+    </div>
+
+    <div class="grid-4">
+      <div class="glass-card"><div class="step-num">01</div><div class="feature-title">Thái Đức</div><div class="feature-desc">Team Lead · Kiến trúc &amp; Tích hợp</div></div>
+      <div class="glass-card"><div class="step-num">02</div><div class="feature-title">Việt</div><div class="feature-desc">AI Agent Engineer</div></div>
+      <div class="glass-card"><div class="step-num">03</div><div class="feature-title">Trung</div><div class="feature-desc">Backend Engineer · QA</div></div>
+      <div class="glass-card"><div class="step-num">04</div><div class="feature-title">Hoàng Long</div><div class="feature-desc">Frontend · Demo</div></div>
+    </div>
+
+    <div class="callout-bar">
+      Đang chạy thật: <span>p-035-incident-agent.onrender.com</span>
+    </div>
+  </div>
+
+  <!-- ══════════ 02 · VẤN ĐỀ ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Vấn đề</div>
+      <h1 class="slide-title">Người trực không thiếu kỹ năng sửa. Họ thiếu bối cảnh lúc 2 giờ sáng.</h1>
+      <div class="slide-subtitle">Bốn việc đang làm bằng tay</div>
+    </div>
+
+    <div class="process-flow four">
+      <div class="process-card">
+        <div><div class="step-num">01</div><div class="step-title">Gọi người vào war room</div></div>
+        <div class="step-meta">Thủ công</div>
+      </div>
+      <div class="process-card bottleneck">
+        <div class="badge-bottleneck">NGHẼN</div>
+        <div><div class="step-num">02</div><div class="step-title">Dò log từng service</div></div>
+        <div class="step-meta">Tốn nhiều thời gian nhất</div>
+      </div>
+      <div class="process-card bottleneck">
+        <div class="badge-bottleneck">NGHẼN</div>
+        <div><div class="step-num">03</div><div class="step-title">Đoán nguyên nhân</div></div>
+        <div class="step-meta">Dựa vào trí nhớ</div>
+      </div>
+      <div class="process-card">
+        <div><div class="step-num">04</div><div class="step-title">Cập nhật trạng thái, viết postmortem</div></div>
+        <div class="step-meta">Hôm sau mới xong</div>
+      </div>
+    </div>
+
+    <div class="callout-bar">
+      Phần lớn thời gian đầu của sự cố dành cho <span>thu thập bối cảnh</span>, không phải khắc phục.
+    </div>
+  </div>
+
+  <!-- ══════════ 03 · KHOẢNG TRỐNG ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Khoảng trống</div>
+      <h1 class="slide-title">Monitor chỉ trả lời được “có gì đó sai”</h1>
+      <div class="slide-subtitle">Sự cố thật: deploy v1.4.3 quên chạy migration</div>
+    </div>
+
+    <div class="grid-3">
+      <div class="stat-card rose">
+        <div class="stat-num">100%</div>
+        <div class="stat-desc">request lỗi — không một giao dịch nào thành công</div>
+      </div>
+      <div class="stat-card emerald">
+        <div class="stat-num">0,048s</div>
+        <div class="stat-desc">p95 latency — nhanh hơn cả lúc bình thường</div>
+      </div>
+      <div class="stat-card emerald">
+        <div class="stat-num">0%</div>
+        <div class="stat-desc">connection pool — rảnh hoàn toàn</div>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="glass-card"><div class="feature-desc">Không tổng hợp bối cảnh xuyên service</div></div>
+      <div class="glass-card"><div class="feature-desc">Không nêu giả thuyết kèm bằng chứng</div></div>
+      <div class="glass-card"><div class="feature-desc">Không điều phối hành động</div></div>
+      <div class="glass-card"><div class="feature-desc">Không sinh postmortem</div></div>
+    </div>
+
+    <div class="callout-bar">
+      Hai trong ba chỉ số trông <span>đẹp hơn bình thường</span>. Đoán ra nguyên nhân từ đây là không thể.
+    </div>
+  </div>
+
+  <!-- ══════════ 04 · GIẢI PHÁP ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Giải pháp</div>
+      <h1 class="slide-title">Agent điều phối trọn vòng đời — với một chốt chặn ở giữa</h1>
+      <div class="slide-subtitle">Từ tín hiệu đến postmortem</div>
+    </div>
+
+    <div class="process-flow five">
+      <div class="process-card">
+        <div><div class="step-num">01</div><div class="step-title">Phát hiện qua PromQL</div></div>
+        <div class="step-meta">Vượt liên tục 30s</div>
+      </div>
+      <div class="process-card">
+        <div><div class="step-num">02</div><div class="step-title">Mở war room trên Jira</div></div>
+        <div class="step-meta">Issue + comment</div>
+      </div>
+      <div class="process-card">
+        <div><div class="step-num">03</div><div class="step-title">Chẩn đoán có bằng chứng</div></div>
+        <div class="step-meta">Kèm runbook</div>
+      </div>
+      <div class="process-card gate">
+        <div class="badge-bottleneck">HITL</div>
+        <div><div class="step-num">04</div><div class="step-title">Dừng, chờ người duyệt</div></div>
+        <div class="step-meta">Không có đường đi tiếp</div>
+      </div>
+      <div class="process-card">
+        <div><div class="step-num">05</div><div class="step-title">Sửa &amp; tự xác nhận đã khỏi</div></div>
+        <div class="step-meta">Rồi sinh postmortem</div>
+      </div>
+    </div>
+
+    <div class="callout-bar">
+      Graph LangGraph <span>dừng hẳn</span> ở <code>await_approval</code> — không có edge nào tự động đi tiếp.
+    </div>
+  </div>
+
+  <!-- ══════════ 05 · SẢN PHẨM ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Sản phẩm</div>
+      <h1 class="slide-title">War room: ba câu hỏi, đúng thứ tự người trực cần đọc</h1>
+      <div class="slide-subtitle">KAN-52 · P1 · service-thanh-toan · tin cậy 70%</div>
+    </div>
+
+    <div class="grid-3">
+      <div class="glass-card teal">
+        <div class="step-num">01</div>
+        <div class="feature-title">AI thấy gì</div>
+        <div class="feature-desc">Toàn bộ request thanh toán đang lỗi. Khách không hoàn tất được giao dịch nào.</div>
+      </div>
+      <div class="glass-card teal">
+        <div class="step-num">02</div>
+        <div class="feature-title">AI nghĩ vì sao</div>
+        <div class="feature-desc">Cột <code>idempotency_key</code> không tồn tại — deploy <code>v1.4.3</code> chưa chạy migration.</div>
+      </div>
+      <div class="glass-card teal">
+        <div class="step-num">03</div>
+        <div class="feature-title">AI đề nghị làm gì</div>
+        <div class="feature-desc">Rollback để khôi phục thanh toán, rồi chạy migration còn thiếu.</div>
+      </div>
+    </div>
+
+    <div class="callout-bar danger">
+      AI đã chẩn đoán xong và đề xuất cách sửa — <span>nhưng nó không tự thực hiện</span>.
+    </div>
+  </div>
+
+  <!-- ══════════ 06 · BẰNG CHỨNG ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Khác biệt 01 · Bằng chứng</div>
+      <h1 class="slide-title">Rule engine chạy trước. LLM chỉ được diễn giải.</h1>
+      <div class="slide-subtitle">Thứ tự này là toàn bộ khác biệt</div>
+    </div>
+
+    <div class="grid-3">
+      <div class="glass-card">
+        <div class="step-num">01</div>
+        <div class="feature-title">Số trước, câu sau</div>
+        <div class="feature-desc">Luật sinh ra con số. LLM nhận số đó rồi viết thành câu và chọn runbook.</div>
+      </div>
+      <div class="glass-card">
+        <div class="step-num">02</div>
+        <div class="feature-title">Mọi giả thuyết mang PromQL</div>
+        <div class="feature-desc">Trường <code>evidence[].promql</code> truy ngược được về một câu truy vấn cụ thể.</div>
+      </div>
+      <div class="glass-card">
+        <div class="step-num">03</div>
+        <div class="feature-title">Bấm là mở Prometheus</div>
+        <div class="feature-desc">Giao diện có nút kiểm chứng, mở ra đúng con số đang hiển thị.</div>
+      </div>
+    </div>
+
+    <div class="callout-bar">
+      Không con số nào trên màn hình mà <span>không bấm ra được nguồn gốc</span>.
+    </div>
+  </div>
+
+  <!-- ══════════ 07 · HITL ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Khác biệt 02 · Human-in-the-loop</div>
+      <h1 class="slide-title">Agent không tự duyệt được — không phải vì bị dặn, mà vì nó không làm được</h1>
+      <div class="slide-subtitle">Ba tầng chặn, không phải một dòng ghi chú</div>
+    </div>
+
+    <div class="grid-3">
+      <div class="glass-card rose">
+        <div class="step-num">Tầng 1</div>
+        <div class="feature-title">Không có cửa</div>
+        <div class="feature-desc"><code>JiraClient</code> không có method nào duyệt incident.</div>
+      </div>
+      <div class="glass-card rose">
+        <div class="step-num">Tầng 2</div>
+        <div class="feature-title">Kiểm danh tính</div>
+        <div class="feature-desc">Đọc changelog Jira. Người duyệt là Agent → <code>ApprovalError</code>.</div>
+      </div>
+      <div class="glass-card rose">
+        <div class="step-num">Tầng 3</div>
+        <div class="feature-title">Không đi vòng được</div>
+        <div class="feature-desc">Mọi đường thi hành đều qua cổng đó. Xoá lời gọi → CI đỏ.</div>
+      </div>
+    </div>
+
+    <div class="badges">
+      <span class="mini-badge rose">TC-03 · Agent tự duyệt → BỊ CHẶN</span>
+      <span class="mini-badge emerald">TC-04 · Người duyệt → THI HÀNH</span>
+      <span class="mini-badge">Changelog do Jira tự ghi, Agent không sửa được</span>
+    </div>
+
+    <div class="callout-bar">
+      Đã verify end-to-end trên Jira thật, issue <span>KAN-11</span>.
+    </div>
+  </div>
+
+  <!-- ══════════ 08 · SỰ CỐ THẬT ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Khác biệt 03 · Sự cố thật</div>
+      <h1 class="slide-title">Không có dòng <code>if demo_mode</code> nào</h1>
+      <div class="slide-subtitle">Agent phải chẩn đoán, không đọc kịch bản</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="glass-card">
+        <div class="feature-title">Cái gì là thật</div>
+        <div class="feature-desc"><b>Pool 5 kết nối</b> — truy vấn không index trên bảng 5.000 dòng.</div>
+        <div class="feature-desc"><b>Lan truyền</b> — service đặt hàng timeout vì thật sự phụ thuộc.</div>
+        <div class="feature-desc"><b>Số đo</b> — Prometheus scrape từ service thật, không phải fixture.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;gap:12px">
+        <div class="stat-card amber">
+          <div class="stat-num">1/8</div>
+          <div class="stat-desc">câu LLM đúng ở UC-2 — 7 lượt còn lại phủ định bằng chứng</div>
+        </div>
+        <div class="stat-card emerald">
+          <div class="stat-num">8/8</div>
+          <div class="stat-desc">kết luận Agent đúng — luật giữ lại khi LLM sai</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout-bar">
+      Khi số liệu phản bác, hệ thống <span>bỏ câu của LLM</span> và giữ kết luận của bộ luật.
+    </div>
+  </div>
+
+  <!-- ══════════ 09 · KIẾN TRÚC ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Kiến trúc</div>
+      <h1 class="slide-title">Bốn khối chạy độc lập, nói chuyện qua HTTP</h1>
+    </div>
+
+    <div class="grid-4">
+      <div class="glass-card teal">
+        <div class="step-num">01</div>
+        <div class="feature-title">Thu tín hiệu</div>
+        <div class="feature-desc">2 service demo (pool = 5 cố ý) → Prometheus scrape mỗi 5 giây.</div>
+      </div>
+      <div class="glass-card teal">
+        <div class="step-num">02</div>
+        <div class="feature-title">Chẩn đoán</div>
+        <div class="feature-desc">LangGraph điều phối, Qwen diễn giải, đối chiếu deploy history.</div>
+      </div>
+      <div class="glass-card rose">
+        <div class="step-num">03</div>
+        <div class="feature-title">Vòng đời &amp; cổng duyệt</div>
+        <div class="feature-desc">Jira Cloud giữ war room và audit trail. HITL Gate chặn ở giữa.</div>
+      </div>
+      <div class="glass-card emerald">
+        <div class="step-num">04</div>
+        <div class="feature-title">Giao diện</div>
+        <div class="feature-desc">Streamlit: war room nội bộ + status page công khai.</div>
+      </div>
+    </div>
+
+    <div class="badges">
+      <span class="mini-badge teal">LangGraph</span>
+      <span class="mini-badge teal">Qwen</span>
+      <span class="mini-badge">FastAPI · Python 3.11</span>
+      <span class="mini-badge">Prometheus</span>
+      <span class="mini-badge">Jira Cloud REST</span>
+      <span class="mini-badge">PostgreSQL</span>
+      <span class="mini-badge">Streamlit</span>
+      <span class="mini-badge">Docker · GitHub Actions</span>
+      <span class="mini-badge">Render</span>
+    </div>
+  </div>
+
+  <!-- ══════════ 10 · ĐO ĐẠC ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Đo đạc</div>
+      <h1 class="slide-title">Số đo được — kể cả số không đẹp</h1>
+      <div class="slide-subtitle">Ground truth chốt trước khi viết Agent</div>
+    </div>
+
+    <div class="grid-4">
+      <div class="stat-card"><div class="stat-num">33,4s</div><div class="stat-desc">từ vượt ngưỡng đến khi mở phiếu Jira</div></div>
+      <div class="stat-card"><div class="stat-num">80,77%</div><div class="stat-desc">chẩn đoán đúng nguyên nhân gốc — 21/26 lượt</div></div>
+      <div class="stat-card emerald"><div class="stat-num">0/75</div><div class="stat-desc">báo nhầm khi tải nhẹ 10 phút</div></div>
+      <div class="stat-card emerald"><div class="stat-num">100→0%</div><div class="stat-desc">tỷ lệ lỗi sau khi người duyệt và hệ thống sửa thật</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="glass-card" style="border-left:4px solid var(--amber)">
+        <div class="feature-title">Chỗ còn yếu — nói thẳng</div>
+        <div class="feature-desc">Bộ 50 case enterprise: recall <b>72%</b>. Rule baseline bỏ lọt silent failure.</div>
+      </div>
+      <div class="glass-card" style="border-left:4px solid var(--accent)">
+        <div class="feature-title">Một đính chính</div>
+        <div class="feature-desc">80,77% là của <b>Agent</b>. Riêng câu LLM được chấp nhận: <b>73,68%</b>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 11 · KHẢ THI ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Tính khả thi</div>
+      <h1 class="slide-title">Cắm vào hạ tầng đội nào cũng đã có sẵn</h1>
+    </div>
+
+    <div class="grid-3">
+      <div class="stat-card"><div class="stat-num">0đ</div><div class="stat-desc">chi phí LLM — Qwen qua endpoint tương thích OpenAI, đổi model chỉ sửa biến môi trường</div></div>
+      <div class="stat-card"><div class="stat-num">3,1s</div><div class="stat-desc">mỗi lượt suy luận — chu kỳ quét 10 giây nên luôn kịp vòng sau</div></div>
+      <div class="stat-card emerald"><div class="stat-num">2</div><div class="stat-desc">thứ cần có sẵn: Prometheus và một issue tracker</div></div>
+    </div>
+
+    <div class="badges">
+      <span class="mini-badge emerald">Live URL công khai trên Render</span>
+      <span class="mini-badge emerald">Jira Automation tự gọi webhook</span>
+      <span class="mini-badge emerald">49 test chạy trong CI</span>
+      <span class="mini-badge emerald">Email cảnh báo + phòng họp khẩn</span>
+    </div>
+
+    <div class="callout-bar">
+      Không tự xây lại CRUD, phân quyền và audit log — <span>Jira đã có sẵn cả ba</span>.
+    </div>
+  </div>
+
+  <!-- ══════════ 12 · ĐỊNH HƯỚNG ══════════ -->
+  <div class="slide">
+    <div>
+      <div class="tag-line">Định hướng</div>
+      <h1 class="slide-title">Ba việc tiếp theo — đã biết chính xác làm gì, vì đã đo ra chỗ hỏng</h1>
+    </div>
+
+    <div class="grid-3">
+      <div class="glass-card teal">
+        <div class="step-num">01</div>
+        <div class="feature-title">Seed phiếu chờ duyệt</div>
+        <div class="feature-desc">Khởi động lại Agent là quên phiếu đang chờ. Cần đọc lại từ Jira lúc khởi động.</div>
+      </div>
+      <div class="glass-card teal">
+        <div class="step-num">02</div>
+        <div class="feature-title">Mở rộng thi hành thật</div>
+        <div class="feature-desc">Rollback đã sửa thật. Ba hành động còn lại cần đổi cấu hình hạ tầng.</div>
+      </div>
+      <div class="glass-card teal">
+        <div class="step-num">03</div>
+        <div class="feature-title">Nâng recall từ 72%</div>
+        <div class="feature-desc">Bổ sung detector cho silent failure và tấn công né tránh.</div>
+      </div>
+    </div>
+
+    <div class="callout-bar">
+      Một hệ thống AI lúc nào cũng chắc chắn là hệ thống <span>nguy hiểm</span> — vì người trực sẽ tin theo cả khi nó sai.
+    </div>
+
+    <div class="contact-box">
+      <div class="who">Team Binary Brothers · PTNT-20</div>
+      <div class="link">p-035-incident-agent.onrender.com · github.com/AI20K-Build-Phase-Cohort-3/P-035</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="deck-controls">
+  <div class="tip">Chuyển slide: bấm nút bên phải hoặc phím mũi tên ◄ / ►</div>
+  <div class="right">
+    <span id="slideIndicator">Slide 1 / 12</span>
+    <div class="nav-buttons">
+      <button class="btn-nav" id="prevBtn" type="button">◄ Trước</button>
+      <button class="btn-nav" id="nextBtn" type="button">Sau ►</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var slides = document.querySelectorAll('.slide');
+  var total = slides.length;
+  var current = 0;
+  var indicator = document.getElementById('slideIndicator');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var deck = document.getElementById('slideDeck');
+
+  function update() {
+    for (var i = 0; i < total; i++) {
+      slides[i].classList.toggle('active', i === current);
+    }
+    indicator.textContent = 'Slide ' + (current + 1) + ' / ' + total;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === total - 1;
+    if (history.replaceState) history.replaceState(null, '', '#s' + (current + 1));
+  }
+
+  function go(n) {
+    current = Math.min(total - 1, Math.max(0, n));
+    update();
+  }
+
+  prevBtn.addEventListener('click', function () { go(current - 1); });
+  nextBtn.addEventListener('click', function () { go(current + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault(); go(current + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault(); go(current - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault(); go(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); go(total - 1);
+    }
+  });
+
+  var startX = 0, startY = 0;
+  deck.addEventListener('touchstart', function (e) {
+    startX = e.changedTouches[0].clientX;
+    startY = e.changedTouches[0].clientY;
+  }, { passive: true });
+  deck.addEventListener('touchend', function (e) {
+    var dx = e.changedTouches[0].clientX - startX;
+    var dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)) go(current + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  deck.setAttribute('role', 'region');
+  deck.setAttribute('aria-label', 'Pitch deck P-035');
+
+  var m = /^#s(\d+)$/.exec(location.hash);
+  if (m) current = Math.min(total - 1, Math.max(0, parseInt(m[1], 10) - 1));
+  update();
+})();
+</script>
+</body>
+</html>

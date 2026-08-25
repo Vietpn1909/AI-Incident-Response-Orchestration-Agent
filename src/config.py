@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     #: làm cùng một bằng chứng ra kết luận khác nhau mỗi lần chạy, không đo được.
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
+    #: Trần token cho MỖI câu trả lời của LLM.
+    #:
+    #: Không đặt thì nhà cung cấp tự lấy trần tối đa của model (8192 với
+    #: qwen-plus). Nhà cung cấp trả trước theo trần đó, nên tài khoản gần cạn
+    #: tiền bị từ chối THẲNG dù câu trả lời thật chỉ dài vài trăm token. Đo ngày
+    #: 23/08 trên OpenRouter, cả `hypothesize` lẫn `analyze_logs` cùng hỏng:
+    #:
+    #:   402 — This request requires more credits, or fewer max_tokens.
+    #:         You requested up to 8192 tokens, but can only afford 5307.
+    #:
+    #: Kiểu hỏng này im lặng ở chỗ nguy hiểm nhất: Agent **vẫn chạy tiếp** bằng
+    #: kết luận của bộ luật, war room vẫn có giả thuyết, nên nhìn qua tưởng LLM
+    #: đã chẩn đoán. Chỉ log mới nói ra là nó chưa từng được gọi.
+    #:
+    #: 2048 vừa đủ cho câu chẩn đoán (prompt giới hạn 4 câu) lẫn postmortem, mà
+    #: vẫn lọt qua cửa tín dụng. Nâng bằng `LLM_MAX_TOKENS` trong .env khi tài
+    #: khoản đã nạp tiền.
+    llm_max_tokens: int = Field(default=2048, gt=0)
+
     # Database — lịch sử deploy, nguồn bằng chứng cho `correlate_deploy`
     #
     # Chỗ duy nhất đọc biến này là `services/deploys.py`, để lấy bảng
@@ -82,6 +101,16 @@ class Settings(BaseSettings):
     # người đã chuyển issue sang Remediating — trùng nhau nghĩa là Agent đang
     # cố tự duyệt, và hành động bị từ chối. Xem src/services/hitl.py.
     jira_agent_account_id: str = ""
+
+    # Auto-remediation khi timeout (mặc định TẮT)
+    #
+    # Khi bật: nếu sự cố đã chờ duyệt quá `auto_remediation_timeout_minutes`
+    # phút mà không có human phản hồi, Agent tự thi hành khắc phục.
+    # - P3/P4: dùng đúng hành động đã đề xuất
+    # - P1/P2: ép rollback về version trước
+    # Xem src/services/auto_remediation.py.
+    auto_remediation_enabled: bool = False
+    auto_remediation_timeout_minutes: int = 30
 
     # Email — gửi báo cáo Postmortem sau khi sự cố resolved
     #

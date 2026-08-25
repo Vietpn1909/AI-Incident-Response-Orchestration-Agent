@@ -226,13 +226,20 @@ def build_incident_graph(
                 # trước bằng chứng sinh ra nó, đúng thứ làm mất lòng tin vào một
                 # chuỗi suy luận tự động.
                 try:
-                    sample_logs = res.hypothesis.log_evidence[:5] if res.hypothesis.log_evidence else None
-                    jira.add_comment(
+                    da_doc = res.hypothesis.log_evidence or []
+                    sample_logs = da_doc[:5] if da_doc else None
+                    # `post_logs` chứ không phải `add_comment`: comment chữ chỉ
+                    # để người đọc, còn `da_doc` phải lưu được dưới dạng dữ liệu.
+                    # Log container trôi rất nhanh (đo trên KAN-82: mất sạch sau
+                    # 20 phút), nên đây là bản duy nhất war room còn đọc được khi
+                    # mở lại phiếu sau đó — xem `Incident.log_evidence`.
+                    jira.post_logs(
                         jira_key,
                         status_logs_collected(
                             signal, res.logs_collected, res.logs_relevant,
                             sample_logs=sample_logs,
                         ),
+                        da_doc,
                     )
                 except Exception as err:
                     logger.warning("%s: không post được status logs_collected (%s)", jira_key, err)

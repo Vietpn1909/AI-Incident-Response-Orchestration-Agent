@@ -12,6 +12,18 @@
       "health": "degraded",
       "message": "Suy giảm hiệu năng do phụ thuộc dịch vụ thanh toán",
       "active_incident": "INC-13"
+    },
+    {
+      "name": "service-kho-hang",
+      "health": "operational",
+      "message": "Hoạt động bình thường",
+      "active_incident": null
+    },
+    {
+      "name": "service-van-chuyen",
+      "health": "operational",
+      "message": "Hoạt động bình thường",
+      "active_incident": null
     }
   ],
   "active_incidents": [
@@ -20,7 +32,9 @@
       "title": "[P1] service-thanh-toan: http_request_duration_seconds p95 = 5.10 (ngưỡng 2.00)",
       "severity": "P1",
       "state": "Awaiting Approval",
-      "affected_services": ["service-thanh-toan"],
+      "affected_services": [
+        "service-thanh-toan"
+      ],
       "detected_at": "2026-07-28T14:32:04Z",
       "resolved_at": null,
       "signal": null,
@@ -28,7 +42,9 @@
       "proposal": null,
       "timeline": [],
       "postmortem": null,
-      "related_incidents": ["INC-13"]
+      "related_incidents": [
+        "INC-13"
+      ]
     }
   ]
 }

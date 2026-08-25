@@ -12,7 +12,7 @@ src/  ──── import ──▶  demo/       ❌ sai
 demo/ ──── import ──▶  src/        ❌ sai
 ```
 
-Backend phải coi 2 service này như **hệ thống bên ngoài**, chỉ nhìn qua `/metrics` và HTTP. Nếu import nhau thì Agent biết trước đáp án và phần "chẩn đoán" mất ý nghĩa.
+Backend phải coi 4 service này như **hệ thống bên ngoài**, chỉ nhìn qua `/metrics` và HTTP. Nếu import nhau thì Agent biết trước đáp án và phần "chẩn đoán" mất ý nghĩa.
 
 Vì vậy thư mục này có `requirements.txt` và `Dockerfile` riêng.
 
