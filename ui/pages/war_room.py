@@ -1312,6 +1312,16 @@ def khoi_code(ngon_ngu: str, than_html: str, *, nguyen_van: str = "") -> str:
 
 
 def hang_link(url: str, nhan: str) -> str:
+    """Một dòng link mở tab mới, hiện CẢ nhãn lẫn URL đầy đủ.
+
+    In nguyên URL ra chứ không giấu sau chữ: người xem war room cần biết mình
+    sắp rời sang đâu — Jira thật, Prometheus của máy nào — trước khi bấm. Đây là
+    trang mà một link trỏ sai chỗ sẽ làm hỏng cả buổi demo mà không ai kịp nhận
+    ra vì sao.
+
+    `rel="noopener"` là bắt buộc kèm `target="_blank"`: thiếu nó thì trang được
+    mở giữ được tham chiếu `window.opener` tới war room.
+    """
     return (
         f'<a class="link-row" href="{e(url)}" target="_blank" rel="noopener">'
         f'{ICON["ngoai"]}{e(nhan)}<span class="url">{e(url)}</span></a>'
@@ -1560,6 +1570,17 @@ def ty_le_anh_huong(
 
 
 def _lay_json(url: str, tham_so: dict | None = None, *, timeout: int = 60) -> Any:
+    """GET rồi trả JSON. **Cố ý ném lỗi** khi mã trạng thái không phải 2xx.
+
+    Không nuốt lỗi ở tầng này. Mọi chỗ gọi đều nằm trong hàm có `@st.cache_data`,
+    và chúng tự quyết định hiển thị gì khi hỏng — trang này đã ghi rõ nguyên
+    tắc "ô nào không có nguồn thì hiện `—` kèm câu nói vì sao". Trả `None` ở đây
+    sẽ biến một backend chết thành một war room trông như bình thường nhưng
+    trống rỗng, tức là khẳng định SAI với người trực rằng không có gì xảy ra.
+
+    Timeout 60 giây vì `/incidents/{key}/logs` gọi `docker logs` qua subprocess —
+    chậm hơn hẳn các endpoint chỉ đọc Jira.
+    """
     phan_hoi = requests.get(url, params=tham_so or {}, timeout=timeout)
     phan_hoi.raise_for_status()
     return phan_hoi.json()
@@ -2770,6 +2791,13 @@ def _trang_thai_agent(health: dict, prom_ok: bool) -> tuple[str, str, str]:
 
 
 def header_html(kho: dict, inc_chon: dict) -> str:
+    """Thanh trên cùng: đếm sự cố ĐANG XẢY RA theo từng mức.
+
+    Chỉ đếm phiếu còn mở (`DANG_XAY_RA`), không đếm phiếu đã đóng. Trộn cả hai
+    vào thì con số chỉ lớn dần theo thời gian và mất hẳn ý nghĩa "ngay lúc này
+    có bao nhiêu việc phải lo" — mà đó là câu duy nhất thanh header cần trả lời
+    cho người vừa mở trang.
+    """
     ds = kho.get("ds") or []
     dang_mo = [i for i in ds if i.get("state") in DANG_XAY_RA]
     dem = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
@@ -2829,6 +2857,18 @@ def header_html(kho: dict, inc_chon: dict) -> str:
 
 
 def the_incident(inc: dict, chuoi: dict | None, dang_chon: bool) -> str:
+    """Một thẻ sự cố trong sidebar.
+
+    Dòng phụ dưới tiêu đề đổi nội dung theo trạng thái: phiếu đang chờ duyệt
+    hoặc đang thi hành thì hiện **trạng thái**, còn lại hiện **tên dịch vụ**. Lý
+    do: hai trạng thái đó là lúc người trực phải hành động, nên chúng phải đọc
+    được ngay từ sidebar mà không cần mở phiếu ra.
+
+    Dùng `dict` thô chứ không dùng model Pydantic vì dữ liệu tới thẳng từ JSON
+    của API, và sidebar chỉ có vài field — `.get()` với giá trị mặc định chịu
+    được phiếu thiếu field, còn validate cả model thì một phiếu lạ làm vỡ cả
+    danh sách.
+    """
     khoa = inc.get("jira_key", "")
     lop_sev = _lop_severity(inc)
     thoi_luong = (
@@ -2861,6 +2901,13 @@ def the_incident(inc: dict, chuoi: dict | None, dang_chon: bool) -> str:
 
 
 def sidebar_html(kho: dict, dang_chon: str) -> str:
+    """Sidebar hai tab: sự cố đang xảy ra và sự cố đã xong.
+
+    Dựng **cả hai tab một lượt** rồi để CSS ẩn/hiện, thay vì dựng lại khi người
+    dùng bấm. Streamlit chạy lại toàn bộ script mỗi lần có tương tác, nên "dựng
+    lại khi bấm" ở đây nghĩa là gọi lại API và mất vị trí cuộn — cái giá đắt hơn
+    nhiều so với vài KB HTML thừa.
+    """
     ds = kho.get("ds") or []
     chuoi = kho.get("chuoi") or {}
     dang_mo = [i for i in ds if i.get("state") in DANG_XAY_RA]

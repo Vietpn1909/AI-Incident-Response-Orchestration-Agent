@@ -116,6 +116,19 @@ def _rss_mb() -> float:
 
 
 def _auth_failure_snapshot(now: float | None = None) -> tuple[int, int, float]:
+    """Ba con số mô tả HÌNH THÁI của các lần đăng nhập hỏng trong 1 phút qua.
+
+    Trả về ``(số IP nguồn khác nhau, số tài khoản khác nhau, tỷ lệ của IP lớn nhất)``.
+
+    Vì sao service tự đếm thay vì để Agent suy từ log: Prometheus chỉ chứa số
+    đếm theo nhãn, không chứa từng dòng. Muốn biết "100 lần hỏng này đến từ MỘT
+    IP hay từ 200 IP" thì phải có ai đó đếm lúc sự việc đang xảy ra — và đó
+    chính là thứ phân biệt một cuộc dò mật khẩu với một đợt người dùng quên mật
+    khẩu. Ba số này đi thẳng vào `MetricEvidence` của UC-3.
+
+    Không có sự kiện nào trong cửa sổ thì trả ``(0, 0, 0.0)`` chứ không chia cho
+    0.
+    """
     current = time.monotonic() if now is None else now
     cutoff = current - AUTH_FAILURE_WINDOW_SECONDS
     with auth_failure_lock:
@@ -132,6 +145,12 @@ def _prune_auth_failure_events(cutoff: float) -> None:
 
 
 def _summarize_auth_failures() -> tuple[int, int, float]:
+    """Tính ba con số từ hàng đợi sự kiện. Chỉ gọi khi đang giữ ``auth_failure_lock``.
+
+    Tách riêng khỏi `_auth_failure_snapshot()` để phần tính toán không nằm lẫn
+    trong khối `with lock` dài — và để test gọi thẳng được mà không phải dựng
+    khoá.
+    """
     sources = Counter(source for _, source, _ in auth_failure_events)
     accounts = {account for _, _, account in auth_failure_events}
     top_source_ratio = max(sources.values()) / len(auth_failure_events)
@@ -139,6 +158,13 @@ def _summarize_auth_failures() -> tuple[int, int, float]:
 
 
 def _record_auth_failure(source_ip: str, account: str) -> None:
+    """Ghi một lần đăng nhập hỏng, đồng thời dọn các sự kiện đã quá cửa sổ.
+
+    Dọn ngay lúc ghi chứ không chạy tác vụ nền: hàng đợi chỉ lớn lên khi có
+    người đăng nhập hỏng, nên đúng lúc đó cũng là lúc rẻ nhất để cắt đuôi. Không
+    dọn thì một đợt dò mật khẩu 10 phút sẽ để lại hàng chục nghìn phần tử trong
+    RAM, và tỷ lệ IP tính ra sẽ trải trên cả 10 phút thay vì 1 phút.
+    """
     current = time.monotonic()
     with auth_failure_lock:
         _prune_auth_failure_events(current - AUTH_FAILURE_WINDOW_SECONDS)
@@ -165,6 +191,27 @@ MEMORY_PADDING_BYTES = 2_048
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Mở connection pool lúc khởi động, đóng lúc tắt.
+
+    ## Vì sao pool chỉ tạo MỘT LẦN và không thử lại
+
+    Đây là hành vi của một service thật, và nó tạo ra một cái bẫy quen thuộc lúc
+    demo: **Postgres restart sau khi service đã lên thì pool chết vĩnh viễn**,
+    và `/pay` trả 503 "Pool chưa khởi tạo" cho tới khi ai đó restart service.
+
+    Giữ nguyên chứ không thêm vòng thử lại, vì hai lý do:
+
+    1. `docker-compose.demo.yml` đã khai `depends_on` kèm điều kiện healthcheck —
+       thứ tự khởi động là việc của trình điều phối, không phải của mã ứng dụng.
+    2. Pool 5 connection là **hạt nhân của UC-1**. Thêm logic tự phục hồi vào
+       đây là bắt đầu che đi chính cái nghẽn mà bài toán cần thấy.
+
+    Vấp lỗi này thì chạy:
+    ``docker compose -f docker-compose.demo.yml restart service-thanh-toan``
+
+    Không kết nối được lúc khởi động thì service **vẫn lên** — cố ý, để
+    `/metrics` còn sống và Prometheus không mất luôn tín hiệu `up`.
+    """
     global pool
     try:
         pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=POOL_SIZE)
@@ -199,11 +246,26 @@ instrumentator.instrument(app).expose(app)
 
 
 class PayRequest(BaseModel):
+    """Thân request của ``POST /pay``.
+
+    ``amount`` bắt buộc lớn hơn 0 — không phải để bảo mật, mà để một payload sai
+    bị chặn ở tầng validate và trả 422, thay vì đi tới tận Postgres rồi hỏng ở
+    đó. Request 422 không chạm database nên không tính vào p95 của đường xử lý
+    thật; nhờ vậy bắn tải bằng payload sai sẽ KHÔNG tạo được sự cố giả.
+    """
+
     order_id: str
     amount: int = Field(..., gt=0)
 
 
 class LoginRequest(BaseModel):
+    """Thân request của ``POST /login`` — đường vào của UC-3 (dò mật khẩu).
+
+    Không có ràng buộc độ dài hay độ mạnh: endpoint này tồn tại để **bị tấn
+    công**, và mọi lần hỏng đều được đếm vào thống kê 1 phút. Thêm luật chặn ở
+    đây là làm mất chính tín hiệu mà UC-3 cần.
+    """
+
     username: str
     password: str
 
@@ -358,6 +420,16 @@ async def login(payload: LoginRequest, request: Request) -> dict:
 
 @app.get("/health")
 async def health() -> dict:
+    """Kiểm tra sống — dùng cho ``depends_on`` của compose và lúc dựng demo.
+
+    ⚠️ Cố ý trả ``ok`` kể cả khi ``pool is None``. Đây là kiểm tra **tiến trình
+    còn sống**, không phải kiểm tra **phục vụ được**. Trộn hai thứ vào một
+    endpoint thì compose sẽ giết và dựng lại container mỗi lần Postgres chớp —
+    biến một sự cố database thành một crash-loop giả, đúng thứ UC-2 đang đo.
+
+    Muốn biết có phục vụ được không thì gọi thẳng ``POST /pay``: pool chết thì
+    nó trả 503.
+    """
     return {"status": "ok", "service": SERVICE_NAME, "pool_size": POOL_SIZE}
 
 

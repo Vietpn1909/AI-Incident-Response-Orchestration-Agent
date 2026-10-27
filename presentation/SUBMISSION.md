@@ -79,11 +79,31 @@ BA ĐIỂM KHÁC BIỆT
 | Test case thủ công trên hệ thống thật | **5/5 PASS** | [eval/EVIDENCE.md](../eval/EVIDENCE.md) |
 | Khắc phục thật UC-4 (deploy thiếu migration) | tỷ lệ lỗi **100% → 0%**, 326/326 request thành công | [docs/demo-runbook.md](../docs/demo-runbook.md) |
 | Thời gian một lượt suy luận LLM | **3,088 giây** trung bình | [eval/results/report.md](../eval/results/report.md) |
-| Bộ 50 case enterprise (nghiêm ngặt hơn) | recall **72%**, severity accuracy **88,89%** | [evaluation_report_v3.md](../evaluation_report_v3.md) |
+| Bộ 50 case enterprise (nghiêm ngặt hơn) | recall **84%** (21/25), báo nhầm **20%** (5/25), severity **80,95%** (17/21), MCC **+0,64** | [eval/RESULTS-2026-08-21.md](../eval/RESULTS-2026-08-21.md) |
+| Phát hiện → đề xuất kèm runbook | **39 giây** (KAN-61: 20:27:42 → 20:28:21) | log lần chạy 22/08 |
+| Cổng người duyệt bị vượt qua | **0 lần** | [tests/test_hitl.py](../tests/test_hitl.py) |
 
 > ⚠️ Đừng diễn đạt 80,77% thành "LLM đạt 80,77%". Đó là con số của **Agent**, gồm cả
 > phần luật giữ lại khi LLM sai. Trong 19 câu LLM được chấp nhận, 14 câu đúng (73,68%).
 > Ghi rõ như vậy nếu bị hỏi sâu — báo cáo đã ghi đúng như thế.
+
+> ⚠️ **Recall 84% có khoảng tin cậy 95% là 70%–98%.** Con số cũ 72% (15/08) có khoảng
+> 54%–90%. Hai khoảng trùm nhau gần hết, nên **đừng nói "đã cải thiện 12 điểm"** — ở
+> n = 25 thì mức đó nằm trong sai số.
+>
+> Cái chứng minh được là **cơ chế**, không phải phần trăm: *p95 = 0 trước đây bị coi là
+> khoẻ, giờ không* · *dò 5.000 tài khoản chậm trước đây không bắt được, giờ bắt* · *bộ
+> nhớ tăng dần trước đây đợi sập mới báo, giờ báo trước 1 giờ*. Ba câu đó kiểm được bằng
+> cách chạy lại kịch bản.
+
+> ⚠️ **Severity tụt 88,89% → 80,95% là vì RECALL TĂNG, không vì luật kém đi.**
+>
+>     15/08   16 đúng / 18 bắt được  = 88,89%
+>     25/08   17 đúng / 21 bắt được  = 80,95%
+>
+> Số **đúng tăng** từ 16 lên 17; mẫu số tăng 3 vì bắt thêm 3 sự cố. Hai phần trăm này
+> không so trực tiếp được. Trong 4 case xếp sai có 1 case **cố ý** — `I18` ground_truth
+> ghi P1, luật trả P2 vì service vẫn đang phục vụ.
 
 ---
 
@@ -181,7 +201,17 @@ mục *"Câu hỏi chắc chắn bị hỏi"*. Đọc lại trước khi thuyế
 - **Thi hành thật**: `rollback` trên `service-thanh-toan` đã chạy thật (bật bằng `REMEDIATION_REAL=1`).
   Ba hành động còn lại vẫn mô phỏng vì cần đổi cấu hình hạ tầng, không đảo được bằng một lệnh.
   Hệ thống **tự biết** cái nào nó sửa thật được và ghi rõ là mô phỏng khi không làm được.
-- **Recall 72%** trên bộ 50 case enterprise: rule baseline bỏ lọt các dạng silent failure.
-  Đây là hạn chế đã đo và ghi lại, không giấu.
+- **Bỏ lọt 4 trên 25 sự cố** (recall 84%). Bốn case đó **kể tên được**, và ba trong bốn
+  có số đo **hoàn toàn bình thường** — không phải luật nắn sai, mà trong Prometheus không
+  có tín hiệu nào để bắt:
+  - `I15` lỗi xác thực bị metric tổng hợp che *(p95 0,08 / thường 0,07)* — **sửa được**
+    bằng cách tách p95 theo từng endpoint
+  - `I16` trả `200 OK` nhưng **ghi sai DB** — cần kiểm tính đúng của dữ liệu
+  - `I22` dependency **gửi dữ liệu ra ngoài** — cần theo dõi traffic đi ra
+  - `I25` race condition **thu tiền 2 lần**, không có lỗi 5xx nào — cần đối soát giao dịch
+
+  Đây là giới hạn **đã đo được**, không phải chỗ chưa thử. Bộ case cố ý chứa những sự cố
+  mà metric không thấy được — nếu chỉ nhét vào đúng loại đã viết luật thì sẽ ra ~100%, và
+  con số đó vô nghĩa.
 - **`awaiting_keys` chỉ nhớ trong tiến trình**: khởi động lại Agent thì nó quên phiếu đang
   chờ duyệt. Cần seed từ Jira lúc khởi động — đang là việc tiếp theo.

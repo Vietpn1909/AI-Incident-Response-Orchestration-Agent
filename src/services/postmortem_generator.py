@@ -204,6 +204,39 @@ def _derive_action_items(incident: Incident) -> list[ActionItem]:
     return items
 
 
+def _nguoi_phu_trach(incident: Incident) -> str:
+    """Ai nhận việc cải thiện sau sự cố — lấy người **thật** đã động vào phiếu.
+
+    Bản cũ để `owner=""` cho mọi action item, nên cột "Người phụ trách" trong
+    report chi tiết luôn là một cột gạch ngang: việc thì có, người thì không —
+    đúng kiểu action item chết yểu mà postmortem sinh ra để tránh.
+
+    Chọn người **cuối cùng** đổi trạng thái phiếu mà không phải Agent. Với
+    đường HITL đó chính là người đã duyệt hoặc đóng phiếu — người đang nắm ngữ
+    cảnh sự cố rõ nhất ngay lúc này, nên là mặc định hợp lý nhất cho tới khi ai
+    đó phân công lại trên Jira.
+
+    Nhận ra Agent bằng cách nào: changelog Jira trả `displayName`, không trả
+    `accountId`, nên không so được với `jira_agent_account_id`. Phần trước dấu
+    `@` của `jira_email` chính là displayName của tài khoản Agent (kiểm trên
+    KAN-104: `thaiduc0201`). So bằng đó, cộng thêm chuỗi `"agent"` mà
+    `FakeJiraClient` ghi.
+
+    Không có ai ngoài Agent — đường auto-fix chẳng hạn — thì trả về tên đội,
+    chứ không gán việc cho chính Agent.
+    """
+    from src.config import get_settings  # noqa: PLC0415
+
+    email = get_settings().jira_email or ""
+    ten_agent = {"agent", "?", email.split("@")[0].lower()} - {""}
+
+    for evt in reversed(incident.timeline):
+        actor = (evt.actor or "").strip()
+        if actor and actor.lower() not in ten_agent:
+            return actor
+    return "Đội trực sự cố"
+
+
 def generate_postmortem(
     incident: Incident,
     jira: JiraClient | None = None,
@@ -223,6 +256,11 @@ def generate_postmortem(
     impact = _derive_impact(incident)
     actions_taken = _derive_actions_taken(incident)
     action_items = _derive_action_items(incident)
+
+    nguoi = _nguoi_phu_trach(incident)
+    for item in action_items:
+        if not item.owner:
+            item.owner = nguoi
 
     # Tạo Jira sub-tasks thật cho mỗi action item
     if jira and action_items:

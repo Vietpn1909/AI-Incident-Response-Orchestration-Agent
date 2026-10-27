@@ -259,8 +259,8 @@ class TestAgentTuThiHanh:
     def test_loi_jira_luc_gan_nhan_khong_pha_luong(self):
         """Nuốt lỗi y như `add_comment()` và `transition()` trong cùng file.
 
-        "Chạy hết" đo bằng việc issue vẫn sang `Remediating` và comment vẫn được
-        post — hai bước nằm SAU chỗ gắn nhãn.
+        "Chạy hết" đo bằng việc issue vẫn được đóng (`Resolved`) và comment vẫn
+        được post — các bước nằm SAU chỗ gắn nhãn.
         """
         jira = FakeJiraClient(verbose=False)
         jira_key = _war_room(jira)
@@ -273,7 +273,7 @@ class TestAgentTuThiHanh:
         ket_qua = execute_auto_remediation(jira, _quyet_dinh_auto(jira_key))
 
         assert ket_qua.succeeded is True
-        assert jira.get_incident(jira_key).state is IncidentState.REMEDIATING
+        assert jira.get_incident(jira_key).state is IncidentState.RESOLVED
         assert jira.get_comment_bodies(jira_key)
 
 

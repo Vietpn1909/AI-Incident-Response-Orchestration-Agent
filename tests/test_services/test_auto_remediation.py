@@ -517,7 +517,10 @@ class TestExecuteAutoRemediation:
 
         incident = jira.get_incident(jira_key)
         assert incident is not None
-        assert incident.state == IncidentState.REMEDIATING
+        # Auto-fix THÀNH CÔNG phải khép vòng: chuyển thẳng Resolved, KHÔNG dừng ở
+        # Remediating. Dừng ở Remediating vừa bỏ dở vừa kích hoạt cổng HITL rồi
+        # bị chính nó từ chối — xem `_sinh_postmortem_va_dong`.
+        assert incident.state == IncidentState.RESOLVED
 
 
 # ---------------------------------------------------------------------------

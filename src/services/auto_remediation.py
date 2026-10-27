@@ -350,17 +350,139 @@ def execute_auto_remediation(
             error,
         )
 
-    # Chuyển issue sang Remediating — giống webhook.
+    if result.succeeded:
+        _sinh_postmortem_va_dong(jira, decision.jira_key)
+
+    return result
+
+
+def _sinh_postmortem_va_dong(jira, jira_key: str) -> None:  # jira: JiraClient
+    """Sau auto-fix THÀNH CÔNG: sinh postmortem rồi chuyển thẳng `Resolved`.
+
+    ## Vì sao KHÔNG dừng ở `Remediating` như bản cũ
+
+    Đo ngày 24/08 trên KAN-106: bản cũ chỉ `transition(REMEDIATING)` rồi dừng,
+    để lại HAI lỗi cùng lúc trên một phiếu:
+
+    1. **Bỏ dở.** Agent đã tự thi hành xong — rollback thành công — nhưng phiếu
+       kẹt ở `Remediating`, không ai đóng. Webhook HITL bình thường thì sau khi
+       thi hành xong đi tiếp: postmortem → `Resolved`. Auto-fix cũng phải khép
+       vòng như vậy, nếu không "tự xử lý" chỉ đúng một nửa.
+
+    2. **Tự đá vào cổng HITL.** Chuyển sang `Remediating` bằng tài khoản Agent
+       kích hoạt đúng Jira Automation rule đang rình trạng thái đó → rule gọi
+       webhook → `assert_human_approved()` thấy người chuyển là Agent → TỪ CHỐI,
+       và dán một comment "TỪ CHỐI THỰC THI" ngay cạnh comment "đã rollback thành
+       công". Hai câu chọi nhau trên cùng một phiếu.
+
+    Chuyển THẲNG sang `Resolved` gỡ cả hai: rule `Remediating` không còn bắn, và
+    rule `Resolved` (nếu có) tự bỏ qua vì `postmortem` đã tồn tại — cùng guard
+    mà `POST /webhooks/jira/resolved` đang dùng.
+
+    ⚠️ Postmortem phải sinh TRƯỚC khi chuyển `Resolved`: nó tính duration theo
+    trạng thái hiện tại, chuyển trước thì `resolved_at` đổi và duration sai —
+    cùng lý do webhook ghi ở "Bước 7".
+
+    Mọi lỗi đều nuốt: rollback đã chạy rồi, một postmortem hỏng hay một
+    transition trượt không đáng phá cả vòng quét. Tệ nhất là phiếu nằm chờ người
+    kéo tay sang Resolved — vẫn tốt hơn kẹt ở Remediating kèm comment mâu thuẫn.
+    """
+    from src.services.postmortem_generator import generate_postmortem  # noqa: PLC0415
+
     try:
-        jira.transition(decision.jira_key, IncidentState.REMEDIATING)
+        incident = jira.get_incident(jira_key)
+        if incident is not None:
+            # Đóng dấu thời điểm phục hồi NGAY, trước khi sinh báo cáo.
+            #
+            # `get_incident()` đọc `resolved_at` từ trường `resolutiondate` của
+            # Jira, mà lúc này phiếu vẫn còn ở `Awaiting Approval` — nên nó là
+            # `None`. Hệ quả: mọi ô thời gian trong postmortem của đường
+            # auto-fix đều rỗng ("Chưa resolved" cho cả tổng thời gian gián
+            # đoạn lẫn MTTR), dù rollback vừa chạy xong và giờ phục hồi là
+            # **bây giờ**. Đường HITL không dính lỗi này vì người duyệt kéo
+            # phiếu sang Resolved trước, rồi webhook mới chạy.
+            #
+            # Không đảo thứ tự (chuyển Jira trước rồi mới sinh) vì `transition`
+            # sang `Resolved` bằng tài khoản Agent sẽ kích hoạt Jira Automation
+            # — xem phần đầu docstring hàm này.
+            incident.state = IncidentState.RESOLVED
+            incident.resolved_at = datetime.now(UTC)
+            postmortem = generate_postmortem(incident, jira=jira)
+            incident.postmortem = postmortem
+            jira.attach_postmortem(jira_key, postmortem)
+            _gui_mail_postmortem(incident)
+    except Exception as error:
+        logger.warning("%s: không sinh được postmortem sau auto-fix (%s)", jira_key, error)
+
+    try:
+        jira.transition(jira_key, IncidentState.RESOLVED)
     except Exception as error:
         logger.warning(
-            "%s: không chuyển được sang Remediating sau auto-fix (%s)",
-            decision.jira_key,
+            "%s: không chuyển được sang Resolved sau auto-fix — kéo tay trên Jira (%s)",
+            jira_key,
             error,
         )
 
-    return result
+
+def _gui_mail_postmortem(incident) -> None:  # incident: Incident
+    """Gửi mail postmortem sau auto-fix — cùng nội dung như luồng người-duyệt.
+
+    Vì sao cần tách riêng thay vì để `POST /webhooks/jira/resolved` lo: khi
+    auto-fix chuyển thẳng `Resolved`, rule webhook đó CÓ bắn, nhưng guard
+    "postmortem đã tồn tại → bỏ qua" của nó chặn lại (đúng, để không gửi trùng).
+    Hệ quả không lường trước: đường auto-fix mất luôn mail postmortem. Đo ngày
+    24/08 trên KAN-112 — phiếu tự đóng, có postmortem trên Jira, nhưng KHÔNG ai
+    nhận được mail.
+
+    Mail là **đường phát hành duy nhất** tới người không mở Jira. Auto-fix là
+    lúc CẦN mail nhất: không ai đang ngồi xem, nên bản tóm tắt gửi tới hộp thư là
+    thứ duy nhất báo cho họ Agent vừa tự làm gì.
+
+    Nuốt mọi lỗi: mail là việc phụ, hỏng không được phá chuỗi auto-fix. Thiếu
+    SMTP thì bỏ qua — postmortem đã nằm trên Jira rồi.
+    """
+    from src.services.email_client import Attachment, GmailClient  # noqa: PLC0415
+    from src.services.postmortem_report import (  # noqa: PLC0415
+        build_detailed_report,
+        build_email_body,
+    )
+
+    settings = get_settings()
+    if not settings.smtp_email or not settings.smtp_app_password:
+        logger.info("%s: bỏ mail postmortem — SMTP chưa cấu hình", incident.jira_key)
+        return
+    recipients = [r.strip() for r in settings.postmortem_recipients.split(",") if r.strip()]
+    if not recipients:
+        logger.info("%s: bỏ mail postmortem — POSTMORTEM_RECIPIENTS trống", incident.jira_key)
+        return
+
+    try:
+        jira_base_url = settings.jira_base_url
+        email_body = build_email_body(incident, jira_base_url=jira_base_url)
+        report_html = build_detailed_report(incident, jira_base_url=jira_base_url)
+        services_str = ", ".join(incident.affected_services)
+        GmailClient(settings.smtp_email, settings.smtp_app_password).send(
+            to=recipients,
+            subject=(
+                f"[Postmortem — Auto] {incident.severity.value} — "
+                f"{services_str} — {incident.jira_key}"
+            ),
+            body_html=email_body,
+            attachments=[
+                Attachment(
+                    filename=f"postmortem_{incident.jira_key}.html",
+                    content=report_html.encode("utf-8"),
+                    mime_type="text/html",
+                )
+            ],
+        )
+        logger.info(
+            "%s: đã gửi mail postmortem (auto-fix) tới %s",
+            incident.jira_key, ", ".join(recipients),
+        )
+    except Exception as error:
+        logger.warning("%s: không gửi được mail postmortem sau auto-fix (%s)",
+                       incident.jira_key, error)
 
 
 # ---------------------------------------------------------------------------

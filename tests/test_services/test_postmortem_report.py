@@ -18,16 +18,119 @@ from src.models.incident import (
     Severity,
     TimelineEvent,
 )
+from src.services import prometheus, rules
 from src.services.email_client import Attachment, FakeEmailClient
 from src.services.postmortem_report import (
     _compute_approval_wait,
     _compute_mttd,
     _compute_mttr,
+    _fmt_khoang,
     _fmt_time,
     _fmt_time_full,
     build_detailed_report,
     build_email_body,
 )
+
+
+def _o_trong(html: str) -> list[str]:
+    """Các ô chỉ chứa dấu gạch ngang hoặc câu "chưa có số".
+
+    Bóc thẻ rồi soi từng ô, thay vì tìm chuỗi "—" trong cả trang: dấu gạch ngang
+    còn xuất hiện hợp lệ GIỮA câu (vd. "Không mất dữ liệu — các giao dịch…"),
+    nên tìm thô sẽ báo nhầm.
+    """
+    import re
+
+    txt = re.sub(r"<(script|style)[\s\S]*?</\1>", "", html)
+    o = [c.strip() for c in re.sub(r"<[^>]+>", "\x00", txt).split("\x00")]
+    return [c for c in o if c in ("—", "Chưa resolved", "Chưa xác định", "Chưa thực hiện")]
+
+
+def _incident_uc3() -> Incident:
+    """UC-3 brute-force: KHÔNG deploy, KHÔNG baseline — ca từng để trống nhiều ô nhất."""
+    detected = datetime(2026, 8, 24, 15, 31, 0, tzinfo=UTC)
+    signal = IncidentSignal(
+        affected_service="service-thanh-toan",
+        severity=Severity.P3,
+        detected_at=detected,
+        metric_name="số request /login thất bại mỗi giây",
+        metric_value=6.207,
+        threshold=rules.AUTH_FAILURE_P3,
+        breached_for_seconds=300.0,
+        evidence=[
+            MetricEvidence(
+                name="số request /login thất bại mỗi giây",
+                value=6.207,
+                promql=prometheus.AUTH_FAILURE_RATE,
+            ),
+            MetricEvidence(
+                name="số IP nguồn khác nhau (1 phút)",
+                value=1.0,
+                promql=prometheus.AUTH_UNIQUE_SOURCE_IPS,
+            ),
+            MetricEvidence(
+                name="số tài khoản bị thử (1 phút)",
+                value=100.0,
+                promql=prometheus.AUTH_UNIQUE_ACCOUNTS,
+            ),
+            MetricEvidence(
+                name="tỷ lệ từ IP nguồn lớn nhất",
+                value=1.0,
+                promql=prometheus.AUTH_TOP_SOURCE_RATIO,
+            ),
+        ],
+    )
+    return Incident(
+        jira_key="KAN-104",
+        title="[P3] service-thanh-toan: brute-force",
+        severity=Severity.P3,
+        state=IncidentState.RESOLVED,
+        affected_services=["service-thanh-toan"],
+        detected_at=detected,
+        resolved_at=datetime(2026, 8, 24, 15, 33, 0, tzinfo=UTC),
+        signal=signal,
+        hypotheses=[
+            Hypothesis(
+                statement="Tấn công brute-force từ IP 172.18.0.1",
+                confidence=0.4,
+                evidence=signal.evidence,
+            )
+        ],
+        proposal=RemediationProposal(
+            action="rate_limit",
+            target="service-thanh-toan",
+            params={"limit": 60},
+            runbook="1. Bật rate limit",
+            risk="Chặn oan người dùng thật",
+        ),
+        timeline=[
+            TimelineEvent(
+                at=datetime(2026, 8, 24, 15, 31, 30, tzinfo=UTC),
+                actor="agent",
+                action="chuyển trạng thái",
+                detail="Investigating → Awaiting Approval",
+            ),
+            TimelineEvent(
+                at=datetime(2026, 8, 24, 15, 31, 31, tzinfo=UTC),
+                actor="agent",
+                action="chuyển trạng thái",
+                detail="Awaiting Approval → Awaiting Approval",
+            ),
+            TimelineEvent(
+                at=datetime(2026, 8, 24, 15, 33, 0, tzinfo=UTC),
+                actor="vietpn04",
+                action="chuyển trạng thái",
+                detail="Awaiting Approval → Resolved",
+            ),
+        ],
+        postmortem=Postmortem(
+            summary="Brute-force vào /login",
+            root_cause="Tấn công brute-force từ một IP",
+            impact="Không mất dữ liệu",
+            actions_taken=["rate_limit service-thanh-toan"],
+            action_items=[ActionItem(title="Thêm rate limit mặc định", owner="vietpn04")],
+        ),
+    )
 
 
 def _incident_day_du() -> Incident:
@@ -202,11 +305,43 @@ class TestIncidentMetrics:
         assert "17" in result
         assert "phút" in result
 
-    def test_mttd_khong_deploy(self):
-        assert _compute_mttd(_incident_toi_thieu()) == "—"
+    def test_mttd_khong_deploy_thi_dung_breached_for_seconds(self):
+        """Không có deploy vẫn phải ra số — lấy quãng metric vượt ngưỡng."""
+        result = _compute_mttd(_incident_uc3())
+        assert result == "5 phút"
 
-    def test_mttr_chua_resolved(self):
-        assert "Chưa resolved" in _compute_mttr(_incident_toi_thieu())
+    def test_mttd_khong_co_tin_hieu(self):
+        """Không signal, không deploy — nói rõ vì sao, không để gạch ngang."""
+        assert _compute_mttd(_incident_toi_thieu()) == "Không đo được (thiếu tín hiệu)"
+
+    def test_mttr_chua_resolved_van_co_so(self):
+        result = _compute_mttr(_incident_toi_thieu())
+        assert "chưa phục hồi" in result
+        assert "—" not in result
+
+    def test_approval_wait_suy_tu_changelog(self):
+        """Jira thật chỉ ghi 'chuyển trạng thái' — vẫn phải tính được."""
+        assert _compute_approval_wait(_incident_uc3()) == "1 phút"
+
+    def test_approval_wait_bo_qua_moc_tu_tro_chinh_no(self):
+        """`Awaiting Approval → Awaiting Approval` không phải lúc rời hàng chờ."""
+        inc = _incident_uc3()
+        # Mốc tự trỏ nằm ngay sau mốc vào; nếu bị tính là "ra" thì kết quả là 1 giây.
+        assert _compute_approval_wait(inc) != "1 giây"
+
+    def test_approval_wait_khi_chua_co_moc_roi_hang_cho(self):
+        """Auto-fix dựng báo cáo trước khi chuyển Resolved — không được nói 'vẫn đang chờ'."""
+        inc = _incident_uc3()
+        inc.timeline = [evt for evt in inc.timeline if "→ Resolved" not in evt.detail]
+        result = _compute_approval_wait(inc)
+        assert result == "1 phút"  # 15:31:30 vào hàng chờ → resolved_at 15:33:00, 90 giây
+        assert "đang chờ" not in result
+
+    def test_fmt_khoang_duoi_mot_phut(self):
+        """30–59 giây từng bị làm tròn thành '0 phút' — vô nghĩa với người đọc."""
+        assert _fmt_khoang(45) == "45 giây"
+        assert _fmt_khoang(90) == "1 phút"
+        assert _fmt_khoang(3900) == "1 giờ 5 phút"
 
 
 # ────────── Email body ──────────
@@ -351,6 +486,22 @@ class TestDetailedReport:
         html = build_detailed_report(_incident_day_du())
         assert "Việt" in html
         assert "Trung" in html
+
+    def test_bang_bang_chung_khong_con_o_trong(self):
+        """UC-3 không có baseline — cột so sánh phải lấy NGƯỠNG, không bỏ trống."""
+        html = build_detailed_report(_incident_uc3())
+        assert "Mốc so sánh" in html
+        assert "×6.2 ngưỡng" in html  # 6.207 / AUTH_FAILURE_P3
+        assert "ngưỡng dò hàng loạt" in html  # số tài khoản bị thử
+        assert "1 IP duy nhất" in html  # metric hình thái, không ép ngưỡng
+
+    def test_khong_con_o_trong_trong_report(self):
+        for incident in (_incident_uc3(), _incident_day_du(), _incident_toi_thieu()):
+            assert _o_trong(build_detailed_report(incident)) == []
+
+    def test_khong_con_o_trong_trong_email(self):
+        for incident in (_incident_uc3(), _incident_day_du(), _incident_toi_thieu()):
+            assert _o_trong(build_email_body(incident)) == []
 
 
 # ────────── Tích hợp với EmailClient ──────────

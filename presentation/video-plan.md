@@ -1,35 +1,51 @@
 # Kế hoạch quay Video Demo — 3 phút
 
-**Người quay:** Long · **Trục kịch bản:** UC-4 (deploy thiếu migration → sửa THẬT → tự xác nhận)
-**Ràng buộc:** ≤ 3:00 · phải có Jira · mọi thứ trên màn hình là hệ thống thật đang chạy
+Viết lại ngày 24/08 theo **khung BTC yêu cầu**, thay bản 21/08 *(vẫn xem được trong
+git history — ý "thử ép thi hành, bị chặn" của Long được giữ, xem cảnh 8)*.
 
-> Kế hoạch này nén màn ⑥ của [docs/demo-runbook.md](../docs/demo-runbook.md) (khoảng 7 phút
-> khi trình bày trực tiếp) xuống 3 phút. Mọi lệnh dưới đây **lấy nguyên văn từ runbook** —
-> nếu runbook đổi thì file này phải đổi theo.
+```
+0:00 ── 0:40   VẤN ĐỀ + CHÂN DUNG AGENT        40 giây
+0:40 ── 2:30   DEMO VẬN HÀNH                  110 giây
+2:30 ── 3:00   GIÁ TRỊ + KẾT QUẢ               30 giây
+```
 
-## Vì sao chọn UC-4 chứ không phải UC-1
+Trong đó **28 giây là B-roll gen bằng Flow** (3 shot: 14 + 8 + 6), **152 giây là màn hình
+thật**. B-roll chạy dưới lời thoại có sẵn nên không ăn thêm giây nào của phần sản phẩm.
 
-Ba phút chỉ đủ cho một kịch bản. UC-4 là kịch bản duy nhất có đủ cả bốn thứ giám khảo sẽ tìm:
+Nhịp đọc **150 chữ/phút = 2,5 chữ/giây**. Mỗi cảnh đã đếm chữ — **đừng thêm chữ**,
+thêm là tràn giờ và phải cắt hình.
 
-| Thứ cần chứng minh | UC-1 (pool cạn) | **UC-4 (thiếu migration)** |
-|---|:---:|:---:|
-| Agent tự phát hiện | ✅ | ✅ |
-| Chẩn đoán được cái mà số đo **không** chỉ ra | ❌ số đo đã nói hết | ✅ p95 đẹp, phải đọc log |
-| Cổng phê duyệt trên Jira | ✅ | ✅ |
-| Sửa **thật** + tự đo lại xác nhận | ❌ mô phỏng | ✅ lỗi 100% → 0% |
-
-UC-1 vẫn dùng được, nhưng để dành cho pitch deck (slide escalation P2→P1 và lan truyền)
-chứ không nhét vào video.
+Tổng lời thoại: **425 chữ / 170 giây đọc**. Ba giây còn lại là khoảng lặng cố ý ở cảnh 5
+— xem lý do ở đó. Đừng lấp.
 
 ---
 
-## A. Chuẩn bị trước khi bấm ghi
+## Vì sao chọn UC-4 chứ không phải UC-1
 
-Đây là phần dễ mất nhiều giờ nhất. Bốn cái bẫy dưới đây đều đã làm hỏng một buổi tập rồi.
+Ba phút chỉ đủ một kịch bản. UC-4 *(deploy thiếu migration)* là kịch bản duy nhất
+có đủ bốn thứ giám khảo sẽ tìm:
 
-### A1. Bật hệ thống — thứ tự này quan trọng
+| | UC-1 pool cạn | **UC-4 thiếu migration** |
+|---|---|---|
+Số đo có nói ra vấn đề? | có — p95 vọt lên | **KHÔNG — p95 còn nhanh hơn thường** |
+Có buộc phải đọc log? | không | **có, đây là nguồn duy nhất** |
+Có sửa được **thật**? | chưa | **có — lỗi 100% → 0%** |
+Có cổng người duyệt? | có | có |
+
+Dòng thứ hai là lý do. UC-4 là chỗ **số đo nói ngược sự thật** — và đó là toàn bộ
+lý do sản phẩm này tồn tại.
+
+---
+
+# A. Chuẩn bị trước khi bấm ghi
+
+Sáu bẫy dưới đây **đều đã làm hỏng một buổi tập rồi**. Đọc hết trước khi quay.
+
+## A1. Bật hệ thống — thứ tự này quan trọng
 
 ```bash
+cd /Users/duc/VIN_AI/P-035
+
 # 1) demo stack
 DEMO_POSTGRES_PORT=55432 docker compose -f docker-compose.demo.yml up -d
 docker ps --format '{{.Names}}' | grep p035-demo      # phải ra 4 dòng
@@ -38,339 +54,495 @@ docker ps --format '{{.Names}}' | grep p035-demo      # phải ra 4 dòng
 pkill -f "uvicorn src.main"
 REMEDIATION_REAL=1 python -m uvicorn src.main:app --port 8000 &
 sleep 8
+curl -s localhost:8000/health                          # {"status":"ok",...}
 
-# 3) war room
-API_URL=http://localhost:8000 streamlit run ui/war_room.py &
-curl -s -o /dev/null -w "%{http_code}\n" localhost:8501   # phải ra 200
+# 3) UI — điểm khởi động là status_page.py, KHÔNG phải war room
+API_URL=http://localhost:8000 \
+JIRA_BASE_URL=https://jibinarybro.atlassian.net \
+PROM_URL=http://localhost:9090 \
+  streamlit run ui/status_page.py &
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8501/war_room   # 200
 ```
 
 > 🪤 **Bẫy 1 — `REMEDIATION_REAL=1` phải đặt trên backend, không phải trên `duyet.py`.**
-> `duyet.py` chỉ gửi HTTP; phần thi hành chạy trong tiến trình backend. Đặt sai chỗ thì kết
-> quả trả về `simulated=true` mà **không báo lỗi gì** — mất 15 phút mới nhận ra (17/08).
-> Quay xong cả video rồi mới phát hiện chữ `simulated` trên màn hình là phải quay lại từ đầu.
+> `duyet.py` chỉ gửi HTTP; phần thi hành chạy trong tiến trình backend. Đặt sai chỗ
+> thì kết quả trả `simulated=true` mà **không báo lỗi gì** — mất 15 phút mới nhận ra
+> (17/08). Quay xong cả video rồi mới thấy chữ `simulated` là **quay lại từ đầu**.
 
-> 🪤 **Bẫy 2 — sửa code Python xong phải khởi động lại backend.** Python không tự nạp lại,
-> tiến trình cũ giữ code cũ.
+> 🪤 **Bẫy 2 — lệnh bật UI đã đổi ngày 22/08.** `ui/war_room.py` chuyển sang
+> `ui/pages/war_room.py` (Streamlit multi-page: một tiến trình, hai trang).
+>
+>     localhost:8501            → trang trạng thái (cảnh 2)
+>     localhost:8501/war_room   → WAR ROOM (cảnh 7)
+>
+> Và **phải đủ ba biến**. Thiếu `JIRA_BASE_URL` thì cảnh 7 mất nút *"Mở phiếu Jira"*;
+> thiếu `PROM_URL` thì mất nút *"kiểm chứng PromQL"* — mà cảnh 7 lấy đúng hai thứ đó
+> làm điểm nhấn. Đã vấp thật 21/08: chỉ truyền `API_URL`.
 
-### A2. Seed dữ liệu — trong vòng 15 phút trước khi quay cảnh 4
+## A2. Hai điều kiện phải kiểm — 20 giây
+
+```bash
+# ① KHÔNG service nào còn phiếu đang mở
+python -c "
+from dotenv import load_dotenv; load_dotenv('.env')
+from src.config import get_settings
+from src.services.jira.real import RealJiraClient
+s=get_settings(); c=RealJiraClient(s.jira_base_url,s.jira_email,s.jira_api_token,s.jira_project_key)
+for sv in ('service-thanh-toan','service-dat-hang'):
+    print(sv, '→', c.find_open_incident(sv))"
+# phải ra None cả hai
+```
+
+> 🪤 **Bẫy 3 — phiếu đang mở làm CẢNH 6 mất hết nội dung.**
+> `open_war_room()` thấy service đã có phiếu mở thì chỉ **comment cập nhật**, không
+> chẩn đoán lại và **không đề xuất lại**. Nên ở cảnh 6 — phần chính, 32 giây, dài
+> nhất video — Agent chỉ in `"đã có incident đang mở"`. Không có `rollback` để duyệt,
+> nên **cảnh 6, 7, 8, 9 mất hết nội dung**.
+>
+> Hành vi này **có chủ ý** (chống mở phiếu trùng), không phải lỗi. Đã vấp hai lần
+> trong hai ngày.
+
+> 🪤 **Bẫy 4 — người khác chạy Agent giữa lúc mình quay.**
+> Bản deploy `035.emmetech.id.vn` và Render đều dùng `JIRA_PROJECT_KEY=KAN` — **cùng
+> một bảng** với máy quay. Board đi từ KAN-61 lên KAN-85 trong hai ngày mà không phải
+> mình làm.
+>
+> Nhắn nhóm trước khi bấm ghi: *"t đang quay, đừng ai chạy `run_agent.py`"*.
+
+## A3. Seed — trong vòng 15 phút trước cảnh 4
 
 ```bash
 python demo/seed.py
 ```
 
-Bảng `deploy_history` đặt bản `v1.4.3` ở mốc "3 phút trước", còn Agent chỉ soi deploy trong
-vòng 15 phút quanh sự cố. Quá hạn thì Agent vẫn chẩn đoán đúng nhưng **mất dòng "trùng thời
-gian với một lần deploy"** — mất luôn mạch kể của video.
+> 🪤 **Bẫy 5 — seed quá sớm thì Agent đề xuất SAI hành động.**
+> `seed.py` đặt `v1.4.3` ở mốc *"3 phút trước"*, còn `rules.DEPLOY_WINDOW_MINUTES = 15`.
+> Quá hạn thì `correlate_deploy()` trả `None`, Agent tụt về nhánh mặc định và đề xuất
+> **`scale_up`** thay vì **`rollback`**. Mà `executors._CHO_PHEP` chỉ cho thi hành thật
+> `rollback` → cảnh 9 ra `(mô phỏng)`.
+>
+> Đo lúc vấp: deploy cách sự cố **58,7 phút**. Mọi mắt khác vẫn đúng — log vẫn tìm ra
+> `idempotency_key`, tin cậy vẫn tăng — **chỉ hành động là sai, và không có dòng lỗi nào.**
 
-### A3. Tài khoản Jira — bẫy chết người
+## A4. Tài khoản Jira — bẫy chết người
 
-| Việc | Tài khoản |
-|---|---|
-| Đăng nhập trình duyệt để **kéo phiếu duyệt** | `thaiduc200427@gmail.com` (Duc Truong — **người**) |
-| Tài khoản Agent dùng — **KHÔNG được đăng nhập bằng cái này** | `thaiduc0201` |
+> 🪤 **Bẫy 6 — Agent không tự duyệt được, kể cả khi mình muốn.**
+> Cổng HITL đọc changelog Jira: ai chuyển trạng thái mà **trùng account của Agent**
+> thì `ApprovalError`, không thi hành. Nên phải kéo phiếu bằng **tài khoản người**
+> (`thaiduc200427`), không phải tài khoản Agent (`thaiduc0201`).
+>
+> Đây cũng chính là thứ cảnh 9 đem ra làm bằng chứng — **hai cái tên khác nhau trong
+> lịch sử phiếu**.
 
-> 🪤 **Bẫy 3.** Đăng nhập nhầm `thaiduc0201` thì cảnh 7 **bị hệ thống chặn** — đúng như thiết
-> kế, nhưng hỏng mất cảnh quay. Kiểm avatar góc phải Jira trước khi bấm ghi.
-
-Board: https://jibinarybro.atlassian.net/jira/software/projects/KAN/boards/2
-
-### A4. Ba cửa sổ, sắp sẵn trước khi ghi
+## A5. Ba cửa sổ, sắp sẵn trước khi ghi
 
 | Cửa sổ | Địa chỉ | Dùng ở cảnh |
 |---|---|---|
-| Terminal (phóng chữ ≥ 16pt) | — | 2, 3, 4, 6, 8 |
-| War room | http://localhost:8501 | 1, 5 |
-| Jira board | link ở A3 | 6, 7 |
+Terminal *(phóng chữ ≥ 16pt)* | — | 4, 5, 6, 8, 10 |
+Trang trạng thái | http://localhost:8501 | 2 |
+War room | http://localhost:8501/war_room | 7 |
+Jira | board KAN | 9 |
 
-> 🪤 **Bẫy 4 — Render ngủ.** Nếu quay cảnh nào chạm tới backend trên Render (webhook Jira
-> Automation), đánh thức trước: `curl https://p-035-incident-agent.onrender.com/health`.
-> Rule gọi lúc nó ngủ sẽ **fail im lặng**.
+## A6. Dọn màn hình
 
-### A5. Dọn màn hình — kiểm trước khi ghi
-
-- [ ] Đóng hết tab không liên quan, tắt thông báo Windows (Focus assist)
-- [ ] Terminal **không** đang hiện nội dung `.env`, `JIRA_API_TOKEN`, `OPENAI_API_KEY`
-- [ ] Lịch sử lệnh không có dòng nào chứa token (bấm `clear` trước mỗi take)
-- [ ] Không mở màn hình email cảnh báo — nó chứa Gmail cá nhân của 4 thành viên
-- [ ] Zoom trình duyệt 110–125% để chữ war room đọc được khi video bị nén
+- Tắt hết thông báo *(Do Not Disturb)*
+- Đóng tab không liên quan — thanh bookmark càng gọn càng tốt
+- Terminal: chữ to, nền tối, **không** hiện tên máy/đường dẫn dài
+- Ẩn thanh Dock
 
 ---
 
-## B. Timeline — 8 cảnh
-
-Cột **Lời thoại** là bản đọc thật, đã đếm chữ theo nhịp ~150 chữ/phút. Đừng thêm chữ:
-mỗi câu thêm vào là một cảnh phải cắt bớt ở cuối.
+# B. Timeline — 11 cảnh
 
 ---
 
-### Cảnh 1 · 0:00–0:18 · Hook
+## PHẦN 1 · VẤN ĐỀ + CHÂN DUNG AGENT · 0:00–0:40
 
-**Màn hình:** War room, màn xanh *"Hệ thống đang bình thường"*. Giữ yên, không rê chuột.
+### Cảnh 1 · 0:00–0:14 · Vấn đề
 
-> "Hai giờ sáng. Đây là bảng theo dõi sự cố của một hệ thống thanh toán. Màn hình xanh —
-> không có gì bất thường. AI đang trực, nó canh ba thứ: khách phải chờ bao lâu, tỷ lệ lỗi,
-> và service còn sống không."
+**Màn hình:** B-roll shot A *(xem mục C)* — phòng tối, điện thoại úp im, đèn xanh mờ
+ngoài nét phía sau.
+
+> "Hai giờ sáng, hệ thống thanh toán có sự cố. Người trực bị gọi dậy. Họ không thiếu
+> kỹ năng sửa — họ thiếu **bối cảnh**: chuyện gì đang xảy ra, vì sao, và nên làm gì
+> trước."
+
+*(35 chữ · 14 giây)*
+
+---
+
+### Cảnh 2 · 0:14–0:22 · Vì sao monitor không đủ
+
+**Màn hình:** trang trạng thái thật, `localhost:8501` — hai thẻ xanh, *"Hoạt động
+bình thường"*. Không rê chuột.
+
+> "Công cụ theo dõi trả lời được *có gì đó sai*. Nó không nói được **sai cái gì**, và
+> **nên làm gì**."
+
+*(20 chữ · 8 giây)*
+
+---
+
+### Cảnh 3 · 0:22–0:40 · Chân dung Agent
+
+**Màn hình:** sơ đồ 4 khối, dựng đơn giản — `PHÁT HIỆN → CHẨN ĐOÁN → ĐỀ XUẤT → CHỜ
+DUYỆT`. Khối cuối tô khác màu.
+
+> "Agent làm bốn việc: **phát hiện** từ số đo, **chẩn đoán** nguyên nhân — kể cả khi
+> phải đọc log, **đề xuất** cách khắc phục kèm rủi ro, rồi **tự đo lại** sau khi sửa.
+>
+> Việc duy nhất nó **không** làm là tự bấm nút. Mọi hành động lên hệ thống thật đều
+> phải có người duyệt."
 
 *(45 chữ · 18 giây)*
 
+> **Vì sao câu cuối phải nằm ở đây, không để tới cảnh 8:** giám khảo nghe *"AI vận hành
+> production"* là nghĩ ngay *"nguy hiểm"*. Trả lời trước thì 100 giây sau đó họ xem với
+> tâm thế khác.
+
 ---
 
-### Cảnh 2 · 0:18–0:40 · Gây sự cố thật
+## PHẦN 2 · DEMO VẬN HÀNH · 0:40–2:30
 
-**Màn hình:** Terminal. Gõ (hoặc dán) và để chạy:
+### Cảnh 4 · 0:40–0:58 · Gây sự cố thật
+
+**8 giây đầu là SHOT B** *(xem mục C)*, 10 giây sau là terminal.
+
+**Màn hình:** Terminal.
 
 ```bash
 SIMULATE_MISSING_MIGRATION=1 DEMO_POSTGRES_PORT=55432 \
   docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
-sleep 10 && python eval/run_measurements.py payment-load --seconds 80 --concurrency 3 --pause 0.05
+
+python eval/run_measurements.py payment-load --seconds 80 --concurrency 3 --pause 0.05
 ```
 
-Kết thúc phải hiện: `{"500": 2202, "502": 735}` — **tua nhanh ×4 đoạn chờ 80 giây**.
+**Tua nhanh ×6** đoạn chờ 80 giây. Kết thúc phải hiện dòng thống kê `{"500": …, "502": …}`.
 
-> "Bọn em vừa deploy phiên bản một-chấm-bốn-chấm-ba, thêm tính năng chống trùng giao dịch,
-> nhưng quên chạy migration. Cột `idempotency_key` chưa tồn tại trong database. Bắn tải vào:
-> hai nghìn hai trăm lỗi 500, bảy trăm ba mươi lăm lỗi 502. Không một request nào thành công."
+> "Đây là sự cố thật, không phải mô phỏng. Bản `v1.4.3` thêm tính năng chống trùng giao
+> dịch, nhưng **quên chạy migration** — cột trong database chưa tồn tại. Giờ không ai
+> thanh toán được."
 
-*(48 chữ · 22 giây)*
+*(40 chữ · 18 giây)*
 
-**Hậu kỳ:** khoanh đỏ dòng `{"500": 2202, "502": 735}`, giữ 2 giây.
+**Hậu kỳ:** khoanh đỏ dòng thống kê, giữ 2 giây. Overlay chữ **`0 request thành công`**.
 
 ---
 
-### Cảnh 3 · 0:40–1:02 · Số đo MÙ — đây là lý do sản phẩm tồn tại
+### Cảnh 5 · 0:58–1:20 · SỐ ĐO MÙ — **đây là lý do sản phẩm tồn tại**
 
-**Màn hình:** Terminal, chạy PromQL:
+**Màn hình:** Terminal.
 
 ```bash
 curl -s -G localhost:9090/api/v1/query --data-urlencode \
- 'query=histogram_quantile(0.95, sum by (service,le) (rate(http_request_duration_seconds_bucket{handler!="/metrics"}[1m])))'
+ 'query=histogram_quantile(0.95, sum by (service,le) (rate(http_request_duration_seconds_bucket{handler!="/metrics",service="service-thanh-toan"}[1m])))'
 ```
 
-Kết quả: p95 ≈ **0,048s**, pool 0%.
+Kết quả: **p95 ≈ 0,048 giây**.
 
-> "Và đây là chỗ công cụ monitor bó tay. Lỗi một trăm phần trăm, nhưng p95 chỉ bốn mươi tám
-> mili giây — nhanh hơn cả lúc bình thường, vì request chết ngay ở câu lệnh đầu. Pool thì
-> rảnh. Nhìn ba con số này mà đoán ra nguyên nhân là **không thể**."
+> "Và đây là chỗ monitor bó tay. Lỗi gần một trăm phần trăm — nhưng thời gian phản hồi
+> chỉ **bốn mươi tám mili giây**, nhanh hơn cả lúc bình thường, vì request chết ngay ở
+> câu lệnh đầu. Pool thì rảnh. Nhìn ba con số này mà đoán nguyên nhân là **không thể**."
 
-*(52 chữ · 22 giây)*
+*(48 chữ · 19 giây đọc + 3 giây IM LẶNG = 22 giây)*
 
-**Hậu kỳ:** hiện overlay 3 ô số cạnh nhau — `Lỗi 100%` (đỏ) · `p95 0,048s` (xanh lá) ·
-`Pool 0%` (xanh lá). Sự nghịch lý phải nhìn thấy được, không chỉ nghe thấy.
+**Hậu kỳ:** overlay ba ô cạnh nhau —
+`Lỗi 99%` *(đỏ)* · `p95 0,048s` *(xanh)* · `Pool 0%` *(xanh)*
+
+> ⏱ **Giữ overlay thêm 3 giây SAU khi hết lời thoại — im lặng, không nhạc.**
+>
+> Nếu người xem không *thấm* nghịch lý này thì cảnh 6 chỉ còn là *"AI đọc log"* — nghe
+> giống trăm dự án khác, và mọi thứ sau đó mất trọng lượng. **Ba giây im lặng làm con số
+> nặng hơn ba câu giải thích.**
+>
+> Cảnh này **không được cắt** dù có tràn giờ. Cắt chỗ khác.
 
 ---
 
-### Cảnh 4 · 1:02–1:38 · Agent vào cuộc — phần chính
+### Cảnh 6 · 1:20–1:45 · Agent vào cuộc — phần chính
 
-**Màn hình:** Terminal:
+**Màn hình:** Terminal.
 
 ```bash
 python scripts/run_agent.py --once
 ```
 
-Vài dòng WARNING đầu là Agent thử các đường phát hiện không áp dụng được — **tua nhanh qua**.
-Dừng lại ở đúng hai dòng:
+Dừng và khoanh **hai dòng log**:
 
-| Dòng log | Xử lý hình ảnh |
+| Dòng | Hậu kỳ |
 |---|---|
-| `giả thuyết (tin cậy 30%) — Chưa đủ bằng chứng để nêu nguyên nhân gốc` | khoanh đỏ, giữ 3 giây |
-| `log đổi kết luận, post lại lên war room (30% → 70%)` | khoanh đỏ, zoom vào `idempotency_key` |
+`giả thuyết (tin cậy 30%) — Chưa đủ bằng chứng để nêu nguyên nhân gốc. Trùng thời gian: deploy v1.4.3 diễn ra 5 phút trước — chưa xác minh nhân quả…` | khoanh đỏ **cả câu**, giữ 4 giây |
+`log đổi kết luận, post lại lên war room (tin cậy 30% → 70%) — thiếu cột idempotency_key trong bảng payments` | khoanh đỏ, giữ 4 giây |
 
-> "Agent vào cuộc. Dòng đầu tiên: tin cậy ba mươi phần trăm — *chưa đủ bằng chứng để nêu
-> nguyên nhân gốc*. Nó **thừa nhận nó chưa biết**, chứ không bịa ra một câu nghe cho xuôi tai.
-> Rồi nó đi đọc log của service, và tìm ra: cột `idempotency_key` không tồn tại. Không con số
-> nào chứa được thông tin đó. Tin cậy lên bảy mươi phần trăm — và nó tự mở một phiếu sự cố
-> trên Jira."
+> "Agent quét, phát hiện, mở phiếu. Rồi nó nói một câu đáng chú ý: *chưa đủ bằng chứng
+> để nêu nguyên nhân gốc*. Nó thấy một lần deploy trùng thời gian — và nói thẳng **trùng
+> thời gian chưa phải nhân quả**.
+>
+> Sau đó nó đọc log. Và tìm ra: **thiếu một cột trong database**. Tin cậy từ ba mươi lên
+> bảy mươi phần trăm. **Không con số nào chứa được thông tin đó.**"
 
-*(78 chữ · 36 giây)*
+*(62 chữ · 25 giây)*
 
-Câu *"nó thừa nhận nó chưa biết"* là câu quan trọng nhất video. Đọc chậm lại ở đó.
-
----
-
-### Cảnh 5 · 1:38–2:02 · War room — bằng chứng truy vết được
-
-**Màn hình:** F5 http://localhost:8501 → mở phiếu vừa tạo. Thao tác đúng ba bước:
-
-1. Lướt qua ba mục **① AI thấy gì → ② AI nghĩ vì sao → ③ AI đề nghị làm gì**
-2. Bấm nút **"PromQL để kiểm chứng lại"** → Prometheus mở ra cùng con số → cắt về ngay
-3. Zoom vào ô đỏ giữa màn hình
-
-> "War room hiện ra ba mục: AI thấy gì, AI nghĩ vì sao, AI đề nghị làm gì. Bấm vào đây —
-> Prometheus mở ra đúng con số đó. AI không tự chế ra số, nó chỉ dịch sang tiếng người. Và
-> ô đỏ này: AI đã đề xuất cách sửa, nhưng **nó không tự thực hiện**."
-
-*(56 chữ · 24 giây)*
+> **Đọc chậm bốn chữ *"chưa xác minh nhân quả"*.** Đó là chỗ chứng minh hệ thống biết
+> ranh giới hiểu biết của nó — và gần như không dự án nào dám in câu đó ra màn hình.
 
 ---
 
-### Cảnh 6 · 2:02–2:20 · **JIRA** — cổng chặn
+### Cảnh 7 · 1:45–2:04 · War room — bằng chứng truy vết được
 
-**Màn hình:** hai nửa.
+**Màn hình:** F5 `localhost:8501/war_room` → mở phiếu vừa tạo. Chỉ **hai** thao tác,
+đừng cuộn lung tung:
 
-Nửa đầu — terminal:
+1. Chỉ vào mục bằng chứng — có tên metric gốc và con số
+2. Bấm **"kiểm chứng PromQL"** → mở tab Prometheus, ra **cùng một con số**
+
+> "Mọi con số trên trang này đều kèm câu truy vấn gốc. Bấm vào là mở thẳng Prometheus —
+> ra đúng con số đó. Người trực **không phải tin Agent**, họ kiểm lại được.
+>
+> Trong tài liệu bọn em cũng **kể tên bốn tình huống Agent bỏ lọt**, gồm cả loại mà số
+> đo không thể thấy được."
+
+*(47 chữ · 19 giây)*
+
+> **Câu *"kể tên bốn tình huống Agent bỏ lọt"* là câu đáng giá nhất cả video.** Không
+> nhóm nào tự nói ra chỗ mình mù.
+>
+> Đặt ở đây, không ở cảnh 11: cảnh này đang nói về **tính minh bạch** nên nó thuộc mạch;
+> còn cảnh 11 là 30 giây cuối, phải kết bằng **kết quả** chứ không bằng thiếu sót.
+>
+> Bốn tình huống đó kể tên trong [`eval/RESULTS-2026-08-21.md`](../eval/RESULTS-2026-08-21.md) §3.
+
+---
+
+### Cảnh 8 · 2:04–2:14 · Cổng chặn — thử ép thi hành
+
+**Màn hình:** Terminal.
 
 ```bash
-python scripts/duyet.py KAN-xx      # thay xx bằng số phiếu thật
+python scripts/duyet.py KAN-xx
 ```
 
-Phải ra: **⛔ BỊ CHẶN — chưa ai duyệt**.
+Kết quả: **bị từ chối**.
 
-Nửa sau — cắt sang **Jira board**, phiếu đang nằm ở cột `Awaiting Approval`. Rê chuột cho
-thấy phiếu, không bấm gì.
+> "Em thử ép hệ thống thi hành luôn, không qua ai. **Bị chặn.** Chưa ai bấm thì không
+> có đường nào đi tiếp."
 
-> "Em thử ép hệ thống thi hành luôn. Bị chặn. Sang Jira — phiếu vẫn đang nằm ở cột *chờ phê
-> duyệt*. Chưa ai bấm nút thì không có đường nào đi tiếp."
+*(24 chữ · 10 giây)*
 
-*(38 chữ · 18 giây)*
-
----
-
-### Cảnh 7 · 2:20–2:44 · **JIRA** — người duyệt, hệ thống sửa thật
-
-**Màn hình:** giữ nguyên Jira, thao tác thật trên board.
-
-1. **Kéo phiếu từ `Awaiting Approval` sang `Remediating`** — quay trọn cú kéo, đừng cắt
-2. Chờ ~30 giây (Jira Automation gọi webhook) — **tua nhanh ×4**
-3. F5 phiếu → hai comment tự hiện:
-   ```
-   ✅ ĐÃ PHÊ DUYỆT — Người phê duyệt: 712020:fd2ca790…
-   Đã thực thi khắc phục: rollback → service-thanh-toan — thành công
-   ```
-4. Mở tab **History** của phiếu → **khoanh đỏ hai cái tên khác nhau** (người mở phiếu = Agent,
-   người duyệt = người)
-
-> "Giờ em kéo phiếu sang *Remediating*, bằng tài khoản người thật. Em không gõ thêm lệnh nào
-> — Jira tự gọi sang hệ thống, hệ thống kiểm ai đã duyệt rồi mới cho thi hành. Hai comment tự
-> hiện. Và mở lịch sử phiếu ra: **hai cái tên khác nhau**. Agent không sửa được lịch sử này —
-> nên đây là bằng chứng kiểm toán được, không phải lời hứa suông."
-
-*(60 chữ · 24 giây)*
-
-> ⚠️ Trên màn hình **không được** xuất hiện chữ `simulated`. Thấy chữ đó nghĩa là quên
-> `REMEDIATION_REAL=1` trên backend (bẫy 1) — dừng, sửa, quay lại cảnh này.
+> *(Ý này của Long trong bản 21/08 — giữ lại vì nó là cách mạnh nhất để chứng minh cổng
+> HITL: cho thấy nó **từ chối** trước khi cho thấy nó cho qua.)*
 
 ---
 
-### Cảnh 8 · 2:44–3:00 · Agent tự xác nhận + kết
+### Cảnh 9 · 2:14–2:30 · Người duyệt — hệ thống sửa thật
 
-**Màn hình:** terminal:
+**Màn hình:** Jira. Kéo phiếu sang **`Remediating`** bằng tài khoản người. Chờ comment
+tự hiện. Rồi mở **History** của phiếu.
+
+> "Giờ một người thật kéo phiếu sang *Remediating*. Cùng một lệnh — lúc nãy bị chặn,
+> giờ qua. Khác duy nhất là **có người bấm nút**.
+>
+> Mở lịch sử phiếu: **hai cái tên khác nhau**. Agent không sửa được lịch sử này."
+
+*(40 chữ · 16 giây)*
+
+> ⚠️ Trên màn hình **không được** xuất hiện chữ `simulated`. Thấy là quên
+> `REMEDIATION_REAL=1` trên backend — dừng, sửa, quay lại cảnh này.
+
+---
+
+## PHẦN 3 · GIÁ TRỊ + KẾT QUẢ · 2:30–3:00
+
+### Cảnh 10 · 2:30–2:44 · Agent tự xác nhận đã khỏi
+
+**8 giây đầu là terminal, 6 giây cuối là SHOT C** *(xem mục C)* — shot C ở 2:38–2:44.
+
+**Màn hình:** Terminal.
 
 ```bash
 python eval/run_measurements.py payment-load --seconds 45 --concurrency 2 --pause 0.05
-sleep 12
 python scripts/run_agent.py --once
 ```
 
-Dừng ở: `verify service-thanh-toan: không còn tín hiệu sự cố — đã hồi phục`
+Dòng cần khoanh: `verify service-thanh-toan: không còn tín hiệu sự cố — đã hồi phục`
 
-> "Agent tự đo lại, bằng **đúng những truy vấn đã phát hiện ra sự cố**. Trước: không một
-> request nào thành công. Sau: ba trăm hai mươi sáu trên ba trăm hai mươi sáu. Đã hồi phục."
+> "Agent tự đo lại, bằng **đúng những truy vấn đã phát hiện ra sự cố**. Trước: không
+> một request nào thành công. Sau: tất cả. Tỷ lệ lỗi từ một trăm phần trăm về **không**."
 
-*(35 chữ · 16 giây)*
+*(36 chữ · 14 giây)*
 
-**Hậu kỳ — card kết, giữ 4 giây cuối:**
-
-```
-AI Agent Điều Phối Ứng Phó Sự Cố
-Team Binary Brothers · PTNT-20
-
-Tự phát hiện · Chẩn đoán có bằng chứng · Người quyết định
-
-<link MVP>
-```
+**Hậu kỳ:** overlay `100% → 0%` thật to, giữ tới hết cảnh.
 
 ---
 
-## C. Cách quay
+### Cảnh 11 · 2:44–3:00 · Con số đo được
 
-**Tách 3 take, đừng quay một mạch.** Quay liền 3 phút nghĩa là sai ở giây thứ 160 phải làm lại
-từ đầu, mà cảnh 2 và 8 đều phải chờ loadtest.
+**Màn hình:** bảng, dựng sạch — **không** quay code:
 
-| Take | Cảnh | Ghi chú |
+```
+Phát hiện → đề xuất kèm runbook        39 giây
+Tỷ lệ lỗi sau khắc phục               100% → 0%
+Request thành công sau rollback        120 / 120
+Cổng người duyệt bị vượt qua           0 lần
+Chi phí hạ tầng                        0 đồng
+```
+
+> "Phát hiện đến đề xuất kèm runbook: **ba mươi chín giây**. Sau khi người duyệt bấm,
+> tỷ lệ lỗi về **không**. Cổng người duyệt chưa lần nào bị vượt qua. Toàn bộ chạy trên
+> hạ tầng miễn phí."
+
+*(38 chữ · 16 giây)*
+
+> **Vì sao bảng này chứ không phải bảng recall/precision:** 30 giây cuối BTC yêu cầu
+> *"giá trị cốt lõi và **kết quả**"*. Recall 84% là **điểm thi**, không phải kết quả —
+> và kết video bằng "bỏ lọt 4, báo nhầm 5" là kết bằng thiếu sót.
+>
+> Năm dòng trên đều là **việc đã giao được**, và đều **đo được, lặp lại được** — không
+> dòng nào là tỷ lệ trên bộ case tự dựng. Phần recall/precision để trong slide và
+> `eval/RESULTS-2026-08-21.md`, chỗ có không gian giải thích khoảng tin cậy.
+>
+> **39 giây là con số mạnh nhất**, vì nó so được ngầm: 2 giờ sáng, một người phải mở
+> laptop, đăng nhập, tìm log — mất bao lâu mới tới được câu *"thiếu cột `idempotency_key`,
+> rollback về v1.4.2"*?
+
+## Nguồn năm con số — kiểm lại trước khi quay
+
+| Dòng | Lấy từ | Cách kiểm lại |
 |---|---|---|
-| Take A — terminal | 2, 3, 4, 8 | Quay một lượt liền mạch của cả chuỗi lệnh, cắt sau |
-| Take B — war room | 1, 5 | Cảnh 1 quay **sau cùng** (lúc hệ thống đã dọn sạch, màn mới xanh lại) |
-| Take C — Jira | 6, 7 | Đây là take quan trọng nhất — quay 2–3 lần lấy bản mượt nhất |
+**39 giây** | log lần chạy 22/08, KAN-61: `20:27:42` phát hiện → `20:28:21` đề xuất | đọc mốc thời gian trong log cảnh 6 của **chính lần quay** |
+**100% → 0%** | `docs/demo-runbook.md` | cảnh 10 |
+**120/120** | `docs/demo-runbook.md` | đầu ra `run_measurements.py` ở cảnh 10 |
+**0 lần vượt cổng** | `tests/test_hitl.py` | cảnh 8 chứng minh trực tiếp |
+**0 đồng** | Render free tier · Jira free · DashScope quota miễn phí | — |
 
-**Thông số:**
-
-- Độ phân giải **1920×1080**, 30fps
-- Terminal: font ≥ 16pt, nền tối (khớp tông war room)
-- Trình duyệt zoom 110–125%, ẩn bookmark bar
-- Công cụ: OBS Studio (miễn phí) hoặc Xbox Game Bar (`Win+G`, có sẵn Windows 11)
-- Thu tiếng riêng nếu được — thu cùng lúc thì tiếng quạt laptop lúc loadtest lọt vào rất rõ
-
-**Hậu kỳ (CapCut / DaVinci Resolve, đều miễn phí):**
-
-- Tua nhanh ×4 mọi đoạn chờ (loadtest 80s, webhook 30s) — có nhãn `×4` góc màn hình
-- Khoanh đỏ: 4 chỗ đã ghi trong timeline, không khoanh thêm chỗ nào nữa
-- Phụ đề **burn-in** cho 3 câu chốt: *"nó thừa nhận nó chưa biết"* · *"AI không tự thực hiện"* ·
-  *"hai cái tên khác nhau"*
-- Nhạc nền: có cũng được, nhưng để rất nhỏ (−28 dB). Video kỹ thuật không cần nhạc kịch tính
+> ⚠️ **39 giây phải lấy từ lần quay thật, không chép số cũ.** Nếu lần quay ra 45 giây thì
+> ghi 45. Bịa một con số nhỏ hơn là phá đúng thứ cả video đang xây.
 
 ---
 
-## D. Phương án B — khi Jira Automation không bắn
+# C. Hai shot B-roll — chạy dưới cảnh 1
 
-Rule Jira hỏng, hoặc Render đang ngủ và fail im lặng. **Quay sẵn take dự phòng này** để khỏi
-phải dựng lại cả buổi:
+B-roll **không ăn thêm giây nào**: nó thay phần hình tĩnh của cảnh 1, lời thoại giữ
+nguyên.
 
-```bash
-python scripts/duyet.py KAN-xx      # ✅ QUA CỔNG
+## Nguyên tắc: **không có màu đỏ nào**
+
+Cảnh 1 là lúc **chưa có sự cố**, và luận điểm của dự án là *"hệ thống cháy mà số đo vẫn
+nói ổn"*. Cho màn đỏ vào là kể sai — và minh hoạ đúng câu chuyện *"monitor bắt được sự
+cố"* mà cảnh 5 nói thẳng là **không đủ**.
+
+Hai màu lấy từ `ui/theme.py`: xanh `#52B788` (`--ok`), đỏ `#E5484D` (`--p1`). Dùng đúng
+token của sản phẩm để cắt sang màn hình thật không bị lệch màu.
+
+## Shot A · 0:00–0:14 · sự bình yên
+
+```
+[STYLE]
+Extreme close-up, macro, shallow depth of field. A pitch-black bedroom at
+night. On a dark wooden bedside table: a smartphone lying face-down, screen
+off, completely still. Behind it and far out of focus, a laptop screen glows
+faint green, showing only a single perfectly flat horizontal line — no text,
+no numbers, unreadable at this distance. Nothing moves. A half-empty glass
+of water catches a thin cold rim of moonlight. The room is asleep.
+
+Camera: locked-off macro, almost imperceptible push-in over 14 seconds.
+Focus stays on the dark phone in the foreground; the green line stays soft
+and out of focus in the background.
+Lighting: single soft green wash #52B788 from the out-of-focus laptop, very
+low intensity. One thin cold blue moonlight rim from a window behind. Near
+black everywhere else.
+
+[AUDIO]
+Quiet room tone. A faint air-conditioner hum. A distant single car passing
+outside. No phone sound. No music. No alert tone.
+
+[NEGATIVE]
+red light, red colour anywhere, alert icons, warning symbols, flashing,
+blinking, spiking or falling line graphs, readable text, numbers, letters,
+dashboards with labels, sirens, dramatic music, tension score, people, hands,
+movement, camera shake
 ```
 
-Cùng endpoint, cùng payload, kết quả giống hệt — chỉ khác là kích tay thay vì Jira tự gọi.
-Lời thoại cảnh 7 đổi thành:
+## Shot B · 4 giây, đặt ở ĐẦU CẢNH 4 · nghịch lý
 
-> "Em kéo phiếu sang *Remediating* bằng tài khoản người thật, rồi kích cho hệ thống chạy.
-> Cùng một lệnh với lúc nãy — lúc nãy bị chặn, giờ qua. Em không sửa dòng code nào giữa hai
-> lần; khác duy nhất là **có người bấm nút hay không**."
+```
+[STYLE]
+Same bedside table, same darkness, identical framing to the previous shot.
+The phone screen lights up and the phone buzzes hard against the wood,
+rattling once, twice. Behind it, still out of focus, the laptop's green line
+stays perfectly flat and perfectly green — completely unchanged. The
+contradiction is the point: the phone is screaming, the screen says fine.
+Hold on the unchanged green line for the final second, not on the phone.
 
-Thực ra câu này còn mạnh hơn bản chính, vì nó nêu bật đúng biến số duy nhất đã thay đổi.
-Nếu bí thời gian, dùng thẳng phương án B.
+Camera: locked-off, identical to previous shot. In the last second, focus
+racks from the buzzing phone to the flat green line behind it.
+Lighting: unchanged soft green #52B788 wash. The phone's own screen light
+is cold white and blown out, illegible.
 
-**Các trục trặc khác:**
+[AUDIO]
+One second of silence. Then an aggressive phone vibration rattling against
+wood, twice. Then silence again. No music, no alert sting, no sub-bass.
 
-| Triệu chứng | Xử lý |
+[NEGATIVE]
+red light, red colour anywhere, red alerts, alert icons, warning symbols,
+spiking graphs, falling line charts, readable text, numbers, sirens,
+dramatic music, sub-bass swell, people, faces, hands
+```
+
+## Ba lưu ý khi gen
+
+**① `readable text, numbers, letters` là dòng quan trọng nhất trong `[NEGATIVE]`.**
+Mọi mô hình gen video đều dựng chữ thành ký tự méo. Video này cắt sang màn hình **thật**
+ngay sau đó — chữ méo cạnh chữ thật là lộ ngay.
+
+**② Không để mặt người.** Bỏ người thì mất luôn hai rủi ro: nhân vật khác nhau giữa hai
+shot, và tay/mắt bị dựng méo.
+
+**③ Giữ nguyên khung giữa hai shot** (`identical framing`), để cắt liền được. Gen 3–4
+lần rồi chọn cặp khớp nhất.
+
+---
+
+# D. Nếu có sự cố lúc quay
+
+| Hiện tượng | Nguyên nhân | Xử |
+|---|---|---|
+Agent in `"đã có incident đang mở"` | còn phiếu mở — **bẫy 3** | đóng phiếu đó, chạy lại cảnh 6 |
+Đề xuất ra `scale_up` thay `rollback` | seed quá 15 phút — **bẫy 5** | `python demo/seed.py`, làm lại từ cảnh 4 |
+Màn hình hiện chữ `simulated` | cờ đặt sai chỗ — **bẫy 1** | bật lại backend, làm lại cảnh 9 |
+`duyet.py` báo 403 | kéo phiếu bằng account Agent — **bẫy 6** | kéo lại bằng tài khoản người |
+PromQL trả `nan` | tải đã tắt quá 1–2 phút | chạy lại tải, quay lại cảnh 5 |
+`verify` báo **CHƯA ĐỠ** / **TỆ HƠN** | **không phải hỏng** | đọc to ra — xem dưới |
+
+## Nếu `verify` báo CHƯA ĐỠ hoặc TỆ HƠN
+
+Đó là hai nhánh **có thật** trong code, không phải lỗi:
+
+| Agent nói | Nghĩa |
 |---|---|
-| War room trắng / dữ liệu lạ | Thiếu `API_URL`. Bật lại kèm `API_URL=http://localhost:8000` |
-| Agent báo không có sự cố | Để nguội quá lâu sau loadtest. Chạy lại loadtest rồi chạy Agent **ngay** |
-| Đề xuất `increase_pool` thay vì `rollback` | Quên `seed.py`, hoặc seed quá 15 phút |
-| Duyệt xong vẫn bị chặn | Jira đang đăng nhập `thaiduc0201` (tài khoản Agent) |
-| `verify` báo ⚠️ CHƯA ĐỠ | Không phải hỏng — đó là nhánh có thật. Nhưng với video thì quay lại, vì mạch kể cần nhánh "đã hồi phục" |
-| `docker compose` chết ở port 5432 | Máy có Postgres khác. Dùng `DEMO_POSTGRES_PORT=55432` |
+⚠️ **CHƯA ĐỠ** | *"chẩn đoán ban đầu có thể sai, đừng thi hành lại cùng hành động"* |
+🔴 **TỆ HƠN** | mức nặng hơn lúc mở phiếu → *"cần người vào ngay, đừng thi hành thêm"* |
+
+Gặp thì cứ giữ nguyên và đọc to. **Một hệ thống dám nói "tôi có thể đã sai" đáng tin hơn
+một hệ thống lúc nào cũng báo thành công** — và câu đó nói ra trong video còn mạnh hơn
+một lần chạy suôn sẻ.
 
 ---
 
-## E. Dọn sau khi quay
+# E. Ngân sách thời gian — kiểm lại sau khi dựng
 
-```bash
-SIMULATE_MISSING_MIGRATION=0 DEMO_POSTGRES_PORT=55432 \
-  docker compose -f docker-compose.demo.yml up -d --force-recreate service-thanh-toan
-```
+| Phần | Cảnh | Giây | BTC yêu cầu |
+|---|---|---:|---|
+Vấn đề + chân dung | 1, 2, 3 | **40** | 30–45 ✅ |
+Demo vận hành | 4–9 | **110** | phần giữa ✅ |
+Giá trị + kết quả | 10, 11 | **30** | 30 ✅ |
+| | **Tổng** | **180** | ≤ 180 ✅ |
 
-Quên bước này thì service demo giữ nguyên trạng thái hỏng, và lần tập sau sẽ tưởng là bug mới.
+Nếu tràn giờ, cắt theo thứ tự này:
 
----
+1. cảnh 7 *(war room)* — 16 → 12 giây, bỏ thao tác thứ nhất
+2. cảnh 4 *(gây sự cố)* — tua nhanh mạnh hơn
+3. cảnh 9 *(người duyệt)* — bỏ phần mở History, chỉ nói
 
-## F. Checklist trước khi nộp video
-
-**Nội dung**
-- [ ] Thời lượng **≤ 3:00** (bấm giờ bản final, không ước lượng)
-- [ ] Có Jira xuất hiện rõ ràng ở **hai** cảnh: bị chặn (cảnh 6) và được duyệt (cảnh 7)
-- [ ] Tab History của Jira với hai tên khác nhau có lên hình
-- [ ] Không có chữ `simulated` ở cảnh 7
-- [ ] Số cuối là **326/326**, khớp với con số trong pitch deck và `SUBMISSION.md`
-
-**An toàn**
-- [ ] Không lộ `JIRA_API_TOKEN`, `OPENAI_API_KEY`, nội dung `.env` ở bất kỳ frame nào
-- [ ] Không lộ Gmail cá nhân của thành viên khác (màn hình email cảnh báo — đừng quay)
-- [ ] Tua từng frame ở đoạn terminal cuộn nhanh để chắc chắn không có dòng nào lọt
-
-**Kỹ thuật**
-- [ ] Xem lại trên **điện thoại** — chữ terminal còn đọc được không
-- [ ] Tiếng nói to đều, không bị tiếng quạt át
-- [ ] Upload YouTube ở chế độ **unlisted** (không phải private — giám khảo mở không được)
-- [ ] Tiêu đề video: `P-035 — AI Agent Điều Phối Ứng Phó Sự Cố | Team Binary Brothers`
-- [ ] Ảnh thumbnail YouTube: dùng `presentation/thumbnail.png`
-- [ ] Dán link vào bảng ở [SUBMISSION.md §5](SUBMISSION.md)
+**Không bao giờ cắt:** cảnh 5 *(số đo mù)*, cảnh 8 *(bị chặn)*, cảnh 11 *(con số)*. Ba
+cảnh đó là ba luận điểm — mất cái nào là mất một chân.

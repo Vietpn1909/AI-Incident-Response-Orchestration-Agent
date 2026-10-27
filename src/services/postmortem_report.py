@@ -29,9 +29,10 @@ Theo văn hoá blameless — mô tả hệ thống và quy trình, không chỉ 
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
-from src.models.incident import Incident
+from src.models.incident import Incident, IncidentState
+from src.services import prometheus, rules
 
 # ---------------------------------------------------------------------------
 # Jira URL helper
@@ -72,17 +73,45 @@ def _fmt_time_full(dt: datetime | None) -> str:
     return f"{local_dt.strftime('%Y-%m-%d %H:%M')} (UTC+7) / {dt.strftime('%H:%M')} UTC"
 
 
+def _bay_gio(moc: datetime) -> datetime:
+    """`now` cùng kiểu tz với `moc`.
+
+    Jira trả datetime CÓ tz, còn fixture test viết tay thì có thể không. Trừ hai
+    kiểu cho nhau là `TypeError`, mà chỗ gọi lại nằm trong đường sinh báo cáo —
+    vỡ ở đây là mất cả postmortem.
+    """
+    return datetime.now(UTC) if moc.tzinfo else datetime.now()  # noqa: DTZ005
+
+
+def _fmt_khoang(giay: float) -> str:
+    """Khoảng thời gian, đọc được ở MỌI thang đo.
+
+    Bản cũ chia thẳng cho 60 rồi in "N phút", nên mọi khoảng dưới một phút đều
+    ra **"0 phút"** — ô có chữ nhưng vô nghĩa. Đây không phải ca hiếm: ngưỡng
+    phát hiện là 30 giây (`rules.SUSTAINED_SECONDS`), nên phần lớn MTTD rơi vào
+    khoảng 30–59 giây.
+    """
+    giay = max(0.0, giay)
+    if giay < 60:
+        return f"{giay:.0f} giây"
+    phut = int(giay // 60)
+    if phut < 60:
+        return f"{phut} phút"
+    return f"{phut // 60} giờ {phut % 60} phút"
+
+
 def _fmt_duration(detected: datetime, resolved: datetime | None) -> str:
-    """Thời gian xử lý sự cố."""
+    """Thời gian xử lý sự cố. Chưa đóng thì đếm tới **bây giờ**, không bỏ trống.
+
+    Bản cũ trả "Chưa resolved" — đúng nghĩa nhưng vô dụng với người đọc, và nó
+    xuất hiện đúng lúc người ta cần con số nhất: mail postmortem của đường
+    auto-fix sinh ra TRƯỚC khi phiếu chuyển `Resolved`, nên ô "Tổng thời gian
+    gián đoạn" luôn rỗng.
+    """
     if resolved is None:
-        return "Chưa resolved"
-    delta = resolved - detected
-    minutes = int(delta.total_seconds() / 60)
-    if minutes < 60:
-        return f"{minutes} phút"
-    hours = minutes // 60
-    remaining = minutes % 60
-    return f"{hours} giờ {remaining} phút"
+        troi = (_bay_gio(detected) - detected).total_seconds()
+        return f"{_fmt_khoang(troi)} (đang diễn ra)"
+    return _fmt_khoang((resolved - detected).total_seconds())
 
 
 # ---------------------------------------------------------------------------
@@ -91,41 +120,194 @@ def _fmt_duration(detected: datetime, resolved: datetime | None) -> str:
 
 
 def _compute_mttd(incident: Incident) -> str:
-    """Mean Time To Detect — từ lúc deploy (nếu có) đến lúc phát hiện."""
-    if not incident.hypotheses:
-        return "—"
-    best = max(incident.hypotheses, key=lambda h: h.confidence)
-    if best.related_deploy:
-        delta = incident.detected_at - best.related_deploy.deployed_at
-        minutes = int(delta.total_seconds() / 60)
-        return f"{minutes} phút"
-    return "—"
+    """Mean Time To Detect — sự cố đã tồn tại bao lâu trước khi Agent thấy.
+
+    Hai nguồn, theo thứ tự ưu tiên:
+
+    1. **Có deploy nghi phạm** → đếm từ lúc deploy đến lúc mở phiếu. Chỉ dùng
+       được cho UC-4, nhưng khi dùng được thì đây là con số có ý nghĩa nhất:
+       nó đo đúng quãng "code hỏng đã chạy trong production bao lâu".
+    2. **Không có deploy** → `signal.breached_for_seconds`, tức metric đã vượt
+       ngưỡng liên tục bao lâu trước khi `detect()` chốt đây là sự cố.
+
+    Bản cũ chỉ có nhánh 1 và trả "—" cho tất cả phần còn lại — nghĩa là UC-1,
+    UC-2, UC-3 **không bao giờ** có MTTD. Đo trên KAN-104 (UC-3): ô trống, dù
+    `breached_for_seconds = 300` nằm sẵn trong signal.
+    """
+    best = max(incident.hypotheses, key=lambda h: h.confidence) if incident.hypotheses else None
+    if best and best.related_deploy:
+        return _fmt_khoang((incident.detected_at - best.related_deploy.deployed_at).total_seconds())
+    if incident.signal and incident.signal.breached_for_seconds > 0:
+        return _fmt_khoang(incident.signal.breached_for_seconds)
+    return "Không đo được (thiếu tín hiệu)"
 
 
 def _compute_mttr(incident: Incident) -> str:
-    """Mean Time To Recovery — từ lúc phát hiện đến lúc resolved."""
+    """Mean Time To Recovery — từ lúc phát hiện đến lúc resolved.
+
+    Chưa đóng thì đếm tới bây giờ và nói rõ là chưa xong — cùng lý do với
+    `_fmt_duration()`.
+    """
     if incident.resolved_at is None:
-        return "Chưa resolved"
-    delta = incident.resolved_at - incident.detected_at
-    minutes = int(delta.total_seconds() / 60)
-    return f"{minutes} phút"
+        troi = (_bay_gio(incident.detected_at) - incident.detected_at).total_seconds()
+        return f"{_fmt_khoang(troi)} (chưa phục hồi)"
+    return _fmt_khoang((incident.resolved_at - incident.detected_at).total_seconds())
+
+
+def _moc_cho_duyet_tu_changelog(events) -> tuple[datetime | None, datetime | None]:
+    """Suy mốc vào/ra hàng chờ duyệt từ dòng **đổi trạng thái** của Jira.
+
+    Vì sao cần: `RealJiraClient._timeline_from_changelog()` chỉ dựng được MỘT
+    loại mốc — đổi trạng thái. Các tên hành động `propose`/`approve` mà bản cũ
+    dò chỉ tồn tại trong `FakeJiraClient`, nên với Jira **thật** ô "Thời gian
+    chờ phê duyệt" luôn rỗng. Đo trên KAN-104 ngày 24/08: 7 mốc timeline,
+    không mốc nào tên `approve`, ô hiện "—" dù người trực đã duyệt sau 1 phút.
+
+    Chi tiết dễ vấp: changelog có cả mốc **tự trỏ về chính nó**
+    (`Awaiting Approval → Awaiting Approval`, do Jira Automation ghi lại cùng
+    một trạng thái). Đó KHÔNG phải lúc rời hàng chờ, nên phải so trạng thái
+    đích khác trạng thái chờ, chứ không chỉ bắt mốc kế tiếp.
+    """
+    cho = IncidentState.AWAITING_APPROVAL.value
+    vao = ra = None
+    for evt in events:
+        if evt.action != "chuyển trạng thái" or "→" not in evt.detail:
+            continue
+        den = evt.detail.split("→")[-1].strip()
+        if den == cho:
+            if vao is None:
+                vao = evt.at
+        elif vao is not None and ra is None:
+            ra = evt.at
+    return vao, ra
 
 
 def _compute_approval_wait(incident: Incident) -> str:
-    """Thời gian chờ phê duyệt — từ propose đến approve trong timeline."""
-    propose_at = None
-    approve_at = None
+    """Người trực mất bao lâu mới bấm duyệt — thước đo trực tiếp của cổng HITL."""
     events = incident.timeline or (incident.postmortem.timeline if incident.postmortem else [])
+    propose_at = approve_at = None
     for evt in events:
         if evt.action in ("propose_remediation", "propose") and propose_at is None:
             propose_at = evt.at
-        if evt.action in ("approve",) and approve_at is None:
+        if evt.action == "approve" and approve_at is None:
             approve_at = evt.at
+    if propose_at is None or approve_at is None:
+        propose_at, approve_at = _moc_cho_duyet_tu_changelog(events)
     if propose_at and approve_at:
-        delta = approve_at - propose_at
-        minutes = int(delta.total_seconds() / 60)
-        return f"{minutes} phút"
-    return "—"
+        return _fmt_khoang((approve_at - propose_at).total_seconds())
+    if propose_at and incident.resolved_at:
+        # Vào hàng chờ nhưng changelog chưa ghi lúc RỜI hàng chờ. Đường auto-fix
+        # luôn rơi vào đây: `_sinh_postmortem_va_dong()` dựng báo cáo TRƯỚC khi
+        # gọi `transition(Resolved)`, nên mốc rời hàng chờ chưa tồn tại lúc đọc.
+        # Không có nhánh này thì phiếu đã đóng vẫn in "vẫn đang chờ".
+        return _fmt_khoang((incident.resolved_at - propose_at).total_seconds())
+    if propose_at:
+        troi = (_bay_gio(propose_at) - propose_at).total_seconds()
+        return f"{_fmt_khoang(troi)} (vẫn đang chờ)"
+    return "Không qua bước chờ duyệt"
+
+
+# ---------------------------------------------------------------------------
+# Mốc so sánh cho bảng bằng chứng metric
+# ---------------------------------------------------------------------------
+
+#: Ngưỡng cố định của từng metric bằng chứng, **tra theo câu PromQL**.
+#:
+#: Vì sao tra theo PromQL chứ không theo `name`: `name` là chuỗi hiển thị, có
+#: cái còn nhét số vào giữa (`đỉnh bộ nhớ 10 phút (trần 128 MB)`), nên đem ra
+#: làm khoá tra là mời một lần đổi chữ làm hỏng cả bảng. Câu PromQL là hằng số
+#: dùng chung với `detect()` — đổi nó là đổi phép đo, không phải đổi nhãn.
+#:
+#: Các con số lấy THẲNG từ `rules`, không chép lại. Chép số vào đây thì hôm nào
+#: chỉnh ngưỡng, báo cáo sẽ nói một đằng còn bộ luật xử một nẻo.
+_NGUONG_THEO_PROMQL: dict[str, tuple[float, str]] = {
+    prometheus.P95_LATENCY: (rules.P95_P3_SECONDS, "ngưỡng P3"),
+    prometheus.ERROR_RATE: (rules.ERROR_RATE_P3, "ngưỡng P3"),
+    prometheus.POOL_SATURATION_PEAK_5M: (rules.POOL_EXHAUSTED_RATIO, "ngưỡng cạn pool"),
+    prometheus.AUTH_FAILURE_RATE: (rules.AUTH_FAILURE_P3, "ngưỡng P3"),
+    prometheus.AUTH_UNIQUE_ACCOUNTS: (rules.AUTH_UNIQUE_ACCOUNTS_ATTACK, "ngưỡng dò hàng loạt"),
+    prometheus.RESTART_COUNT_10M: (rules.CRASHLOOP_RESTARTS, "ngưỡng crash loop"),
+    prometheus.MEMORY_USAGE_RATIO: (rules.MEMORY_NEAR_LIMIT_RATIO, "ngưỡng gần trần"),
+    prometheus.MEMORY_FORECAST_1H_RATIO: (1.0, "chạm trần"),
+}
+
+#: Metric chỉ mô tả **hình thái**, không có ngưỡng đúng/sai.
+#:
+#: Ép một ngưỡng lên chúng là bịa: "1 IP nguồn" không hề vượt hay dưới mốc nào
+#: cả — nó nói cuộc tấn công *tập trung hay phân tán*, và cả hai đều bình
+#: thường xét riêng lẻ. Nhưng để trống thì người đọc tưởng thiếu dữ liệu, nên
+#: thay vì con số ta viết ra **cách đọc** con số đó.
+_CACH_DOC_HINH_THAI = {
+    prometheus.SERVICE_UP: lambda v: (
+        "service còn phản hồi" if v >= 1 else "service KHÔNG phản hồi"
+    ),
+    prometheus.AUTH_UNIQUE_SOURCE_IPS: lambda v: (
+        "1 IP duy nhất — tấn công tập trung"
+        if v <= 1
+        else f"{v:.0f} IP khác nhau — nguồn phân tán"
+    ),
+    prometheus.AUTH_TOP_SOURCE_RATIO: lambda v: f"{v:.0%} lưu lượng đến từ một IP",
+    prometheus.MEMORY_PEAK_10M_MB: lambda v: f"đỉnh {v:.0f} MB (trần ghi trong tên metric)",
+}
+
+
+def _doc_theo_nguong(ev, nguong: float, nhan: str) -> tuple[str, str, str]:
+    """Hai ô 'mốc so sánh' + 'đánh giá' khi metric CÓ ngưỡng cố định."""
+    moc = f"{nguong:.4g}{ev.unit} ({nhan})"
+    if nguong == 0:
+        return f"0{ev.unit} ({nhan})", "không có mốc để chia tỷ lệ", "#6b7280"
+    ty = ev.value / nguong
+    if ty >= 1:
+        mau = "#dc2626" if ty > rules.BASELINE_DEVIATION_STRONG else "#ea580c"
+        return moc, f"×{ty:.1f} ngưỡng", mau
+    return moc, f"{ty:.0%} ngưỡng — trong mức cho phép", "#16a34a"
+
+
+def _o_moc_so_sanh(ev, incident: Incident) -> tuple[str, str, str]:
+    """Hai ô cuối bảng bằng chứng: lấy gì làm mốc, và đọc con số ra sao.
+
+    ## Vì sao không giữ cột "Baseline"
+
+    Chỉ **một** trong các metric bằng chứng từng có baseline: p95, và cũng chỉ
+    khi service đã chạy đủ lâu để `rules.detect()` tin được mức thường ngày
+    (`BASELINE_MIN_SAMPLES`). Tất cả metric của UC-2 và UC-3 — số IP nguồn, số
+    tài khoản bị thử, số lần restart, tỷ lệ bộ nhớ — **không có khái niệm
+    baseline**, nên cột đó rỗng theo đúng thiết kế. Đo trên KAN-104: 4/4 dòng
+    trống cả hai cột, và bảng bằng chứng — thứ đáng ra là chỗ chắc chắn nhất
+    của postmortem — trông như chưa thu thập được gì.
+
+    Mốc đúng cho những metric ấy là **ngưỡng đã dùng để phán quyết**. Đó cũng
+    là con số người đọc thật sự cần: không phải "hôm thường bao nhiêu", mà "vì
+    sao cái này bị tính là sự cố".
+
+    Bốn nguồn, theo thứ tự giảm dần độ sát:
+
+    1. Có `baseline` đo được → so với mức thường ngày (thông tin giàu nhất).
+    2. Chính là metric đã kích hoạt sự cố → so với `signal.threshold`, tức
+       ngưỡng của **đúng mức severity này**, không phải ngưỡng chung.
+    3. Metric phụ có ngưỡng cố định trong bộ luật → tra `_NGUONG_THEO_PROMQL`.
+    4. Metric mô tả hình thái → không ép ngưỡng, viết ra cách đọc.
+    """
+    if ev.baseline is not None:
+        ty = ev.deviation_ratio
+        moc = f"{ev.baseline:.4g}{ev.unit} (thường ngày)"
+        if not ty:
+            return moc, "ngang mức thường ngày", "#6b7280"
+        mau = "#dc2626" if ty > rules.BASELINE_DEVIATION_STRONG else "#ea580c"
+        return moc, f"×{ty:.1f} so với thường ngày", mau
+
+    if incident.signal and ev.name == incident.signal.metric_name:
+        return _doc_theo_nguong(ev, incident.signal.threshold, "ngưỡng kích hoạt")
+
+    tra = _NGUONG_THEO_PROMQL.get(ev.promql)
+    if tra:
+        return _doc_theo_nguong(ev, tra[0], tra[1])
+
+    cach_doc = _CACH_DOC_HINH_THAI.get(ev.promql)
+    if cach_doc:
+        return "không có ngưỡng cố định", cach_doc(ev.value), "#6b7280"
+
+    return "không có mốc so sánh", "chỉ số tham khảo", "#6b7280"
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +326,7 @@ def build_email_body(incident: Incident, *, jira_base_url: str = "") -> str:
     """
     postmortem = incident.postmortem
     severity = incident.severity.value
-    services = ", ".join(incident.affected_services) or "—"
+    services = ", ".join(incident.affected_services) or "không xác định"
     duration = _fmt_duration(incident.detected_at, incident.resolved_at)
     mttd = _compute_mttd(incident)
     mttr = _compute_mttr(incident)
@@ -152,12 +334,15 @@ def build_email_body(incident: Incident, *, jira_base_url: str = "") -> str:
 
     # Hypothesis tốt nhất
     best_hyp = max(incident.hypotheses, key=lambda h: h.confidence) if incident.hypotheses else None
-    root_cause = postmortem.root_cause if postmortem else (best_hyp.statement if best_hyp else "Chưa xác định")
+    root_cause = postmortem.root_cause if postmortem else (
+        best_hyp.statement if best_hyp
+        else "Chưa xác định — Agent chưa dựng được giả thuyết nào cho sự cố này"
+    )
     impact = postmortem.impact if postmortem else "Đang đánh giá"
     summary = postmortem.summary if postmortem else f"Sự cố {severity} trên {services}"
 
     # Remediation info — ngôn ngữ kinh doanh
-    remedy = "Chưa thực hiện"
+    remedy = "Chưa có hành động khắc phục nào được đề xuất"
     if incident.proposal:
         action_map = {
             "rollback": "Khôi phục phiên bản trước",
@@ -211,8 +396,10 @@ def build_email_body(incident: Incident, *, jira_base_url: str = "") -> str:
             <td style="padding:8px 12px;color:#6b7280;font-weight:600">Phục hồi trong</td>
             <td style="padding:8px 12px">{mttr} <span style="color:#9ca3af;font-size:12px">(MTTR)</span></td>
         </tr>"""
-    if approval_wait != "—":
-        metrics_html += f"""
+    # Luôn hiện, kể cả khi không qua bước chờ: dòng này là bằng chứng cổng HITL
+    # đã chạy. Bản cũ ẩn nó mỗi khi giá trị là "—", mà với Jira thật thì đó là
+    # MỌI phiếu — nên thứ đáng khoe nhất của hệ thống chưa từng lên tới mail.
+    metrics_html += f"""
         <tr style="border-bottom:1px solid #f3f4f6">
             <td style="padding:8px 12px;color:#6b7280;font-weight:600">Chờ phê duyệt</td>
             <td style="padding:8px 12px">{approval_wait}</td>
@@ -310,16 +497,19 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
     """
     postmortem = incident.postmortem
     severity = incident.severity.value
-    services = ", ".join(incident.affected_services) or "—"
+    services = ", ".join(incident.affected_services) or "không xác định"
     duration = _fmt_duration(incident.detected_at, incident.resolved_at)
     mttd = _compute_mttd(incident)
     mttr = _compute_mttr(incident)
     approval_wait = _compute_approval_wait(incident)
 
     best_hyp = max(incident.hypotheses, key=lambda h: h.confidence) if incident.hypotheses else None
-    root_cause = postmortem.root_cause if postmortem else (best_hyp.statement if best_hyp else "Chưa xác định")
-    confidence = f"{best_hyp.confidence:.0%}" if best_hyp else "—"
-    reasoning = best_hyp.reasoning if best_hyp and best_hyp.reasoning else "—"
+    root_cause = postmortem.root_cause if postmortem else (
+        best_hyp.statement if best_hyp
+        else "Chưa xác định — Agent chưa dựng được giả thuyết nào cho sự cố này"
+    )
+    confidence = f"{best_hyp.confidence:.0%}" if best_hyp else "chưa dựng được giả thuyết"
+    reasoning = best_hyp.reasoning if best_hyp else ""
     impact = postmortem.impact if postmortem else "Đang đánh giá"
     summary = postmortem.summary if postmortem else f"Sự cố {severity} trên {services}"
 
@@ -359,9 +549,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
     metric_rows = ""
     if best_hyp:
         for ev in best_hyp.evidence:
-            baseline_str = f"{ev.baseline:.4g}{ev.unit}" if ev.baseline is not None else "—"
-            ratio_str = f"×{ev.deviation_ratio:.1f}" if ev.deviation_ratio else "—"
-            ratio_color = "#dc2626" if ev.deviation_ratio and ev.deviation_ratio > 3 else "#ea580c"
+            baseline_str, ratio_str, ratio_color = _o_moc_so_sanh(ev, incident)
             metric_rows += f"""
             <tr>
                 <td style="padding:6px 12px;font-family:monospace;font-size:13px">{ev.name}</td>
@@ -390,16 +578,16 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px">
             <tr><td style="padding:4px 12px;color:#6b7280;width:140px">Version</td><td style="padding:4px 12px;font-family:monospace;font-weight:600">{d.version}</td></tr>
             <tr><td style="padding:4px 12px;color:#6b7280">Deploy lúc</td><td style="padding:4px 12px">{_fmt_time(d.deployed_at)}</td></tr>
-            <tr><td style="padding:4px 12px;color:#6b7280">Deploy bởi</td><td style="padding:4px 12px">{d.deployed_by or '—'}</td></tr>
-            <tr><td style="padding:4px 12px;color:#6b7280">Commit</td><td style="padding:4px 12px;font-family:monospace">{d.commit_sha or '—'}</td></tr>
-            <tr><td style="padding:4px 12px;color:#6b7280">Ghi chú thay đổi</td><td style="padding:4px 12px">{d.change_note or '—'}</td></tr>
+            <tr><td style="padding:4px 12px;color:#6b7280">Deploy bởi</td><td style="padding:4px 12px">{d.deployed_by or 'không ghi nhận'}</td></tr>
+            <tr><td style="padding:4px 12px;color:#6b7280">Commit</td><td style="padding:4px 12px;font-family:monospace">{d.commit_sha or 'không ghi nhận'}</td></tr>
+            <tr><td style="padding:4px 12px;color:#6b7280">Ghi chú thay đổi</td><td style="padding:4px 12px">{d.change_note or 'không có ghi chú thay đổi'}</td></tr>
         </table>"""
     else:
         deploy_html = '<p style="color:#9ca3af">Không có deploy nào liên quan trong khung thời gian sự cố.</p>'
 
     # 5 Whys RCA
     five_whys_html = ""
-    if reasoning and reasoning != "—":
+    if reasoning:
         # Parse reasoning thành các bước — nếu có dạng số 1. 2. 3.
         lines = [dong.strip() for dong in reasoning.strip().split("\n") if dong.strip()]
         if len(lines) >= 2:
@@ -426,9 +614,9 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
     remedy_html = ""
     if incident.proposal:
         p = incident.proposal
-        params_str = ", ".join(f"{k}={v}" for k, v in p.params.items()) if p.params else "—"
+        params_str = ", ".join(f"{k}={v}" for k, v in p.params.items()) if p.params else "không cần tham số"
 
-        runbook_html = '<span style="color:#9ca3af">—</span>'
+        runbook_html = '<p style="color:#9ca3af">Hành động này không kèm runbook.</p>'
         if p.runbook:
             runbook_html = _copy_block(p.runbook, "cmd")
 
@@ -437,7 +625,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
             <tr><td style="padding:4px 12px;color:#6b7280;width:140px">Hành động</td><td style="padding:4px 12px;font-weight:600">{p.action}</td></tr>
             <tr><td style="padding:4px 12px;color:#6b7280">Đối tượng</td><td style="padding:4px 12px;font-family:monospace">{p.target}</td></tr>
             <tr><td style="padding:4px 12px;color:#6b7280">Tham số</td><td style="padding:4px 12px">{params_str}</td></tr>
-            <tr><td style="padding:4px 12px;color:#6b7280">Rủi ro</td><td style="padding:4px 12px">{p.risk or '—'}</td></tr>
+            <tr><td style="padding:4px 12px;color:#6b7280">Rủi ro</td><td style="padding:4px 12px">{p.risk or 'không ghi nhận rủi ro'}</td></tr>
         </table>
         <h4 style="color:#1e3a5f;font-size:14px;margin:8px 0">Runbook</h4>
         {runbook_html}"""
@@ -450,14 +638,14 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
         items = "".join(f"<li>{a}</li>" for a in postmortem.actions_taken)
         actions_taken_html = f'<ul style="margin:0;padding-left:20px;font-size:14px">{items}</ul>'
     else:
-        actions_taken_html = '<p style="color:#9ca3af">—</p>'
+        actions_taken_html = '<p style="color:#9ca3af">Chưa ghi nhận hành động khắc phục nào.</p>'
 
     # Action items — với Jira hyperlink
     action_items_html = ""
     if postmortem and postmortem.action_items:
         rows = ""
         for ai in postmortem.action_items:
-            jira_cell = '—'
+            jira_cell = 'chưa tạo sub-task'
             if ai.jira_key and jira_base_url:
                 url = _jira_browse_url(jira_base_url, ai.jira_key)
                 jira_cell = f'<a href="{url}" style="color:#2563eb;text-decoration:none;font-weight:600">{ai.jira_key}</a>'
@@ -466,7 +654,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
             rows += f"""
             <tr>
                 <td style="padding:6px 12px">{ai.title}</td>
-                <td style="padding:6px 12px;text-align:center">{ai.owner or '—'}</td>
+                <td style="padding:6px 12px;text-align:center">{ai.owner or 'Đội trực sự cố'}</td>
                 <td style="padding:6px 12px;text-align:center;font-family:monospace">{jira_cell}</td>
             </tr>"""
         action_items_html = f"""
@@ -547,7 +735,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
                 <tr><td style="padding:6px 12px;color:#6b7280">Dịch vụ ảnh hưởng</td><td style="padding:6px 12px">{services}</td></tr>
                 <tr><td style="padding:6px 12px;color:#6b7280">Mức độ</td><td style="padding:6px 12px"><span class="badge badge-{severity.lower()}">{severity}</span></td></tr>
                 <tr><td style="padding:6px 12px;color:#6b7280">Phát hiện lúc</td><td style="padding:6px 12px">{_fmt_time_full(incident.detected_at)}</td></tr>
-                <tr><td style="padding:6px 12px;color:#6b7280">Resolved lúc</td><td style="padding:6px 12px">{_fmt_time_full(incident.resolved_at)}</td></tr>
+                <tr><td style="padding:6px 12px;color:#6b7280">Resolved lúc</td><td style="padding:6px 12px">{_fmt_time_full(incident.resolved_at) if incident.resolved_at else "chưa đóng — sự cố còn đang mở"}</td></tr>
             </table>
         </div>
 
@@ -578,7 +766,7 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
         <!-- 3. Tín hiệu kích hoạt -->
         <div class="section">
             <div class="section-title">3. Tín hiệu kích hoạt (Trigger Signal)</div>
-            {signal_html or '<p style="color:#9ca3af">—</p>'}
+            {signal_html or '<p style="color:#9ca3af">Phiếu không lưu tín hiệu kích hoạt — sự cố được mở thủ công.</p>'}
         </div>
 
         <!-- 4. Chẩn đoán nguyên nhân gốc -->
@@ -599,8 +787,8 @@ def build_detailed_report(incident: Incident, *, jira_base_url: str = "") -> str
                 <tr style="background:#f8fafc">
                     <th style="padding:8px 12px">Tên metric</th>
                     <th style="padding:8px 12px;text-align:right">Giá trị đo</th>
-                    <th style="padding:8px 12px;text-align:right">Baseline</th>
-                    <th style="padding:8px 12px;text-align:right">Độ lệch</th>
+                    <th style="padding:8px 12px;text-align:right">Mốc so sánh</th>
+                    <th style="padding:8px 12px;text-align:right">Đánh giá</th>
                 </tr>
                 {metric_rows}
             </table>

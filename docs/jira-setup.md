@@ -180,9 +180,15 @@ Webhook chạy **trên Render**, không phải trên máy bạn. Nên nếu Rend
 
 - [ ] Trigger: **Issue transitioned** → To status = `Remediating`
 - [ ] Action: **Send web request**
-  - URL: `https://p-035-incident-agent.onrender.com/webhooks/jira`
-  - Method: `POST`, Header `X-Webhook-Secret` = giá trị `JIRA_WEBHOOK_SECRET` trên Render
+  - URL: `https://api-035.emmetech.id.vn/webhooks/jira`
+  - Method: `POST`, Header `X-Webhook-Secret` = giá trị `JIRA_WEBHOOK_SECRET` trong `.env`
   - Body: `Issue data`
+
+> ⚠️ **Địa chỉ này đã đổi (23/08).** Bản cũ trỏ về Render
+> (`p-035-incident-agent.onrender.com`) — nay đã chết, gọi vào trả rỗng. Hệ
+> thống chuyển sang tự host qua Cloudflare Tunnel, xem
+> [self-host-cloudflare.md](self-host-cloudflare.md). Rule còn trỏ địa chỉ cũ
+> thì **người duyệt xong sẽ không có gì xảy ra**, và Jira KHÔNG báo lỗi gì.
 
 > Nếu `Send web request` bị chặn hoặc quota quá chật: cho Agent poll Jira bằng JQL tìm issue vừa sang `Remediating`, chậm hơn vài giây và luồng HITL giữ nguyên **vì cổng phê duyệt không nằm ở webhook**. Ghi kết quả kiểm tra vào JOURNAL.
 

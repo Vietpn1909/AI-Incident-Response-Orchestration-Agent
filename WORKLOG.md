@@ -988,4 +988,76 @@ Ba lỗi đáng ghi lại vì đều thuộc loại **im lặng trả sai**, ngu
 
 ---
 
+## 2026-08-25
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Quay demo 3 trường hợp HITL trên 3 phiếu Jira độc lập: TH1 người duyệt → Remediating, TH2 người kéo thẳng → Resolved, TH3 hết thời chờ → Agent tự thi hành. Mỗi trường hợp một phiếu riêng, không dính link lan truyền | ✅ Done | `scratchpad/ban_mot_service.py` — bắn đúng MỘT service, khác `demo/loadtest.py` vốn cố ý cho 1/4 request đi qua `/orders` nên nối hai phiếu |
+| Việt | Fix auto-remediation bỏ dở giữa chừng: thi hành xong nhưng phiếu kẹt ở `Remediating`, không ai đóng — "tự xử lý" chỉ đúng một nửa | ✅ Done | `_sinh_postmortem_va_dong()`, `src/services/auto_remediation.py` |
+| Việt | Fix auto-remediation **tự đá vào cổng HITL của chính nó**: chuyển `Remediating` bằng tài khoản Agent kích hoạt đúng Jira rule đang rình trạng thái đó → `assert_human_approved()` từ chối → comment "TỪ CHỐI THỰC THI" nằm ngay cạnh comment "đã rollback thành công" | ✅ Done | chuyển THẲNG `Resolved`; rule `Remediating` không bắn, rule `Resolved` tự bỏ qua nhờ guard "postmortem đã tồn tại" |
+| Việt | Đường auto-fix mất mail postmortem: webhook `resolved` có bắn nhưng bị chính guard chống-trùng chặn lại → không ai nhận được gì, đúng lúc **cần mail nhất** vì không ai đang ngồi xem | ✅ Done | `_gui_mail_postmortem()`, tiêu đề `[Postmortem — Auto]` để phân biệt với đường người-duyệt |
+| Việt | Rà soát ô trống trong postmortem — dựng lại báo cáo từ dữ liệu THẬT của KAN-104 rồi bóc thẻ HTML đếm từng ô, không soi bằng mắt | ✅ Done | **13 ô trống trong file đính kèm, 5 ô trong mail body → 0** |
+| Việt | MTTD chỉ tính được khi có deploy nghi phạm → UC-1/UC-2/UC-3 **không bao giờ** có số | ✅ Done | không deploy thì lấy `signal.breached_for_seconds`. KAN-104: `5 phút` (số đã nằm sẵn trong signal, chưa ai đọc tới) |
+| Việt | "Thời gian chờ phê duyệt" dò tên hành động `propose`/`approve` — mà chỉ `FakeJiraClient` mới ghi tên đó. Jira thật chỉ ghi "chuyển trạng thái", nên với **mọi phiếu thật** ô này luôn rỗng | ✅ Done | suy từ changelog: lúc vào ↔ lúc rời `Awaiting Approval`, có né mốc tự trỏ `Awaiting Approval → Awaiting Approval` do Automation ghi. KAN-104: `1 phút` |
+| Việt | MTTR + tổng thời gian gián đoạn in "Chưa resolved" trên đường auto-fix: báo cáo sinh TRƯỚC khi chuyển `Resolved` nên `resolutiondate` chưa tồn tại | ✅ Done | đóng dấu `resolved_at` ngay sau khi rollback xong; chưa đóng thì đếm tới bây giờ kèm "(đang diễn ra)" |
+| Việt | Cột "Baseline"/"Độ lệch" trong bảng bằng chứng trống 4/4 dòng — chỉ p95 mới có baseline, toàn bộ metric UC-2/UC-3 **không có khái niệm baseline** | ✅ Done | đổi thành "Mốc so sánh"/"Đánh giá", tra ngưỡng thật từ `rules` theo câu PromQL (không chép số). Metric mô tả hình thái thì viết cách đọc thay vì ép ngưỡng |
+| Việt | Điền `ActionItem.owner` — cột "Người phụ trách" trước đó là một cột gạch ngang: việc thì có, người thì không | ✅ Done | lấy người cuối cùng đổi trạng thái phiếu mà không phải Agent (nhận ra Agent qua phần trước `@` của `JIRA_EMAIL`, vì changelog trả `displayName` chứ không trả `accountId`) |
+| Việt | 8 test mới chống tái phát, gồm 2 test quét toàn trang khẳng định không còn ô nào chỉ chứa `—` | ✅ Done | **673 test pass** (665 + 8), ruff sạch |
+
+**Tổng kết ngày:** Ngày khép vòng tự xử lý. Ba trường hợp HITL quay xong trên ba phiếu độc lập, và đúng lúc quay TH3 mới lộ ra đường auto-fix chưa bao giờ chạy trọn: thi hành xong thì dừng ở `Remediating`, không postmortem, không mail, lại còn tự kích hoạt cổng HITL của chính mình để bị từ chối — hai câu chọi nhau trên cùng một phiếu.
+
+Sau đó là đợt rà ô trống. Đáng ghi lại vì cả bốn ô đều thuộc loại **có dữ liệu nhưng không ai đọc tới**, chứ không phải thiếu dữ liệu:
+
+1. `breached_for_seconds = 300` nằm sẵn trong signal của KAN-104, mà ô MTTD vẫn in `—` vì code chỉ biết một đường tính duy nhất (theo deploy).
+2. Mốc duyệt nằm đủ trong changelog Jira, mà ô "chờ phê duyệt" vẫn rỗng vì đi dò tên hành động chỉ tồn tại trong `FakeJiraClient` — lỗi kiểu **chỉ lộ khi chạy thật**, test với fake thì xanh hết.
+3. Ngưỡng phán quyết nằm trong `rules`, mà bảng bằng chứng — thứ đáng ra là chỗ chắc chắn nhất của postmortem — trông như chưa thu thập được gì.
+4. `resolved_at` biết được ngay lúc rollback xong, chỉ là chưa ai đóng dấu.
+
+Cách tìm cũng đáng ghi: không soi ảnh chụp mà **dựng lại báo cáo từ phiếu thật rồi bóc thẻ đếm ô**. Soi mắt thì bỏ sót 8/13 ô nằm dưới màn hình.
+
+---
+
+## 2026-08-26
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Trương Công Thái Đức | Fix `pre-push` hook CRASH trên macOS: `_pyrun.sh` lấy `python3` ĐẦU TIÊN trên PATH, trên máy Đức đó là **3.9.6 của Xcode**, trong khi hai script dùng cú pháp `X \| None` (3.10+) và `datetime.UTC` (3.11+) | ✅ Done | `cfc4136` |
+| Trương Công Thái Đức | Tài liệu kiểm thử — chiến lược 4 tầng, kèm mục **"bộ test này KHÔNG bắt được gì"** | ✅ Done | `d101950`, `docs/TESTING.md` +233 dòng |
+
+**Tổng kết ngày:** Lỗi hook thuộc đúng họ "im lặng trả sai" mà worklog đã ghi ba lần. `setup_hooks.sh` gọi hai script kèm `|| true`, nên chúng crash mà push vẫn thành công — không ai để ý, và **AI log chưa từng gửi lên server chấm**. Lần trước (23/08) là hook chưa được cài; lần này hook có cài, có chạy, và vẫn không nộp được gì. Cùng một deliverable hỏng hai lần vì hai nguyên nhân khác nhau.
+
+---
+
+## 2026-08-27
+
+| Member | Task | Status | Output |
+|--------|------|--------|--------|
+| Việt | Viết hướng dẫn tự demo cho **người chưa từng đụng vào dự án**: bản đồ 30 giây, cài lần đầu, 4 kịch bản sự cố, 3 trường hợp HITL, bảng 13 lỗi thường gặp | ✅ Done | `docs/huong-dan-demo.md` (mới) |
+| Việt | Gộp việc dựng hệ thống thành MỘT lệnh — 7 bước: mở Docker → dựng stack → đợi từng service trả lời thật → seed nếu trống → phóng backend/UI/Agent → hâm nóng → kiểm 7 địa chỉ. Cờ `-UC4`, `-KhongHamNong` | ✅ Done | `scripts/khoi_dong_demo.ps1` (mới) |
+| Việt | Script tắt, mặc định GIỮ Docker: `compose down` sẽ xoá container Postgres vốn không có volume → mất `deploy_history` | ✅ Done | `scripts/dung_demo.ps1` (mới) |
+| Việt | Đưa 2 script tải vào repo: hâm nóng mức thấp (biểu đồ có đường vẽ mà không mở sự cố) và bắn đúng MỘT service (mỗi trường hợp HITL một phiếu riêng) | ✅ Done | `scripts/ham_nong.py`, `scripts/ban_mot_service.py` |
+| Việt | Fix `.ps1` không có BOM → Windows PowerShell 5.1 đọc theo ANSI, dấu tiếng Việt nuốt mất dấu nháy → lỗi cú pháp ngay dòng đầu | ✅ Done | ghi bằng `utf-8-sig` |
+| Việt | Fix `-UC4` **im lặng không có tác dụng**: dựng container với cờ bật rồi mới `compose up -d` thì compose thấy cấu hình lệch và dựng LẠI với cờ tắt | ✅ Done | đảo thứ tự; nghiệm thu `/pay` → 500 |
+| Việt | Thêm chốt dọn tiến trình cũ trước khi phóng: chạy script hai lần thì bộ mới chết vì cổng bận, mà **bảng kiểm vẫn xanh** nhờ bộ cũ | ✅ Done | `khoi_dong_demo.ps1` bước 4 |
+| Việt | `.env.example` **thiếu hẳn nhóm Jira** (6 khoá, gồm `JIRA_AGENT_ACCOUNT_ID` — thiếu là cổng HITL không chạy) và `LLM_MAX_TOKENS`, `PROMETHEUS_URL` | ✅ Done | `.env.example` |
+| Việt | Bổ sung docstring cho 12 hàm ở hai file người đọc mở đầu tiên — `demo/service_thanh_toan/main.py` (7, giờ đủ 100%) và `ui/pages/war_room.py` (5) | ✅ Done | viết theo lối "vì sao", không mô tả lại code |
+| Việt | README: trỏ tới hướng dẫn ở 4 chỗ theo 4 đường người ta vào repo; viết lại mục "Chạy demo stack" vốn là cái bẫy | ✅ Done | `README.md` |
+| Việt | Sửa 3 link Render đã chết (đo được: trả `000`), trong đó **URL webhook trong `jira-setup.md`** là link nguy hiểm nhất | ✅ Done | `README.md`, `docs/jira-setup.md` |
+| Việt | Dán biển cảnh báo lên `demo-runbook.md`: 2 chỗ đã cũ (`DEMO_POSTGRES_PORT=55432`, và mọi câu nhắc Render) | ✅ Done | `docs/demo-runbook.md` |
+| Việt | Đo lại độ dài câu LLM thật trên 7 phiếu để kiểm chứng `LLM_MAX_TOKENS=2048` | ✅ Done | 256–479 ký tự, trung bình 404 — tức ~150–250 token |
+
+**Tổng kết ngày:** Ngày làm cho người khác chạy được, không thêm tính năng nào.
+
+Cách làm đáng ghi lại: **viết script trước, rồi tự chạy thử để tìm lỗi trong chính script đó** — và tìm ra ba lỗi mà đọc code không thấy được:
+
+1. File `.ps1` viết bằng UTF-8 không BOM thì Windows PowerShell 5.1 đọc theo ANSI. Một ký tự tiếng Việt nhiều byte nuốt mất dấu nháy và trình phân tích cú pháp báo lỗi ở **dòng cách đó 180 dòng** — thông báo lỗi không hề chỉ về chỗ thật.
+2. `-UC4` chạy trơn tru, in ra "đã bật cờ", mà cờ vẫn tắt: `docker compose up` so cấu hình đã resolve với container đang chạy, nên nó lặng lẽ dựng lại container về đúng cấu hình không có biến môi trường. Chỉ lộ khi `printenv` trong container.
+3. Chạy script hai lần thì bộ tiến trình thứ hai chết vì cổng bận, nhưng **bảng kiểm cuối script vẫn xanh** vì bộ cũ còn phục vụ — tưởng đã khởi động lại với cấu hình mới, thực ra vẫn chạy cấu hình cũ.
+
+Về phần chú thích code: đo bằng AST cho ra **536 đơn vị không có docstring**, nhưng chỉ thêm cho 12. Phần lớn con số kia **không đáng thêm** — ~400 nằm trong test mà tên test đã là câu tiếng Việt hoàn chỉnh (`test_khong_co_deploy_nao_thi_tra_none`), và 44 nằm ở các lớp hiện thực `JiraClient` mà **Protocol đã có docstring đầy đủ**, chép lại là mời chúng trôi lệch nhau. Ghi lại đây để lần sau không ai nhìn con số 536 rồi đi lấp cho đủ.
+
+Tác dụng phụ khi kiểm thử: hai lần `--force-recreate` làm số restart chạm đúng `CRASHLOOP_RESTARTS = 2` → mở phiếu **KAN-120** (P1). Agent tự xử lý và đóng — tiện thể **nghiệm thu bản vá 25/08 trên dữ liệu thật: 0 ô trống** trong cả mail lẫn file đính kèm, "Người phụ trách" điền "Đội trực sự cố".
+
+---
+
 <!-- Format: copy block trên cho mỗi ngày làm việc -->

@@ -3,6 +3,19 @@
 Viết ngày 12/08/2026, sau ba lượt chạy thử trọn chuỗi trên Jira thật.
 Mọi con số trong đây là số đo được, không phải ước lượng.
 
+> **Chưa từng dựng hệ thống này bao giờ?** Đọc
+> [huong-dan-demo.md](huong-dan-demo.md) trước — file đó lo phần *dựng máy*, còn
+> file này lo phần *đứng nói*. Bật toàn bộ hệ thống giờ chỉ còn một lệnh:
+> `powershell -ExecutionPolicy Bypass -File scripts/khoi_dong_demo.ps1`
+>
+> **Hai chỗ trong file này đã cũ so với hạ tầng hiện tại (25/08):**
+>
+> 1. `DEMO_POSTGRES_PORT=55432` — cổng Postgres đã về mặc định **5432**. Cứ bỏ
+>    biến đó đi, trừ khi máy bạn đã có Postgres riêng chiếm cổng.
+> 2. Mọi câu nhắc tới **Render** không còn đúng: hệ thống đã chuyển sang tự host
+>    qua Cloudflare Tunnel từ 23/08. Không còn chuyện "Render ngủ sau 15 phút".
+>    Xem [self-host-cloudflare.md](self-host-cloudflare.md).
+
 ---
 
 ## 0. Chuẩn bị — 5 phút trước giờ

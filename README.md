@@ -6,7 +6,42 @@
 
 > ✅ **Cổng HITL đã verify end-to-end trên Jira thật** (02/08, issue `KAN-11`). Agent tự duyệt → backend từ chối; người duyệt → thi hành. Chạy lại bằng `python scripts/verify_e2e.py --local`.
 
-🌐 **Live:** https://p-035-incident-agent.onrender.com · [API docs](https://p-035-incident-agent.onrender.com/docs) · [status page (JSON)](https://p-035-incident-agent.onrender.com/api/status)
+🌐 **Live:** https://035.emmetech.id.vn · [API docs](https://api-035.emmetech.id.vn/docs) · [status page (JSON)](https://api-035.emmetech.id.vn/api/status)
+
+---
+
+## ▶️ Muốn tự chạy demo? Đọc một file duy nhất
+
+### 👉 **[docs/huong-dan-demo.md](docs/huong-dan-demo.md)**
+
+Viết cho **người chưa từng đụng vào dự án**. Không cần đọc code, không cần biết
+LangGraph là gì — làm theo từ trên xuống là chạy được.
+
+| Trong đó có | |
+|---|---|
+| **Bản đồ 30 giây** | 9 thứ chạy cùng lúc, cái nào ở đâu, và chuyện gì xảy ra theo thứ tự nào |
+| **Cài lần đầu** | Python, Docker, `.env`, hai rule Jira Automation — và khóa nào thiếu thì hỏng cái gì |
+| **Bật hệ thống** | Một lệnh duy nhất, khoảng 2 phút |
+| **4 kịch bản sự cố** | UC-1 pool cạn · UC-2 crash-loop · UC-3 dò mật khẩu · UC-4 deploy hỏng — kèm chỗ nên chỉ tay vào khi diễn |
+| **3 trường hợp cổng phê duyệt** | Người duyệt · người tự sửa · không ai trả lời |
+| **Bảng lỗi thường gặp** | 13 triệu chứng đã vấp thật — phần lớn thuộc loại **không báo lỗi**, chỉ cho ra màn hình trống hoặc số sai |
+
+Bật toàn bộ hệ thống:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/khoi_dong_demo.ps1
+```
+
+Tắt:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/dung_demo.ps1
+```
+
+Đã biết hệ thống rồi, chỉ cần **lời thoại lúc đứng nói** → [docs/demo-runbook.md](docs/demo-runbook.md).
+Cần **kịch bản quay video** → [docs/demo-video-script.md](docs/demo-video-script.md).
+
+---
 
 > 👋 **Thành viên đội: mở [docs/START-HERE.md](docs/START-HERE.md) trước khi code** — việc của từng người, lệnh cụ thể, và tiêu chí "xong là thế nào".
 
@@ -14,6 +49,7 @@
 
 | Tài liệu | Nội dung | Link |
 |---|---|---|
+| **▶ Tự chạy demo** | Từ máy trắng đến màn diễn — cài, bật bằng 1 lệnh, 4 kịch bản sự cố, bảng lỗi thường gặp | **[docs/huong-dan-demo.md](docs/huong-dan-demo.md)** |
 | **Brief** | Vấn đề, người dùng, phạm vi, chỉ số thành công, rủi ro | [docs/brief.md](docs/brief.md) |
 | **PRD** | 16 yêu cầu chức năng + tiêu chí nghiệm thu, NFR, kế hoạch phát hành | [docs/prd.md](docs/prd.md) |
 | **UI Flow / Wireframe** | Bản đồ màn hình, wireframe 2 trang, quy tắc hiển thị | [docs/ui-flow.md](docs/ui-flow.md) |
@@ -21,8 +57,12 @@
 | **Architecture (chi tiết)** | Thành phần, data flow, deployment, security | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **ADR** | 3 quyết định kiến trúc kèm lý do và đánh đổi | [docs/adr/](docs/adr/) |
 | **Contracts** | 4 interface giữa 4 thành viên — thứ mở khoá làm song song | [docs/contracts/](docs/contracts/) |
-| **Use cases** | 3 kịch bản sự cố + ground truth để đo độ chính xác chẩn đoán | [docs/use-cases.md](docs/use-cases.md) |
-| **Live URL** | Backend đang chạy | [p-035-incident-agent.onrender.com](https://p-035-incident-agent.onrender.com) |
+| **Use cases** | 4 kịch bản sự cố (+1 biến thể lan truyền) + ground truth để đo độ chính xác chẩn đoán | [docs/use-cases.md](docs/use-cases.md) |
+| **Tài liệu kiểm thử** | Chiến lược 4 tầng · 673 test · số đo chất lượng · **và bộ test này KHÔNG bắt được gì** | [docs/TESTING.md](docs/TESTING.md) |
+| **Kết quả đo** | 50 case, recall 84% — kèm 4 case bỏ lọt **kể tên** | [eval/RESULTS-2026-08-21.md](eval/RESULTS-2026-08-21.md) |
+| **Bằng chứng kiểm thử tay** | 5 test case chạy trên hệ thống thật, output thật | [eval/EVIDENCE.md](eval/EVIDENCE.md) |
+| **Live URL** | **Sản phẩm chạy được** — trang trạng thái + war room | **[035.emmetech.id.vn](https://035.emmetech.id.vn)** |
+| Live URL (backend) | API + Swagger | [api-035.emmetech.id.vn/docs](https://api-035.emmetech.id.vn/docs) |
 | **AI Logs** | Hook ghi + submit AI usage log | [.github/hooks/hooks.json](.github/hooks/hooks.json) · LangSmith |
 | **Weekly Journal** | Mục tiêu, khó khăn, bài học từng tuần | [JOURNAL.md](JOURNAL.md) |
 | **Worklog** | Ai làm gì theo ngày | [WORKLOG.md](WORKLOG.md) |
@@ -121,12 +161,19 @@ python3.11 -m venv .venv && source .venv/bin/activate
 # Windows (PowerShell hoặc Git Bash)
 #   py -3.11 -m venv .venv
 #   .venv\Scripts\activate
-pip install -r requirements.txt
+# `demo/requirements.txt` là bắt buộc, không phải tuỳ chọn: thiếu `prometheus_client`
+# thì tests/test_services/test_demo_services.py không collect được, bộ test tụt 11
+# case mà KHÔNG báo đỏ.
+pip install -r requirements.txt -r demo/requirements.txt
 
 # 5. Chạy server
 uvicorn src.main:app --reload --port 8000
 # Swagger UI: http://localhost:8000/docs
 ```
+
+> 🎬 **Chỉ muốn xem hệ thống chạy, không định sửa code?** Bỏ qua phần này và
+> làm theo **[docs/huong-dan-demo.md](docs/huong-dan-demo.md)** — bật tất cả
+> bằng một lệnh.
 
 > ⚠️ **Bước 2 không được bỏ qua.** `.git/hooks/` không nằm trong repo nên mỗi clone phải tự cài. Thiếu hook thì AI usage log chỉ ghi local và **không bao giờ submit** lên grading server — mất deliverable #4 mà không có cảnh báo nào.
 
@@ -252,13 +299,30 @@ Ba khối chạy độc lập nên 4 người sửa cùng lúc không đụng nh
 
 ## Chạy demo stack (tạo sự cố thật)
 
+> 📖 Hướng dẫn đầy đủ: **[docs/huong-dan-demo.md](docs/huong-dan-demo.md)**.
+> Phần dưới đây chỉ là bản rút gọn.
+
+Bật **toàn bộ** — Docker, seed, backend, UI, Agent, hâm nóng, kiểm tra:
+
 ```bash
-docker compose -f docker-compose.demo.yml up --build
-python demo/seed.py            # sinh dữ liệu mẫu, chạy một lần
-python demo/loadtest.py         # bắn tải tăng dần
+powershell -ExecutionPolicy Bypass -File scripts/khoi_dong_demo.ps1
 ```
 
-Rồi mở http://localhost:9090 và query p95 — xem [demo/README.md](demo/README.md).
+Rồi tạo một sự cố thật:
+
+```bash
+.venv/Scripts/python demo/loadtest.py
+```
+
+Mở http://localhost:8501/war_room và xem Agent vào cuộc trong vòng 10 giây.
+
+> ⚠️ **Đừng chỉ chạy `docker compose up`.** Nó dựng 4 service demo + Prometheus,
+> nhưng **không có backend, không có giao diện, và không có Agent** — ba thứ đó
+> cố ý chạy trên máy chứ không đóng gói, vì backend phải gọi được `docker logs`
+> để lấy log tươi cho war room. Thiếu chúng thì có tải, có metric, mà **không có
+> gì phát hiện sự cố cả**.
+
+Chi tiết từng service demo: [demo/README.md](demo/README.md).
 
 ## Deliverables Checklist
 
@@ -268,7 +332,7 @@ Rồi mở http://localhost:9090 và query p95 — xem [demo/README.md](demo/REA
 | 2 | README.md | file này | Đức | ✅ |
 | 3 | Architecture Diagram | `docs/architecture_diagram.md` + `ARCHITECTURE.md` + 3 ADR | Đức | ✅ |
 | 4 | AI Logs | LangSmith + `.ai-log/` | Đức | 🔄 |
-| 5 | Live URL | [p-035-incident-agent.onrender.com](https://p-035-incident-agent.onrender.com) | Đức | ✅ |
+| 5 | Live URL | **[035.emmetech.id.vn](https://035.emmetech.id.vn)** · backend: [api-035.emmetech.id.vn/docs](https://api-035.emmetech.id.vn/docs) | Đức | ✅ |
 | 6 | Video Demo | `presentation/` | Long | ⏳ |
 | 7 | Pitch Deck | `presentation/` | Long | ⏳ |
 | 8 | Weekly Journal | `JOURNAL.md` | Đức | 🔄 |
